@@ -1,0 +1,1146 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif;
+  background: #050816;
+  color: #f9fafb;
+}
+
+/* Корень для WebApp */
+.page-root {
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  background:
+    radial-gradient(circle at top left, #f97316 0, transparent 40%),
+    radial-gradient(circle at bottom right, #fb923c 0, #020617 55%);
+}
+
+/* Основной контейнер (как телефон) */
+.app-container {
+  width: 100%;
+  max-width: 520px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at top, #020617 0, #020617 45%, #000 100%);
+  border-left: 1px solid rgba(15, 23, 42, 0.9);
+  border-right: 1px solid rgba(15, 23, 42, 0.9);
+}
+
+/* Плавное появление */
+.fade-in-app {
+  animation: fadeIn 0.4s ease-out both;
+}
+
+/* Шапка */
+.header {
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid #111827;
+  background: radial-gradient(circle at left top, #f97316 0, #0b1120 55%);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-logo-fox {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: radial-gradient(circle at 30% 20%, #fed7aa, #f97316);
+  border: 1px solid rgba(248, 250, 252, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 12px 35px rgba(248, 158, 79, 0.8);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.brand-sub {
+  font-size: 12px;
+  color: #e5e7eb;
+}
+
+.brand-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #fed7aa;
+  background: rgba(248, 158, 79, 0.15);
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid rgba(248, 158, 79, 0.6);
+}
+
+/* Контент с прокруткой */
+.content {
+  flex: 1;
+  padding: 10px 14px 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.content::-webkit-scrollbar {
+  width: 4px;
+}
+.content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.content::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 999px;
+}
+
+/* Лоадер (если будешь добавлять позже) */
+.loader-inline {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px 20px 16px;
+}
+
+.loader-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  background: #020617;
+  border: 1px solid #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  font-size: 15px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8);
+}
+
+/* Заголовки секций */
+.section-title {
+  margin-bottom: 6px;
+}
+
+.section-title h2 {
+  margin: 0 0 2px 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.section-title p {
+  margin: 0;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Общий блок */
+.section-block {
+  border-radius: 16px;
+}
+
+/* ===== HERO (главная) ===== */
+
+.hero-block {
+  padding: 12px 12px 10px 12px;
+  display: flex;
+  gap: 12px;
+  background: radial-gradient(circle at top left, #f97316 0, #0b1120 45%);
+  border: 1px solid rgba(248, 158, 79, 0.5);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+}
+
+.hero-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hero-label {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.7);
+  color: #fed7aa;
+  width: fit-content;
+}
+
+.hero-title {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.hero-gradient {
+  background: linear-gradient(135deg, #fed7aa, #f97316);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.hero-sub {
+  font-size: 11px;
+  color: #f9fafb;
+}
+
+.hero-stats-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.hero-stat {
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.hero-stat-label {
+  font-size: 10px;
+  color: #e5e7eb;
+}
+
+.hero-stat-value {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hero-orb {
+  width: 90px;
+  min-width: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.hero-orb-inner {
+  width: 70px;
+  height: 70px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 15%, #fed7aa, #fb923c);
+  box-shadow:
+    0 0 20px rgba(248, 158, 79, 0.8),
+    0 25px 40px rgba(15, 23, 42, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-orb-text {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.12em;
+}
+
+.hero-orb-glow {
+  position: absolute;
+  inset: 0;
+  filter: blur(18px);
+  background: radial-gradient(circle, rgba(248, 158, 79, 0.6), transparent);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+/* Популярные монеты */
+
+.coins-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.coin-row {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #020617;
+  border: 1px solid #111827;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.coin-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coin-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 20%, #fed7aa, #f97316);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.coin-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.coin-symbol {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.coin-name {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.coin-right {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coin-price {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.coin-change {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.coin-change.positive {
+  color: #4ade80;
+}
+
+.coin-change.negative {
+  color: #f97373;
+}
+
+/* Общие маркеры списков */
+.bullets-list {
+  margin: 4px 0 0 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bullets-list li {
+  font-size: 11px;
+  color: #e5e7eb;
+}
+
+/* ===== Торговля ===== */
+
+.trade-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (min-width: 480px) {
+  .trade-layout {
+    flex-direction: row;
+  }
+}
+
+.pair-selector-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.pair-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #1f2937;
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pair-pill.active {
+  background: #f97316;
+  border-color: #fed7aa;
+  color: #020617;
+  box-shadow: 0 8px 22px rgba(248, 158, 79, 0.8);
+}
+
+.chart-card {
+  padding: 8px 10px 10px;
+  border-radius: 14px;
+  background: radial-gradient(circle at top, #0b1120, #020617);
+  border: 1px solid #111827;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.chart-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chart-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(248, 158, 79, 0.1);
+  color: #fed7aa;
+  border: 1px solid rgba(248, 158, 79, 0.5);
+}
+
+.chart-body {
+  position: relative;
+  height: 120px;
+  overflow: hidden;
+}
+
+.chart-line {
+  position: absolute;
+  inset: 18px 0;
+  opacity: 0.12;
+  border-radius: 999px;
+}
+
+.chart-line-1 {
+  background: radial-gradient(circle at left, #f97316, transparent);
+}
+.chart-line-2 {
+  background: radial-gradient(circle at center, #22c55e, transparent);
+}
+.chart-line-3 {
+  background: radial-gradient(circle at right, #60a5fa, transparent);
+}
+
+.chart-grid {
+  position: absolute;
+  inset: 10px 6px 4px 6px;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.chart-bar {
+  flex: 1;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(180deg, rgba(248, 158, 79, 0.8), transparent);
+  height: calc(40% + 40% * var(--rnd, 1));
+}
+
+/* Ордер-форма и стакан */
+
+.order-card,
+.orderbook-card {
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: #020617;
+  border: 1px solid #111827;
+}
+
+.order-switch {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.order-side-btn {
+  flex: 1;
+  border-radius: 999px;
+  border: 1px solid #1f2937;
+  background: #020617;
+  font-size: 12px;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.order-side-btn.buy.active {
+  background: #22c55e;
+  border-color: #bbf7d0;
+  color: #022c22;
+  box-shadow: 0 8px 22px rgba(34, 197, 94, 0.8);
+}
+
+.order-side-btn.sell.active {
+  background: #ef4444;
+  border-color: #fecaca;
+  color: #450a0a;
+  box-shadow: 0 8px 22px rgba(239, 68, 68, 0.8);
+}
+
+.order-field {
+  margin-bottom: 6px;
+}
+
+.order-label {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 2px;
+}
+
+.order-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 2px;
+}
+
+.order-label-extra {
+  color: #e5e7eb;
+}
+
+.order-input-mock {
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: #020617;
+  border: 1px solid #1f2937;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.order-unit {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.order-submit-btn {
+  width: 100%;
+  margin-top: 4px;
+  border-radius: 999px;
+  padding: 9px 0;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.order-submit-btn.buy {
+  background: linear-gradient(135deg, #22c55e, #4ade80);
+  color: #022c22;
+  box-shadow: 0 12px 26px rgba(34, 197, 94, 0.9);
+}
+
+.order-submit-btn.sell {
+  background: linear-gradient(135deg, #ef4444, #f97373);
+  color: #450a0a;
+  box-shadow: 0 12px 26px rgba(239, 68, 68, 0.9);
+}
+
+.order-submit-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.8);
+}
+
+.order-note {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+/* Стакан */
+
+.orderbook-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.orderbook-pair {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.orderbook-columns {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 0.9fr;
+  font-size: 10px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.orderbook-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 170px;
+  overflow: hidden;
+}
+
+.orderbook-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 0.9fr;
+  font-size: 11px;
+  padding: 3px 4px;
+  border-radius: 6px;
+}
+
+.orderbook-row.ask {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.orderbook-row.bid {
+  background: rgba(34, 197, 94, 0.08);
+}
+
+/* ===== Кошелёк ===== */
+
+.wallet-summary {
+  padding: 10px;
+  border-radius: 14px;
+  background: radial-gradient(circle at top right, #f97316, #0b1120);
+  border: 1px solid rgba(251, 146, 60, 0.6);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.9);
+}
+
+.wallet-balance-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wallet-balance-label {
+  font-size: 11px;
+  color: #fed7aa;
+}
+
+.wallet-balance-value {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.wallet-balance-sub {
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #f9fafb;
+}
+
+.wallet-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.wallet-btn {
+  flex: 1;
+  border-radius: 999px;
+  border: none;
+  padding: 9px 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wallet-deposit {
+  background: linear-gradient(135deg, #22c55e, #4ade80);
+  color: #022c22;
+  box-shadow: 0 10px 24px rgba(34, 197, 94, 0.9);
+}
+
+.wallet-withdraw {
+  background: linear-gradient(135deg, #f97316, #fb923c);
+  color: #451a03;
+  box-shadow: 0 10px 24px rgba(248, 158, 79, 0.9);
+}
+
+.wallet-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.8);
+}
+
+.wallet-actions-note {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.wallet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wallet-row {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #020617;
+  border: 1px solid #111827;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.wallet-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wallet-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 20%, #fed7aa, #f97316);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.wallet-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.wallet-symbol {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wallet-balance {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.wallet-right {
+  font-size: 11px;
+  color: #e5e7eb;
+}
+
+.wallet-inorder {
+  font-size: 11px;
+}
+
+/* История транзакций */
+
+.tx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tx-row {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #020617;
+  border: 1px solid #111827;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tx-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tx-type {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tx-asset {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.tx-right {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tx-amount {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tx-amount.positive {
+  color: #4ade80;
+}
+.tx-amount.negative {
+  color: #f97373;
+}
+
+.tx-meta {
+  font-size: 10px;
+  color: #6b7280;
+}
+
+/* ===== История ===== */
+
+.deals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.deal-row {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #020617;
+  border: 1px solid #111827;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.deal-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deal-pair {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.deal-time {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.deal-right {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deal-side {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.deal-side.buy {
+  background: rgba(34, 197, 94, 0.18);
+  color: #bbf7d0;
+}
+.deal-side.sell {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fecaca;
+}
+
+.deal-amount {
+  font-size: 11px;
+  color: #e5e7eb;
+}
+
+/* История входов */
+
+.login-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-row {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #020617;
+  border: 1px solid #111827;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.login-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.login-device {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.login-time {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.login-right {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.login-status {
+  font-size: 11px;
+  color: #4ade80;
+}
+
+.login-ip {
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+/* ===== Профиль ===== */
+
+.profile-card {
+  padding: 10px;
+  border-radius: 14px;
+  background: radial-gradient(circle at top left, #f97316, #0b1120);
+  border: 1px solid rgba(251, 146, 60, 0.6);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.95);
+}
+
+.profile-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.profile-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 20%, #fed7aa, #f97316);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.profile-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.profile-id {
+  font-size: 11px;
+  color: #fee2e2;
+}
+
+.profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.profile-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.8);
+}
+
+.profile-badge.orange {
+  background: rgba(248, 158, 79, 0.2);
+  color: #ffedd5;
+}
+
+.profile-badge.neutral {
+  background: rgba(15, 23, 42, 0.7);
+  color: #e5e7eb;
+}
+
+.profile-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-btn {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid #1f2937;
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.profile-btn:hover {
+  box-shadow: 0 12px 28px rgba(59, 130, 246, 0.5);
+  border-color: #3b82f6;
+  transform: translateY(-1px);
+}
+
+.profile-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.9);
+}
+
+.profile-note {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+/* Ховер-эффект общий */
+.hover-glow:hover {
+  box-shadow: 0 12px 28px rgba(248, 158, 79, 0.5);
+  border-color: rgba(248, 158, 79, 0.9);
+  transform: translateY(-1px);
+}
+
+/* Нижняя навигация */
+
+.bottom-nav {
+  padding: 8px 10px 10px;
+  border-top: 1px solid #111827;
+  background: rgba(3, 7, 18, 0.98);
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.nav-item {
+  flex: 1;
+  border-radius: 999px;
+  border: 1px solid #111827;
+  background: #020617;
+  color: #9ca3af;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 4px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: all 0.15s ease;
+}
+
+.nav-icon {
+  font-size: 15px;
+}
+
+.nav-label {
+  font-size: 10px;
+}
+
+.nav-item.active {
+  background: linear-gradient(135deg, #f97316, #fb923c);
+  color: #0f172a;
+  border-color: #fed7aa;
+  box-shadow: 0 12px 26px rgba(248, 158, 79, 0.9);
+}
+
+.nav-item:active {
+  transform: translateY(1px);
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.9);
+}
+
+/* Анимации */
+
+.fade-in {
+  animation: fadeInUp 0.4s ease-out both;
+}
+
+.delay-1 {
+  animation-delay: 0.05s;
+}
+.delay-2 {
+  animation-delay: 0.1s;
+}
+.delay-3 {
+  animation-delay: 0.15s;
+}
+.delay-4 {
+  animation-delay: 0.2s;
+}
+.delay-5 {
+  animation-delay: 0.25s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* анимация точек, если потом вернёшь лоадер */
+@keyframes loaderDots {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
