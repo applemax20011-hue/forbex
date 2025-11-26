@@ -23,16 +23,15 @@ body {
     #020617;
 }
 
-/* Контейнер */
 .app-container {
   width: 100%;
-  max-width: 480px;
+  max-width: 100%;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, #020617 0, #020617ee 55%, #020617 100%);
-  border-left: 1px solid #111827;
-  border-right: 1px solid #111827;
+  border-left: none;
+  border-right: none;
   position: relative;
 }
 
@@ -1592,14 +1591,13 @@ body {
   color: #9ca3af;
 }
 
-/* Нижняя навигация */
 .bottom-nav {
   position: fixed;
-  left: 50%;
+  left: 0;
   bottom: 0;
-  transform: translateX(-50%);
+  transform: none;
   width: 100%;
-  max-width: 480px;
+  max-width: 100%; /* или просто убери строку max-width */
   padding: 6px 10px 10px;
   background: rgba(2, 6, 23, 0.95);
   border-top: 1px solid #111827;
@@ -1609,6 +1607,7 @@ body {
   backdrop-filter: blur(18px);
   z-index: 30;
 }
+
 
 .nav-tab {
   flex: 1;
@@ -1679,15 +1678,20 @@ body {
   overflow-x: hidden;
 }
 
-.app-container {
-  width: 100%;
-  max-width: 100%; /* или просто УДАЛИ строку с max-width вообще */
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(180deg, #020617 0, #020617ee 55%, #020617 100%);
-  border-left: none;         /* можешь убрать бордера, если не нужны */
-  border-right: none;
-  position: relative;
+.profile-login {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.profile-email {
+  font-size: 12px;
+  font-weight: 400;
+  color: #fef3c7;
+}
+
+.profile-created {
+  font-size: 11px;
+  font-weight: 400;
+  color: #fde68a;
 }
 
