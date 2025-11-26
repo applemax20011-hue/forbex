@@ -98,15 +98,18 @@ body {
   border-radius: 999px;
 }
 
-/* ЛОАДЕР при старте */
+/* ЛОАДЕР при старте: фикс по центру */
 .boot-loader {
-  flex: 1;
-  min-height: 100dvh;
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 14px;
+  pointer-events: none;
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.9), #020617);
+  z-index: 50;
 }
 
 .fox-orbit {
@@ -573,6 +576,12 @@ body {
   gap: 8px;
 }
 
+.wallet-min-info {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
 .wallet-action-btn {
   flex: 1;
   border-radius: 999px;
@@ -650,7 +659,7 @@ body {
   color: #f97316;
 }
 
-/* Модалка кошелька */
+/* Модалки (кошелёк, пароль и т.д.) */
 .wallet-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -744,6 +753,13 @@ body {
   color: #9ca3af;
 }
 
+.wallet-modal-note.error {
+  color: #fecaca;
+}
+.wallet-modal-note.success {
+  color: #bbf7d0;
+}
+
 .wallet-modal-actions {
   margin-top: 10px;
   display: flex;
@@ -770,6 +786,87 @@ body {
   background: linear-gradient(135deg, #f97316, #fde68a);
   border-color: #f97316;
   color: #020617;
+}
+
+/* Детали оплаты при пополнении */
+.payment-details {
+  margin-top: 6px;
+  border-radius: 12px;
+  border: 1px solid #111827;
+  background: #020617;
+  padding: 6px 8px 8px;
+  font-size: 11px;
+}
+
+.payment-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.payment-label {
+  color: #9ca3af;
+}
+
+.payment-value {
+  text-align: right;
+}
+
+.payment-card-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copy-btn {
+  border-radius: 999px;
+  border: 1px solid #374151;
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 10px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.payment-timer {
+  font-weight: 600;
+  color: #f97316;
+}
+
+.payment-upload {
+  margin-top: 6px;
+}
+
+.upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  border: 1px solid #1f2937;
+  background: #020617;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.upload-btn input {
+  display: none;
+}
+
+.upload-filename {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.support-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #38bdf8;
+  text-decoration: none;
 }
 
 /* История */
@@ -879,10 +976,12 @@ body {
 
 .profile-btn {
   border-radius: 999px;
-  border: 1px solid;
+  border: 1px solid #1f2937;
   padding: 7px 0;
   font-size: 12px;
   cursor: pointer;
+  background: #020617;
+  color: #e5e7eb;
 }
 
 .profile-btn.logout {
@@ -891,10 +990,50 @@ body {
   color: #fecaca;
 }
 
-.profile-btn.danger {
-  background: #111827;
-  border-color: #1f2937;
+/* Блок настроек */
+.settings-block {
+  border-radius: 14px;
+  border: 1px solid #111827;
+  background: #020617;
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.settings-row:last-child {
+  margin-bottom: 0;
+}
+
+.settings-label {
+  color: #9ca3af;
+}
+
+.settings-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.settings-chip {
+  border-radius: 999px;
+  border: 1px solid #1f2937;
+  background: #020617;
   color: #e5e7eb;
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.settings-chip.active {
+  background: linear-gradient(135deg, #f97316, #fde68a);
+  color: #020617;
+  border-color: #f97316;
 }
 
 /* AUTH экран */
@@ -987,16 +1126,53 @@ body {
   border-color: #f97316;
 }
 
+/* "Запомнить меня" как тумблер */
 .auth-remember {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 11px;
+  cursor: pointer;
+  margin-top: 2px;
 }
 
-.auth-remember input {
+.remember-toggle {
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  padding: 1px;
+  display: flex;
+  align-items: center;
+}
+.remember-toggle.on {
+  background: linear-gradient(135deg, #f97316, #fde68a);
+  border-color: #f97316;
+  justify-content: flex-end;
+}
+.remember-thumb {
   width: 14px;
   height: 14px;
+  border-radius: 999px;
+  background: #f9fafb;
+}
+
+/* Пост-регистрация (язык/валюта) */
+.post-register {
+  margin-top: 10px;
+}
+
+.post-register-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.post-register-sub {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 8px;
 }
 
 .auth-error {
