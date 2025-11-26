@@ -84,11 +84,11 @@ body {
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
-  align-items: stretch;      /* ВАЖНО */
+  align-items: stretch;   /* ВАЖНО */
 }
 
 .content > * {
-  width: 100%;               /* ВАЖНО */
+  width: 100%;           /* ВАЖНО */
 }
 
 .content::-webkit-scrollbar {
@@ -219,7 +219,7 @@ body {
 
 .section-block {
   border-radius: 14px;
-  width: 100%;               /* ВАЖНО */
+  width: 100%;           /* тоже важно */
 }
 
 .section-title {
@@ -1304,7 +1304,7 @@ body {
 /* --- ПРОФИЛЬ (Исправленный) --- */
 
 .profile-card {
-  width: 100%;               /* тянем карточку на всю ширину секции */
+  width: 100%;           /* тянется на всю ширину секции */
   max-width: 100%;
   box-sizing: border-box;
 
@@ -1681,6 +1681,13 @@ body {
 
 .app-container {
   width: 100%;
-  max-width: 480px;
-  overflow-x: hidden;
+  max-width: 100%; /* или просто УДАЛИ строку с max-width вообще */
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #020617 0, #020617ee 55%, #020617 100%);
+  border-left: none;         /* можешь убрать бордера, если не нужны */
+  border-right: none;
+  position: relative;
 }
+
