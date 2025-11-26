@@ -80,7 +80,7 @@ body {
 /* Контент */
 .content {
   flex: 1;
-  padding: 12px 14px 80px; /* снизу запас под навигацию */
+  padding: 12px 16px 80px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -216,6 +216,7 @@ body {
 /* Заголовки секций */
 .section-block {
   border-radius: 14px;
+  width: 100%;
 }
 
 .section-title {
@@ -408,15 +409,27 @@ body {
   font-weight: 600;
 }
 
+/* базовый вид графика оставляем как есть */
 .fake-chart {
   position: relative;
-  height: 160px;
+  height: 210px;
   border-radius: 12px;
   overflow: hidden;
   background: radial-gradient(circle at top, #0f172a, #020617 70%);
 }
 
-/* базовая "линия" графика */
+/* контейнер для lightweight-charts */
+.lw-chart {
+  position: absolute;
+  inset: 0;
+}
+
+.chart-svg {
+  position: absolute;
+  inset: 0;
+}
+
+/* линия графика */
 .fake-chart::before {
   content: "";
   position: absolute;
@@ -424,9 +437,9 @@ body {
   background-image: linear-gradient(
     135deg,
     rgba(34, 197, 94, 0.95),
-    rgba(249, 115, 22, 0.95)
+    rgba(248, 113, 22, 0.95)
   );
-  opacity: 0.85;
+  opacity: 0.9;
   clip-path: polygon(
     0% 60%,
     12% 55%,
@@ -437,57 +450,88 @@ body {
     80% 45%,
     100% 50%
   );
-  transform: translateY(0);
 }
 
-/* направления движения */
+/* разные сценарии движения */
+
+/* режим ожидания */
 .fake-chart.chart-idle::before {
   animation: chartIdle 6s ease-in-out infinite;
 }
-.fake-chart.chart-up::before {
-  animation: chartUp 4s linear infinite;
-}
-.fake-chart.chart-down::before {
-  animation: chartDown 4s linear infinite;
-}
-.fake-chart.chart-flat::before {
-  animation: chartFlat 4s ease-in-out infinite;
+
+/* ВВЕРХ / выигрыш:
+   сначала лёгкая просадка вниз, потом уверенный рост */
+.fake-chart.chart-up-win::before {
+  animation: chartUpWin 6s linear infinite;
 }
 
-@keyframes chartUp {
-  from {
-    transform: translateY(18%);
-  }
-  to {
-    transform: translateY(-18%);
-  }
+/* ВВЕРХ / проигрыш:
+   сначала чуть вверх, потом сильнее вниз */
+.fake-chart.chart-up-lose::before {
+  animation: chartUpLose 6s linear infinite;
 }
-@keyframes chartDown {
-  from {
-    transform: translateY(-18%);
-  }
-  to {
-    transform: translateY(18%);
-  }
+
+/* ВНИЗ / выигрыш:
+   сначала небольшой всплеск вверх, затем вниз */
+.fake-chart.chart-down-win::before {
+  animation: chartDownWin 6s linear infinite;
 }
-@keyframes chartFlat {
-  from {
-    transform: translateY(4%);
-  }
-  to {
-    transform: translateY(-4%);
-  }
+
+/* ВНИЗ / проигрыш:
+   сначала вниз, потом вверх */
+.fake-chart.chart-down-lose::before {
+  animation: chartDownLose 6s linear infinite;
 }
+
+/* НЕ ИЗМЕНИТСЯ — мягкая болтанка вокруг уровня */
+.fake-chart.chart-flat-win::before,
+.fake-chart.chart-flat-lose::before {
+  animation: chartFlat 6s ease-in-out infinite;
+}
+
+/* сами keyframes */
+
 @keyframes chartIdle {
-  0% {
-    transform: translateY(8%);
-  }
-  50% {
-    transform: translateY(-8%);
-  }
-  100% {
-    transform: translateY(8%);
-  }
+  0% { transform: translateY(4%); }
+  50% { transform: translateY(-4%); }
+  100% { transform: translateY(4%); }
+}
+
+/* вверх / win: вниз → вверх */
+@keyframes chartUpWin {
+  0%   { transform: translateY(4%); }
+  25%  { transform: translateY(18%); }   /* просадка вниз */
+  100% { transform: translateY(-18%); }  /* мощный рост */
+}
+
+/* вверх / lose: вверх → вниз */
+@keyframes chartUpLose {
+  0%   { transform: translateY(4%); }
+  30%  { transform: translateY(-14%); }  /* немного вверх */
+  100% { transform: translateY(22%); }   /* сильнее вниз */
+}
+
+/* вниз / win: вверх → вниз */
+@keyframes chartDownWin {
+  0%   { transform: translateY(4%); }
+  25%  { transform: translateY(-16%); }  /* всплеск вверх */
+  100% { transform: translateY(20%); }   /* падение */
+}
+
+/* вниз / lose: вниз → вверх */
+@keyframes chartDownLose {
+  0%   { transform: translateY(4%); }
+  30%  { transform: translateY(18%); }   /* вниз */
+  100% { transform: translateY(-18%); }  /* потом вверх */
+}
+
+/* плоский сценарий */
+@keyframes chartFlat {
+  0%   { transform: translateY(2%); }
+  25%  { transform: translateY(-3%); }
+  50%  { transform: translateY(1%); }
+  75%  { transform: translateY(-2%); }
+  100% { transform: translateY(2%); }
 }
 
 .fake-chart-layer {
@@ -515,11 +559,13 @@ body {
   );
 }
 
+/* оставим сетку и подпись */
 .fake-chart-grid {
   position: absolute;
   inset: 10px;
   border-radius: 10px;
   border: 1px dashed rgba(148, 163, 184, 0.2);
+  pointer-events: none;
 }
 
 .fake-chart-label {
@@ -578,9 +624,10 @@ body {
   border: 1px solid #1f2937;
   background: #020617;
   color: #e5e7eb;
-  font-size: 11px;
-  padding: 4px 8px;
+  font-size: 13px;
+  padding: 6px 12px;
   cursor: pointer;
+  min-width: 54px;
 }
 
 .trade-coin-btn.active {
@@ -603,10 +650,10 @@ body {
 .trade-input-with-suffix {
   display: flex;
   align-items: center;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid #111827;
   background: #020617;
-  padding: 2px 6px;
+  padding: 4px 10px;
 }
 
 .trade-input-with-suffix input {
@@ -614,8 +661,8 @@ body {
   border: none;
   background: transparent;
   color: #f9fafb;
-  font-size: 12px;
-  padding: 4px 2px;
+  font-size: 14px;
+  padding: 6px 4px;
 }
 
 .trade-input-with-suffix input:focus {
@@ -1251,15 +1298,26 @@ body {
   color: #6b7280;
 }
 
-/* Профиль */
 .profile-card {
-  padding: 10px 12px;
-  border-radius: 16px;
+  padding: 12px 14px;
+  border-radius: 18px;
   background: radial-gradient(circle at top left, #f97316, #020617 60%);
   border: 1px solid #fb923c;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.9);
+}
+
+.profile-login {
+  font-size: 16px;
+  font-weight: 700;
+}
+.profile-email {
+  font-size: 12px;
+}
+.profile-created {
+  font-size: 11px;
 }
 
 .profile-avatar {
@@ -1277,19 +1335,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.profile-login {
-  font-size: 14px;
-  font-weight: 600;
-}
-.profile-email {
-  font-size: 11px;
-  color: #fef3c7;
-}
-.profile-created {
-  font-size: 10px;
-  color: #fef9c3;
 }
 
 .profile-actions {
@@ -1314,13 +1359,33 @@ body {
   color: #fecaca;
 }
 
-/* Блок настроек */
 .settings-block {
-  border-radius: 14px;
-  border: 1px solid #111827;
+  border-radius: 16px;
+  border: 1px solid #f97316;
+  background: radial-gradient(circle at top left, #f973161a, #020617 70%);
+  padding: 10px 12px;
+  font-size: 12px;
+  box-shadow: 0 0 22px rgba(248, 113, 22, 0.35);
+}
+
+.settings-chip {
+  border-radius: 999px;
+  border: 1px solid #1f2937;
   background: #020617;
-  padding: 8px 10px;
-  font-size: 11px;
+  color: #e5e7eb;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.1s ease,
+    border-color 0.15s ease, background 0.15s ease;
+}
+
+.settings-chip.active {
+  background: linear-gradient(135deg, #f97316, #fde68a);
+  color: #020617;
+  border-color: #f97316;
+  box-shadow: 0 0 18px rgba(248, 113, 22, 0.9);
+  transform: translateY(-1px);
 }
 
 .settings-row {
@@ -1344,22 +1409,6 @@ body {
   flex-wrap: wrap;
 }
 
-.settings-chip {
-  border-radius: 999px;
-  border: 1px solid #1f2937;
-  background: #020617;
-  color: #e5e7eb;
-  font-size: 11px;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-
-.settings-chip.active {
-  background: linear-gradient(135deg, #f97316, #fde68a);
-  color: #020617;
-  border-color: #f97316;
-}
-
 /* AUTH экран */
 .auth-screen {
   flex: 1;
@@ -1371,23 +1420,38 @@ body {
 
 .auth-card {
   width: 100%;
-  padding: 18px 18px 16px;
-  border-radius: 18px;
-  border: 1px solid #111827;
-  background: radial-gradient(circle at top, #f9731622, #020617 60%);
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.9);
-  max-width: 360px;
+  padding: 22px 20px 18px;
+  border-radius: 22px;
+  border: 1px solid #f97316;
+  background:
+    radial-gradient(circle at top, #f973162e, #020617 60%),
+    radial-gradient(circle at bottom, #0ea5e91a, transparent 60%);
+  box-shadow:
+    0 0 30px rgba(248, 113, 22, 0.6),
+    0 18px 34px rgba(0, 0, 0, 0.9);
+  max-width: 380px;
   margin: 0 12px;
+}
+
+.auth-title {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.auth-form input[type="text"],
+.auth-form input[type="email"],
+.auth-form input[type="password"] {
+  border-radius: 12px;
+  border: 1px solid #111827;
+  background: #020617;
+  color: #f9fafb;
+  padding: 8px 10px;
+  font-size: 13px;
 }
 
 .auth-fox {
   font-size: 34px;
   margin-bottom: 4px;
-}
-
-.auth-title {
-  font-size: 18px;
-  font-weight: 700;
 }
 
 .auth-sub {

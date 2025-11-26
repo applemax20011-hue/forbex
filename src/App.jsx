@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import "./App.css";
 
 // ===== Константы =====
@@ -58,6 +58,7 @@ const STORAGE_KEYS = {
   loginHistory: "forbex_login_history",
   settings: "forbex_settings",
   tradeHistory: "forbex_trade_history",
+  registrationTs: "forbex_registration_ts",   // ← добавили
 };
 
 const TV_SYMBOLS = {
@@ -78,6 +79,136 @@ const TV_SYMBOLS = {
   SOL: "BINANCE:SOLUSDT",
   LINK: "BINANCE:LINKUSDT",
 };
+
+function ScenarioLightweightChart({ points, scenario, progress }) {
+  const svgRef = useRef(null);
+
+  // считаем, какие точки показывать с учётом progress
+  const processed = useMemo(() => {
+    if (!Array.isArray(points) || points.length === 0) return null;
+
+    const ratio = progress == null ? 1 : progress;
+    const visibleCount = Math.max(2, Math.floor(points.length * ratio));
+    const data = points.slice(0, visibleCount);
+
+    const values = data.map((p) => p.value);
+    const times = data.map((p) => p.time);
+
+    const minV = Math.min(...values);
+    const maxV = Math.max(...values);
+    const minT = Math.min(...times);
+    const maxT = Math.max(...times);
+
+    const vRange = maxV - minV || 1;
+    const tRange = maxT - minT || 1;
+
+    const width = 100;
+    const height = 100;
+
+    const path = data
+      .map((p) => {
+        const x = ((p.time - minT) / tRange) * width;
+        const y = height - ((p.value - minV) / vRange) * height;
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(" ");
+
+    return { path, width, height };
+  }, [points, progress]);
+
+  if (!processed) {
+    return (
+      <div
+        className="lw-chart"
+        style={{ width: "100%", height: "260px", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.5 }}
+      >
+        нет данных для графика
+      </div>
+    );
+  }
+
+  const { path, width, height } = processed;
+  const color =
+    scenario && scenario.endsWith("win") ? "#22c55e" : "#f97316";
+
+  return (
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${width} ${height}`}
+      className="lw-chart-svg"
+      style={{ width: "100%", height: "260px" }}
+    >
+      {/* фон-сетка (просто декоративная) */}
+      <defs>
+        <pattern
+          id="grid"
+          x="0"
+          y="0"
+          width="10"
+          height="10"
+          patternUnits="userSpaceOnUse"
+        >
+          <path
+            d="M 10 0 L 0 0 0 10"
+            fill="none"
+            stroke="#111827"
+            strokeWidth="0.3"
+          />
+        </pattern>
+      </defs>
+      <rect
+        x="0"
+        y="0"
+        width={width}
+        height={height}
+        fill="url(#grid)"
+      />
+
+      {/* линия цены */}
+      <polyline
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        points={path}
+      />
+    </svg>
+  );
+}
+
+// генерим "будущее" от реальной цены
+function generateScenarioPoints(scenario, startPoint) {
+  const steps = 40;      // сколько точек в будущем
+  const stepSec = 15;    // шаг по времени в секундах
+
+  const base = startPoint?.value || 100;
+  const startTime = startPoint?.time || Math.floor(Date.now() / 1000);
+
+  const maxChange = 0.03;   // до 3% вверх/вниз
+  const noiseLevel = 0.003; // до 0.3% шум
+
+  const points = [];
+
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+
+    let dir = 0;
+    if (scenario === "up-win" || scenario === "down-lose") dir = 1;
+    else if (scenario === "down-win" || scenario === "up-lose") dir = -1;
+    else dir = 0; // flat-сценарии
+
+    const trend = base * maxChange * dir * t;
+    const noise = base * noiseLevel * (Math.random() - 0.5);
+
+    points.push({
+      time: startTime + i * stepSec,
+      value: base + trend + noise,
+    });
+  }
+
+  return points;
+}
 
 function TradingViewChart({ symbol }) {
   const containerRef = useRef(null);
@@ -227,21 +358,61 @@ function App() {
   const [loginHistory, setLoginHistory] = useState([]);
 
   // trade
-    // trade
   const [selectedSymbol, setSelectedSymbol] = useState("BTC");
-  const [chartDirection, setChartDirection] = useState("idle"); // idle | up | down | flat
+  const [chartDirection, setChartDirection] = useState("idle");
+  const [chartScenario, setChartScenario] = useState("idle");
+
+// база = реальная история, chartPoints = база + сценарий
+  const [baseChartPoints, setBaseChartPoints] = useState([]);
+  const [chartPoints, setChartPoints] = useState([]);
+  const [chartProgress, setChartProgress] = useState(1); // 0..1, сколько линии уже прорисовано
   const [tradeForm, setTradeForm] = useState({
-  amount: "",
-  direction: "up", // "up" | "down" | "flat"
-  multiplier: 2,
-  duration: 10, // секунд
-});
+    amount: "",
+    direction: "up",
+    multiplier: 2,
+    duration: 10,
+  });
 
   const [tradeError, setTradeError] = useState("");
   const [activeTrade, setActiveTrade] = useState(null);
   const [tradeCountdown, setTradeCountdown] = useState(0);
   const [lastTradeResult, setLastTradeResult] = useState(null);
   const [tradeHistory, setTradeHistory] = useState([]);
+  
+  // отдельная функция, которую вызывает useEffect с таймером
+const finishTrade = (trade) => {
+  const win = trade.resultDirection === trade.direction; // up / down / flat
+  const profit = win
+    ? trade.amount * (trade.multiplier - 1)
+    : -trade.amount;
+
+  if (win) {
+    setBalance((prev) => prev + trade.amount * trade.multiplier);
+  }
+
+  const finished = {
+    ...trade,
+    finishedAt: Date.now(),
+    status: win ? "win" : "lose",
+    profit,
+  };
+
+  setTradeHistory((prev) => [finished, ...prev]);
+  setActiveTrade(null);
+  setLastTradeResult({
+      status: win ? "win" : "lose",
+      chartDirection: trade.resultDirection,
+      message: win
+        ? isEN
+          ? "Congratulations! The asset price moved in your direction."
+          : "Поздравляем! Стоимость актива пошла в вашу сторону."
+        : isEN
+        ? "The asset price moved against your forecast. The investment failed."
+        : "Стоимость актива пошла против вашего прогноза. Инвестиция не удалась.",
+  });
+
+  setChartDirection(trade.resultDirection);
+};
 
   // смена пароля
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -377,62 +548,90 @@ function App() {
   }, [walletModal, depositStep]);
   
   // отсчёт по сделке
+  // отсчёт по сделке + прогресс для графика
   useEffect(() => {
     if (!activeTrade) return;
 
     setTradeCountdown(activeTrade.duration);
     setLastTradeResult(null);
+    setChartProgress(0);
+
+    const total = activeTrade.duration;
 
     const timerId = setInterval(() => {
       setTradeCountdown((prev) => {
         if (prev <= 1) {
+          setChartProgress(1); // дорисовали линию до конца
           clearInterval(timerId);
           finishTrade(activeTrade);
           return 0;
         }
-        return prev - 1;
+
+        const next = prev - 1;
+        const elapsed = total - next;
+        setChartProgress(Math.min(1, elapsed / total));
+        return next;
       });
     }, 1000);
 
     return () => clearInterval(timerId);
   }, [activeTrade]);
   
+function formatVolume(num) {
+  if (typeof num !== "number" || Number.isNaN(num)) return "";
+  if (num >= 1e9) return (num / 1e9).toFixed(1) + "B";
+  if (num >= 1e6) return (num / 1e6).toFixed(1) + "M";
+  if (num >= 1e3) return (num / 1e3).toFixed(1) + "K";
+  return num.toFixed(0);
+}
+  
 // подгружаем реальные цены монет (CoinGecko)
+// подгружаем реальные цены монет (CoinGecko: price + 24h change + volume)
 useEffect(() => {
   async function fetchCoinPrices() {
     try {
       const ids = Object.values(COIN_API_MAP).join(",");
       const res = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
+        `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&price_change_percentage=24h`
       );
       if (!res.ok) return;
+
       const data = await res.json();
+      const byId = {};
+      data.forEach((item) => {
+        byId[item.id] = item;
+      });
 
       setCoins((prev) =>
         prev.map((coin) => {
           const apiId = COIN_API_MAP[coin.symbol];
-          const apiData = apiId ? data[apiId] : null;
+          const apiData = apiId ? byId[apiId] : null;
           if (!apiData) return coin;
 
-          const price = apiData.usd;
-          const changeNum = Number(apiData.usd_24h_change);
+          const price = apiData.current_price;
+          const changeNum = apiData.price_change_percentage_24h;
+          const volumeNum = apiData.total_volume;
 
-          // если цена сломанная/нет числа – не трогаем монету
           if (typeof price !== "number" || Number.isNaN(price)) {
             return coin;
           }
 
-          // строка изменения цены: если числа нет – оставляем старую
           let changeStr = coin.change;
-          if (!Number.isNaN(changeNum)) {
+          if (typeof changeNum === "number" && !Number.isNaN(changeNum)) {
             changeStr =
               (changeNum >= 0 ? "+" : "") + changeNum.toFixed(2) + "%";
+          }
+
+          let volumeStr = coin.volume;
+          if (typeof volumeNum === "number" && !Number.isNaN(volumeNum)) {
+            volumeStr = formatVolume(volumeNum);
           }
 
           return {
             ...coin,
             price,
             change: changeStr,
+            volume: volumeStr,
           };
         })
       );
@@ -441,10 +640,80 @@ useEffect(() => {
     }
   }
 
-  fetchCoinPrices();              // первый раз
-  const id = setInterval(fetchCoinPrices, 60000); // раз в минуту
+  fetchCoinPrices();                  // первый раз
+  const id = setInterval(fetchCoinPrices, 15000); // обновление
   return () => clearInterval(id);
 }, []);
+
+  // проста фейковая история, если CoinGecko не ответил
+  const buildFallbackHistory = () => {
+    const now = Math.floor(Date.now() / 1000);
+    const basePrice =
+      (coins.find((c) => c.symbol === selectedSymbol)?.price) || 100;
+
+    const arr = [];
+    let price = basePrice;
+    for (let i = 59; i >= 0; i--) {
+      // лёгкий рандомный шаг
+      const noise = basePrice * 0.002 * (Math.random() - 0.5); // ±0.2%
+      price += noise;
+      arr.push({
+        time: now - i * 60,
+        value: price,
+      });
+    }
+    return arr;
+  };
+
+useEffect(() => {
+  async function fetchHistory() {
+    const apiId = COIN_API_MAP[selectedSymbol];
+    if (!apiId) return;
+
+    try {
+      const res = await fetch(
+        `https://api.coingecko.com/api/v3/coins/${apiId}/market_chart?vs_currency=usd&days=1&interval=minute`
+      );
+
+      if (!res.ok) {
+        console.warn("market_chart not ok, use fallback");
+        const fallback = buildFallbackHistory();
+        setBaseChartPoints(fallback);
+        setChartScenario("idle");
+        setChartProgress(1);
+        setChartPoints(fallback);
+        return;
+      }
+
+      const data = await res.json();
+      const prices = data.prices || [];
+
+      let last = prices.slice(-60).map(([ts, price]) => ({
+        time: Math.floor(ts / 1000),
+        value: price,
+      }));
+
+      if (!last.length) {
+        console.warn("no prices, use fallback");
+        last = buildFallbackHistory();
+      }
+
+      setBaseChartPoints(last);
+      setChartScenario("idle");
+      setChartProgress(1);
+      setChartPoints(last);
+    } catch (e) {
+      console.error("Failed to load history for chart", e);
+      const fallback = buildFallbackHistory();
+      setBaseChartPoints(fallback);
+      setChartScenario("idle");
+      setChartProgress(1);
+      setChartPoints(fallback);
+    }
+  }
+
+  fetchHistory();
+}, [selectedSymbol, coins]); // добавь сюда coins
 
   // ===== helpers =====
   const showOverlay = (title, subtitle, callback, delay = 1100) => {
@@ -545,6 +814,13 @@ useEffect(() => {
         } catch {
           // ignore
         }
+		
+		if (!localStorage.getItem(STORAGE_KEYS.registrationTs)) {
+        localStorage.setItem(
+          STORAGE_KEYS.registrationTs,
+          String(pendingUser.createdAt)
+        );
+       }
 
         const entry = {
           id: Date.now(),
@@ -562,50 +838,61 @@ useEffect(() => {
     );
   };
 
-  const handleLogin = () => {
-    const { login, email, password, remember } = authForm;
+const handleLogin = () => {
+  const { login, email, password, remember } = authForm;
 
-    try {
-      const savedUserStr = localStorage.getItem(STORAGE_KEYS.user);
-      const savedPass = localStorage.getItem(STORAGE_KEYS.password);
+  try {
+    const savedUserStr = localStorage.getItem(STORAGE_KEYS.user);
+    const savedPass = localStorage.getItem(STORAGE_KEYS.password);
 
-      if (!savedUserStr || !savedPass) {
-        setAuthError("Аккаунт не найден. Сначала зарегистрируйтесь.");
-        return;
-      }
-
-      const savedUser = JSON.parse(savedUserStr);
-      const loginOrEmail = login.trim() || email.trim();
-
-      if (
-        loginOrEmail !== savedUser.login &&
-        loginOrEmail !== savedUser.email
-      ) {
-        setAuthError("Неверный логин или email.");
-        return;
-      }
-
-      if (password !== savedPass) {
-        setAuthError("Неверный пароль.");
-        return;
-      }
-
-      setUser(savedUser);
-      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-
-      const entry = {
-        id: Date.now(),
-        type: "login",
-        login: savedUser.login,
-        email: savedUser.email,
-        ts: Date.now(),
-        device: navigator.userAgent || "",
-      };
-      setLoginHistory((prev) => [entry, ...prev]);
-    } catch {
-      setAuthError("Ошибка входа. Попробуйте ещё раз.");
+    if (!savedUserStr || !savedPass) {
+      setAuthError("Аккаунт не найден. Сначала зарегистрируйтесь.");
+      return;
     }
-  };
+
+    const savedUser = JSON.parse(savedUserStr);
+    const loginOrEmail = login.trim() || email.trim();
+
+    if (
+      loginOrEmail !== savedUser.login &&
+      loginOrEmail !== savedUser.email
+    ) {
+      setAuthError("Неверный логин или email.");
+      return;
+    }
+
+    if (password !== savedPass) {
+      setAuthError("Неверный пароль.");
+      return;
+    }
+
+    // постоянная дата регистрации
+    const savedRegTs = localStorage.getItem(STORAGE_KEYS.registrationTs);
+    const createdAt =
+      savedRegTs ? Number(savedRegTs) : savedUser.createdAt || Date.now();
+
+    const userWithCreatedAt = { ...savedUser, createdAt };
+
+    setUser(userWithCreatedAt);
+    localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+    localStorage.setItem(
+      STORAGE_KEYS.user,
+      JSON.stringify(userWithCreatedAt)
+    );
+
+    const entry = {
+      id: Date.now(),
+      type: "login",
+      login: savedUser.login,
+      email: savedUser.email,
+      ts: Date.now(),
+      device: navigator.userAgent || "",
+    };
+    setLoginHistory((prev) => [entry, ...prev]);
+  } catch {
+    setAuthError("Ошибка входа. Попробуйте ещё раз.");
+  }
+};
 
   const handleLogout = () => {
     if (user) {
@@ -688,51 +975,47 @@ useEffect(() => {
       startedAt: Date.now(),
     };
 
-    // блокируем сумму на время сделки
-    setBalance((prev) => prev - amountNum);
-    setChartDirection(resultDirection); // запускаем анимацию графика
-    setActiveTrade(trade);
-  };
+    // определяем, выиграет ли сделка
+    const willWin = resultDirection === tradeForm.direction;
 
-  // отдельная функция, которую вызывает useEffect с таймером
-  function finishTrade(trade) {
-    const win = trade.resultDirection === trade.direction; // up / down / flat
-    const profit = win
-      ? trade.amount * (trade.multiplier - 1)
-      : -trade.amount;
+    // выбираем сценарий анимации графика
+    let scenario = "idle";
 
-    if (win) {
-      setBalance((prev) => prev + trade.amount * trade.multiplier);
+    if (tradeForm.direction === "up") {
+      scenario = willWin ? "up-win" : "up-lose";
+    } else if (tradeForm.direction === "down") {
+      scenario = willWin ? "down-win" : "down-lose";
+    } else {
+      // flat
+      scenario = willWin ? "flat-win" : "flat-lose";
     }
 
-    const finished = {
-      ...trade,
-      finishedAt: Date.now(),
-      status: win ? "win" : "lose",
-      profit,
-    };
+setChartScenario(scenario);
 
-    setTradeHistory((prev) => [finished, ...prev]);
-    setActiveTrade(null);
-    setLastTradeResult({
-      status: win ? "win" : "lose",
-      chartDirection: trade.resultDirection,
-      message: win
-        ? isEN
-          ? "Congratulations! The asset price moved in your direction."
-          : "Поздравляем! Стоимость актива пошла в вашу сторону."
-        : isEN
-        ? "The asset price moved against your forecast. The investment failed."
-        : "Стоимость актива пошла против вашего прогноза. Инвестиция не удалась.",
-    });
+// берём последнюю реальную точку (текущую цену)
+const lastBasePoint =
+  baseChartPoints.length > 0
+    ? baseChartPoints[baseChartPoints.length - 1]
+    : null;
 
-    // после сделки оставляем график в последнем направлении
-    setChartDirection(trade.resultDirection);
-  }
+// генерим "будущее" от неё
+const future = generateScenarioPoints(scenario, lastBasePoint);
+
+// для красоты берём хвост истории + будущее
+const historyTail = baseChartPoints.slice(-40);
+setChartPoints([...historyTail, ...future]);
+
+setChartProgress(0); // линия будет прорисовываться по таймеру
+                           // начинаем с нуля
+
+    // блокируем сумму и запускаем сделку
+    setBalance((prev) => prev - amountNum);
+    setChartDirection(resultDirection);
+    setActiveTrade(trade);
+  }; // ← ВОТ ЭТА СТРОКА НУЖНА
 
   const handlePasswordChange = () => {
     const { oldPassword, newPassword, confirmPassword } = passwordForm;
-
     try {
       const savedPass = localStorage.getItem(STORAGE_KEYS.password);
       if (!savedPass) {
@@ -956,34 +1239,63 @@ const handleDepositSendReceipt = () => {
     </>
   );
 
-  const renderTrade = () => {
-    const currentCoin =
-      coins.find((c) => c.symbol === selectedSymbol) || coins[0];
+const renderTrade = () => {
+  const currentCoin =
+    coins.find((c) => c.symbol === selectedSymbol) || coins[0];
 
-    const chartDir =
-      activeTrade?.resultDirection ||
-      lastTradeResult?.chartDirection ||
-      chartDirection ||
-      "idle";
+  const scenario = chartScenario || "idle";
 
-    const minInvest = settings.currency === "RUB" ? 100 : 5;
-    const multipliers = [2, 5, 10];
-    const durations = [10, 30, 60];
+  const minInvest = settings.currency === "RUB" ? 100 : 5;
+  const multipliers = [2, 5, 10];
+  const durations = [10, 30, 60];
 
-    return (
-      <>
-        <section className="section-block fade-in delay-1">
-          <div className="section-title">
-            <h2>{isEN ? "Trading" : "Торговля"}</h2>
-            <p>
-              {isEN
-                ? "Choose a coin, set amount, direction and time — the result will be calculated automatically."
-                : "Выберите монету, задайте сумму, направление и время — результат сделки посчитается автоматически."}
-            </p>
-          </div>
+  // подпись под графиком — можно оставить, но основное теперь линия
+  const chartLabel =
+    scenario === "idle"
+      ? isEN
+        ? "Waiting for trade…"
+        : "Ожидаем сделку…"
+      : scenario.startsWith("up") && scenario.endsWith("win")
+      ? isEN
+        ? "Price goes up"
+        : "Курс растёт"
+      : scenario.startsWith("up") && scenario.endsWith("lose")
+      ? isEN
+        ? "Price goes down"
+        : "Курс падает"
+      : scenario.startsWith("down") && scenario.endsWith("win")
+      ? isEN
+        ? "Price goes down"
+        : "Курс падает"
+      : scenario.startsWith("down") && scenario.endsWith("lose")
+      ? isEN
+        ? "Price goes up"
+        : "Курс растёт"
+      : scenario.startsWith("flat") && scenario.endsWith("win")
+      ? isEN
+        ? "Almost no change"
+        : "Почти без изменений"
+      : scenario.startsWith("flat") && scenario.endsWith("lose")
+      ? isEN
+        ? "Small volatility"
+        : "Небольшая волатильность"
+      : isEN
+      ? "Almost no change"
+      : "Почти без изменений";
 
-          <div className="trade-layout">
-            {/* Левая часть: график */}
+  return (
+    <>
+      <section className="section-block fade-in delay-1">
+        <div className="section-title">
+          <h2>{isEN ? "Trading" : "Торговля"}</h2>
+          <p>
+            {isEN
+              ? "Choose a coin, set amount, direction and time — the result will be calculated automatically."
+              : "Выберите монету, задайте сумму, направление и время — результат сделки посчитается автоматически."}
+          </p>
+        </div>
+        <div className="trade-layout">
+          {/* Левая часть: наш фейковый график */}
 <div className="trade-chart-card">
   <div className="trade-chart-header">
     <div className="trade-pair">
@@ -1000,16 +1312,22 @@ const handleDepositSendReceipt = () => {
     </div>
   </div>
 
-  {/* вот тут теперь TradingView */}
-  <TradingViewChart symbol={currentCoin.symbol} />
+  {/* наш рисованный график */}
+  <div className={`fake-chart chart-${scenario}`}>
+    <ScenarioLightweightChart
+      points={chartPoints}
+      scenario={scenario}
+      progress={activeTrade ? chartProgress : 1}
+    />
+    <div className="fake-chart-grid" />
+    <div className="fake-chart-label">{chartLabel}</div>
+  </div>
 
   <div className="trade-timeframe-row">
     {["1М", "15М", "1Ч", "4Ч", "1Д"].map((tf, i) => (
       <button
         key={tf}
-        className={
-          "tf-pill " + (i === 3 ? "tf-pill-active" : "")
-        }
+        className={"tf-pill " + (i === 3 ? "tf-pill-active" : "")}
         type="button"
       >
         {tf}
@@ -2453,78 +2771,95 @@ const methodLabel = (m) => {
               </button>
             </div>
 
-            <div className="auth-form">
-              <label>
-                Логин / никнейм
-                <input
-                  type="text"
-                  value={authForm.login}
-                  onChange={(e) =>
-                    handleAuthInput("login", e.target.value)
-                  }
-                  placeholder="Например, fox_trader"
-                />
-              </label>
+<div className="auth-form">
+  {authMode === "register" ? (
+    <>
+      <label>
+        Логин / никнейм
+        <input
+          type="text"
+          value={authForm.login}
+          onChange={(e) =>
+            handleAuthInput("login", e.target.value)
+          }
+          placeholder="Например, fox_trader"
+        />
+      </label>
 
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={authForm.email}
-                  onChange={(e) =>
-                    handleAuthInput("email", e.target.value)
-                  }
-                  placeholder="name@example.com"
-                />
-              </label>
+      <label>
+        Email
+        <input
+          type="email"
+          value={authForm.email}
+          onChange={(e) =>
+            handleAuthInput("email", e.target.value)
+          }
+          placeholder="name@example.com"
+        />
+      </label>
+    </>
+  ) : (
+    <>
+      <label>
+        Логин или email
+        <input
+          type="text"
+          value={authForm.login}
+          onChange={(e) =>
+            handleAuthInput("login", e.target.value)
+          }
+          placeholder="Введите логин или email"
+        />
+      </label>
+    </>
+  )}
 
-              <label>
-                Пароль
-                <input
-                  type="password"
-                  value={authForm.password}
-                  onChange={(e) =>
-                    handleAuthInput("password", e.target.value)
-                  }
-                  placeholder="Не менее 4 символов"
-                />
-              </label>
+  <label>
+    Пароль
+    <input
+      type="password"
+      value={authForm.password}
+      onChange={(e) =>
+        handleAuthInput("password", e.target.value)
+      }
+      placeholder="Не менее 4 символов"
+    />
+  </label>
 
-              <div
-                className="auth-remember"
-                onClick={() =>
-                  handleAuthInput("remember", !authForm.remember)
-                }
-              >
-                <div
-                  className={
-                    "remember-toggle " +
-                    (authForm.remember ? "on" : "")
-                  }
-                >
-                  <div className="remember-thumb" />
-                </div>
-                <span>Запомнить меня</span>
-              </div>
+  <div
+    className="auth-remember"
+    onClick={() =>
+      handleAuthInput("remember", !authForm.remember)
+    }
+  >
+    <div
+      className={
+        "remember-toggle " +
+        (authForm.remember ? "on" : "")
+      }
+    >
+      <div className="remember-thumb" />
+    </div>
+    <span>Запомнить меня</span>
+  </div>
 
-              {authError && (
-                <div className="auth-error">{authError}</div>
-              )}
+  {authError && (
+    <div className="auth-error">{authError}</div>
+  )}
 
-              <button
-                className="auth-submit"
-                onClick={
-                  authMode === "register"
-                    ? handleRegister
-                    : handleLogin
-                }
-              >
-                {authMode === "register"
-                  ? "Зарегистрироваться"
-                  : "Войти"}
-              </button>
-            </div>
-
+  <button
+    className="auth-submit"
+    onClick={
+      authMode === "register"
+        ? handleRegister
+        : handleLogin
+    }
+  >
+    {authMode === "register"
+      ? "Зарегистрироваться"
+      : "Войти"}
+  </button>
+</div>
             <div className="auth-note">
               Интерфейс сейчас работает как тестовая оболочка. Данные
               хранятся только в вашем браузере и не отправляются на
