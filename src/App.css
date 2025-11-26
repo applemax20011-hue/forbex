@@ -1,3 +1,4 @@
+/* ВАЖНО: Это сброс поведения размеров для ВСЕХ элементов */
 * {
   box-sizing: border-box;
 }
@@ -218,7 +219,10 @@ body {
 
 .section-block {
   border-radius: 14px;
-  width: 100%;           /* тоже важно */
+  width: 100%;
+  box-sizing: border-box; /* Добавь это */
+  display: flex;           /* Добавь это, чтобы дети точно слушались */
+  flex-direction: column;  /* Добавь это */
 }
 
 .section-title {
@@ -1364,7 +1368,6 @@ body {
 .settings-block {
   width: 100%;
   box-sizing: border-box;
-
   border-radius: 16px;
   border: 1px solid #f97316;
   background: radial-gradient(circle at top left, #f973161a, #020617 70%);
