@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import "./App.css";
 
 // ===== Константы =====
@@ -11,18 +11,43 @@ const TABS = [
   { id: 5, labelRu: "Профиль", labelEn: "Profile", icon: "👤" },
 ];
 
-const popularCoins = [
+const INITIAL_COINS = [
   { symbol: "BTC", name: "Bitcoin", price: 97320, change: "+3.2%", volume: "34.1B" },
   { symbol: "ETH", name: "Ethereum", price: 3270, change: "+1.8%", volume: "18.4B" },
-  { symbol: "SOL", name: "Solana", price: 192, change: "-0.7%", volume: "4.2B" },
-  { symbol: "BNB", name: "BNB", price: 612, change: "+0.4%", volume: "2.9B" },
+  { symbol: "LTC", name: "Litecoin", price: 84, change: "-0.3%", volume: "410M" },
+  { symbol: "ADA", name: "Cardano", price: 0.52, change: "+0.7%", volume: "980M" },
+  { symbol: "DOT", name: "Polkadot", price: 7.4, change: "+1.1%", volume: "610M" },
+  { symbol: "MATIC", name: "Polygon", price: 0.89, change: "-0.5%", volume: "520M" },
+  { symbol: "AVAX", name: "Avalanche", price: 29.1, change: "+2.4%", volume: "430M" },
+  { symbol: "UNI", name: "Uniswap", price: 11.2, change: "+0.3%", volume: "210M" },
   { symbol: "XRP", name: "XRP", price: 0.81, change: "+0.9%", volume: "1.7B" },
   { symbol: "DOGE", name: "Dogecoin", price: 0.18, change: "-1.1%", volume: "890M" },
+  { symbol: "SHIB", name: "Shiba Inu", price: 0.000029, change: "+4.5%", volume: "390M" },
   { symbol: "TON", name: "Toncoin", price: 6.25, change: "+4.5%", volume: "520M" },
+  { symbol: "BNB", name: "BNB", price: 612, change: "+0.4%", volume: "2.9B" },
   { symbol: "TRX", name: "TRON", price: 0.14, change: "+0.2%", volume: "730M" },
-  { symbol: "LTC", name: "Litecoin", price: 84, change: "-0.3%", volume: "410M" },
+  { symbol: "SOL", name: "Solana", price: 192, change: "-0.7%", volume: "4.2B" },
   { symbol: "LINK", name: "Chainlink", price: 19.4, change: "+2.1%", volume: "360M" },
 ];
+
+const COIN_API_MAP = {
+  BTC: "bitcoin",
+  ETH: "ethereum",
+  LTC: "litecoin",
+  ADA: "cardano",
+  DOT: "polkadot",
+  MATIC: "matic-network",
+  AVAX: "avalanche-2",
+  UNI: "uniswap",
+  XRP: "ripple",
+  DOGE: "dogecoin",
+  SHIB: "shiba-inu",
+  TON: "toncoin",
+  BNB: "binancecoin",
+  TRX: "tron",
+  SOL: "solana",
+  LINK: "chainlink",
+};
 
 const STORAGE_KEYS = {
   user: "forbex_user",
@@ -32,7 +57,79 @@ const STORAGE_KEYS = {
   walletHistory: "forbex_wallet_history",
   loginHistory: "forbex_login_history",
   settings: "forbex_settings",
+  tradeHistory: "forbex_trade_history",
 };
+
+const TV_SYMBOLS = {
+  BTC: "BINANCE:BTCUSDT",
+  ETH: "BINANCE:ETHUSDT",
+  LTC: "BINANCE:LTCUSDT",
+  ADA: "BINANCE:ADAUSDT",
+  DOT: "BINANCE:DOTUSDT",
+  MATIC: "BINANCE:MATICUSDT",
+  AVAX: "BINANCE:AVAXUSDT",
+  UNI: "BINANCE:UNIUSDT",
+  XRP: "BINANCE:XRPUSDT",
+  DOGE: "BINANCE:DOGEUSDT",
+  SHIB: "BINANCE:SHIBUSDT",
+  TON: "BYBIT:TONUSDT",
+  BNB: "BINANCE:BNBUSDT",
+  TRX: "BINANCE:TRXUSDT",
+  SOL: "BINANCE:SOLUSDT",
+  LINK: "BINANCE:LINKUSDT",
+};
+
+function TradingViewChart({ symbol }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const tvSymbol = TV_SYMBOLS[symbol] || "BINANCE:BTCUSDT";
+
+    function createWidget() {
+      if (!window.TradingView || !containerRef.current) return;
+
+      // очищаем контейнер перед созданием нового виджета
+      containerRef.current.innerHTML = "";
+
+      new window.TradingView.widget({
+        autosize: true,
+        symbol: tvSymbol,
+        interval: "15",
+        timezone: "Etc/UTC",
+        theme: "dark",
+        style: "1",
+        locale: "en",
+        toolbar_bg: "#0f172a",
+        hide_top_toolbar: false,
+        hide_legend: false,
+        hide_side_toolbar: false,
+        allow_symbol_change: false,
+        container_id: containerRef.current.id,
+      });
+    }
+
+    // подключаем скрипт, если его ещё нет на странице
+    if (!document.getElementById("tradingview-widget-script")) {
+      const script = document.createElement("script");
+      script.id = "tradingview-widget-script";
+      script.src = "https://s3.tradingview.com/tv.js";
+      script.type = "text/javascript";
+      script.async = true;
+      script.onload = createWidget;
+      document.body.appendChild(script);
+    } else {
+      createWidget();
+    }
+  }, [symbol]);
+
+  return (
+    <div
+      id={`tv_chart_${symbol}`}
+      ref={containerRef}
+      style={{ width: "100%", height: "160px" }}
+    />
+  );
+}
 
 // ===== Вспомогательные функции =====
 
@@ -58,7 +155,7 @@ function formatTimer(seconds) {
 
 // ===== Лоадер =====
 
-function Loader() {
+function Loader({ title, subtitle }) {
   return (
     <div className="boot-loader">
       <div className="fox-orbit">
@@ -68,8 +165,10 @@ function Loader() {
         <div className="orbit-dot orbit-dot-1" />
         <div className="orbit-dot orbit-dot-2" />
       </div>
-      <div className="boot-title">FORBEX TRADE</div>
-      <div className="boot-sub">загрузка торгового терминала…</div>
+      <div className="boot-title">{title || "FORBEX TRADE"}</div>
+      <div className="boot-sub">
+        {subtitle || "загрузка торгового терминала…"}
+      </div>
     </div>
   );
 }
@@ -87,6 +186,8 @@ function App() {
     remember: true,
   });
   const [authError, setAuthError] = useState("");
+  
+  const [coins, setCoins] = useState(INITIAL_COINS);
 
   // доп. шаг после регистрации (выбор языка/валюты)
   const [pendingUser, setPendingUser] = useState(null);
@@ -111,7 +212,7 @@ function App() {
   const [walletModal, setWalletModal] = useState(null); // "deposit" | "withdraw" | null
   const [walletForm, setWalletForm] = useState({
     amount: "",
-    method: "card", // card | usdt | paypal
+    method: "card", // card | usdt | paypal | support
   });
 
   // flow пополнения
@@ -126,7 +227,21 @@ function App() {
   const [loginHistory, setLoginHistory] = useState([]);
 
   // trade
+    // trade
   const [selectedSymbol, setSelectedSymbol] = useState("BTC");
+  const [chartDirection, setChartDirection] = useState("idle"); // idle | up | down | flat
+  const [tradeForm, setTradeForm] = useState({
+  amount: "",
+  direction: "up", // "up" | "down" | "flat"
+  multiplier: 2,
+  duration: 10, // секунд
+});
+
+  const [tradeError, setTradeError] = useState("");
+  const [activeTrade, setActiveTrade] = useState(null);
+  const [tradeCountdown, setTradeCountdown] = useState(0);
+  const [lastTradeResult, setLastTradeResult] = useState(null);
+  const [tradeHistory, setTradeHistory] = useState([]);
 
   // смена пароля
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -138,6 +253,13 @@ function App() {
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
 
+  // глобальная загрузка между шагами
+  const [overlayLoading, setOverlayLoading] = useState(false);
+  const [overlayText, setOverlayText] = useState({
+    title: "",
+    subtitle: "",
+  });
+  
   const isEN = settings.language === "en";
   const currencySymbol = settings.currency === "RUB" ? "₽" : "USD";
 
@@ -156,6 +278,9 @@ function App() {
       const savedLoginHistory = localStorage.getItem(
         STORAGE_KEYS.loginHistory
       );
+      const savedTradeHistory = localStorage.getItem(
+        STORAGE_KEYS.tradeHistory
+      );
       const savedSettings = localStorage.getItem(STORAGE_KEYS.settings);
 
       if (savedWalletHistory) {
@@ -163,6 +288,9 @@ function App() {
       }
       if (savedLoginHistory) {
         setLoginHistory(JSON.parse(savedLoginHistory));
+      }
+      if (savedTradeHistory) {
+        setTradeHistory(JSON.parse(savedTradeHistory));
       }
       if (savedBalance) {
         const num = parseFloat(savedBalance);
@@ -222,10 +350,14 @@ function App() {
         STORAGE_KEYS.settings,
         JSON.stringify(settings)
       );
+      localStorage.setItem(
+        STORAGE_KEYS.tradeHistory,
+        JSON.stringify(tradeHistory)
+      );
     } catch {
       // ignore
     }
-  }, [balance, walletHistory, loginHistory, settings]);
+  }, [balance, walletHistory, loginHistory, settings, tradeHistory]);
 
   // таймер 15 минут на оплату
   useEffect(() => {
@@ -243,8 +375,92 @@ function App() {
       return () => clearInterval(interval);
     }
   }, [walletModal, depositStep]);
+  
+  // отсчёт по сделке
+  useEffect(() => {
+    if (!activeTrade) return;
+
+    setTradeCountdown(activeTrade.duration);
+    setLastTradeResult(null);
+
+    const timerId = setInterval(() => {
+      setTradeCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerId);
+          finishTrade(activeTrade);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, [activeTrade]);
+  
+// подгружаем реальные цены монет (CoinGecko)
+useEffect(() => {
+  async function fetchCoinPrices() {
+    try {
+      const ids = Object.values(COIN_API_MAP).join(",");
+      const res = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+
+      setCoins((prev) =>
+        prev.map((coin) => {
+          const apiId = COIN_API_MAP[coin.symbol];
+          const apiData = apiId ? data[apiId] : null;
+          if (!apiData) return coin;
+
+          const price = apiData.usd;
+          const changeNum = Number(apiData.usd_24h_change);
+
+          // если цена сломанная/нет числа – не трогаем монету
+          if (typeof price !== "number" || Number.isNaN(price)) {
+            return coin;
+          }
+
+          // строка изменения цены: если числа нет – оставляем старую
+          let changeStr = coin.change;
+          if (!Number.isNaN(changeNum)) {
+            changeStr =
+              (changeNum >= 0 ? "+" : "") + changeNum.toFixed(2) + "%";
+          }
+
+          return {
+            ...coin,
+            price,
+            change: changeStr,
+          };
+        })
+      );
+    } catch (e) {
+      console.error("Failed to load coin prices", e);
+    }
+  }
+
+  fetchCoinPrices();              // первый раз
+  const id = setInterval(fetchCoinPrices, 60000); // раз в минуту
+  return () => clearInterval(id);
+}, []);
 
   // ===== helpers =====
+  const showOverlay = (title, subtitle, callback, delay = 1100) => {
+    setOverlayText({
+      title: title || "FORBEX TRADE",
+      subtitle: subtitle || "",
+    });
+    setOverlayLoading(true);
+
+    setTimeout(() => {
+      if (callback) {
+        callback();
+      }
+      setOverlayLoading(false);
+    }, delay);
+  };
 
   const updateSettings = (patch) => {
     setSettings((prev) => {
@@ -272,8 +488,8 @@ function App() {
       setAuthError("Заполните все поля.");
       return;
     }
-    if (login.trim().length < 3) {
-      setAuthError("Логин должен быть от 3 символов.");
+    if (login.trim().length < 4) {
+      setAuthError("Логин должен быть от 4 символов.");
       return;
     }
     if (!validateEmail(email.trim())) {
@@ -291,48 +507,59 @@ function App() {
       createdAt: Date.now(),
     };
 
-    setPendingUser(newUser);
-    setPostRegisterStep(true);
-    setTempSettings({
-      language: "ru",
-      currency: "RUB",
-    });
-
-    // remember-флаг и пароль просто остаются в authForm, используем в completeRegistration
-  };
+    showOverlay(
+      "FORBEX TRADE",
+      "Регистрация…",
+      () => {
+      setPendingUser(newUser);
+      setPostRegisterStep(true);
+      setTempSettings({
+        language: "ru",
+        currency: "RUB",
+      });
+    }
+  );
+};
 
   const completeRegistration = () => {
     if (!pendingUser) return;
     const { password, remember } = authForm;
 
     const finalSettings = { ...settings, ...tempSettings };
-    setSettings(finalSettings);
 
-    setUser(pendingUser);
+    showOverlay(
+      "FORBEX TRADE",
+      "загрузка торгового терминала…",
+      () => {
+        setSettings(finalSettings);
+        setUser(pendingUser);
 
-    try {
-      localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(pendingUser));
-      localStorage.setItem(STORAGE_KEYS.password, password);
-      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-      localStorage.setItem(
-        STORAGE_KEYS.settings,
-        JSON.stringify(finalSettings)
-      );
-    } catch {
-      // ignore
-    }
+        try {
+          localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(pendingUser));
+          localStorage.setItem(STORAGE_KEYS.password, password);
+          localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+          localStorage.setItem(
+            STORAGE_KEYS.settings,
+            JSON.stringify(finalSettings)
+          );
+        } catch {
+          // ignore
+        }
 
-    const entry = {
-      id: Date.now(),
-      type: "register",
-      login: pendingUser.login,
-      email: pendingUser.email,
-      ts: Date.now(),
-    };
-    setLoginHistory((prev) => [entry, ...prev]);
+        const entry = {
+          id: Date.now(),
+          type: "register",
+          login: pendingUser.login,
+          email: pendingUser.email,
+          ts: Date.now(),
+          device: navigator.userAgent || "",
+        };
+        setLoginHistory((prev) => [entry, ...prev]);
 
-    setPendingUser(null);
-    setPostRegisterStep(false);
+        setPendingUser(null);
+        setPostRegisterStep(false);
+      }
+    );
   };
 
   const handleLogin = () => {
@@ -372,6 +599,7 @@ function App() {
         login: savedUser.login,
         email: savedUser.email,
         ts: Date.now(),
+        device: navigator.userAgent || "",
       };
       setLoginHistory((prev) => [entry, ...prev]);
     } catch {
@@ -380,6 +608,17 @@ function App() {
   };
 
   const handleLogout = () => {
+    if (user) {
+      const entry = {
+        id: Date.now(),
+        type: "logout",
+        login: user.login,
+        email: user.email,
+        ts: Date.now(),
+        device: navigator.userAgent || "",
+      };
+      setLoginHistory((prev) => [entry, ...prev]);
+    }
     setUser(null);
     setActiveTab(1);
   };
@@ -390,6 +629,106 @@ function App() {
     setPasswordError("");
     setPasswordSuccess("");
   };
+
+  const handleTradeInput = (field, value) => {
+    setTradeForm((prev) => ({ ...prev, [field]: value }));
+    setTradeError("");
+  };
+
+  const handleStartTrade = () => {
+    const raw = tradeForm.amount.toString().replace(",", ".");
+    const amountNum = parseFloat(raw);
+    const minInvest = settings.currency === "RUB" ? 100 : 5;
+
+    if (Number.isNaN(amountNum) || amountNum <= 0) {
+      setTradeError(
+        isEN
+          ? "Enter the amount you want to invest."
+          : "Введите сумму, которую хотите инвестировать."
+      );
+      return;
+    }
+
+    if (amountNum < minInvest) {
+      setTradeError(
+        isEN
+          ? `Minimum investment is ${minInvest} ${
+              settings.currency === "RUB" ? "RUB" : "USD"
+            }.`
+          : `Минимальная сумма инвестиций — ${minInvest} ${
+              settings.currency === "RUB" ? "₽" : "USD"
+            }.`
+      );
+      return;
+    }
+
+    if (amountNum > balance) {
+      setTradeError(
+        isEN
+          ? "Not enough funds on balance."
+          : "Недостаточно средств на балансе."
+      );
+      return;
+    }
+
+    if (activeTrade) return; // уже идёт сделка
+
+    const possibleDirections = ["up", "down", "flat"];
+    const resultDirection =
+      possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
+
+    const trade = {
+      id: Date.now(),
+      symbol: selectedSymbol,
+      amount: amountNum,
+      direction: tradeForm.direction, // выбор пользователя
+      resultDirection, // как реально пойдёт график
+      multiplier: tradeForm.multiplier,
+      duration: tradeForm.duration,
+      startedAt: Date.now(),
+    };
+
+    // блокируем сумму на время сделки
+    setBalance((prev) => prev - amountNum);
+    setChartDirection(resultDirection); // запускаем анимацию графика
+    setActiveTrade(trade);
+  };
+
+  // отдельная функция, которую вызывает useEffect с таймером
+  function finishTrade(trade) {
+    const win = trade.resultDirection === trade.direction; // up / down / flat
+    const profit = win
+      ? trade.amount * (trade.multiplier - 1)
+      : -trade.amount;
+
+    if (win) {
+      setBalance((prev) => prev + trade.amount * trade.multiplier);
+    }
+
+    const finished = {
+      ...trade,
+      finishedAt: Date.now(),
+      status: win ? "win" : "lose",
+      profit,
+    };
+
+    setTradeHistory((prev) => [finished, ...prev]);
+    setActiveTrade(null);
+    setLastTradeResult({
+      status: win ? "win" : "lose",
+      chartDirection: trade.resultDirection,
+      message: win
+        ? isEN
+          ? "Congratulations! The asset price moved in your direction."
+          : "Поздравляем! Стоимость актива пошла в вашу сторону."
+        : isEN
+        ? "The asset price moved against your forecast. The investment failed."
+        : "Стоимость актива пошла против вашего прогноза. Инвестиция не удалась.",
+    });
+
+    // после сделки оставляем график в последнем направлении
+    setChartDirection(trade.resultDirection);
+  }
 
   const handlePasswordChange = () => {
     const { oldPassword, newPassword, confirmPassword } = passwordForm;
@@ -427,34 +766,49 @@ function App() {
 
   // кошелёк: депозит / вывод
 
-  const handleWalletConfirmWithdraw = () => {
-    const amountNum = parseFloat(walletForm.amount.replace(",", "."));
-    if (Number.isNaN(amountNum) || amountNum <= 0) return;
+// кошелёк: депозит / вывод
+const handleWalletConfirmWithdraw = () => {
+  const raw = walletForm.amount.toString().replace(",", ".");
+  const amountNum = parseFloat(raw);
 
-    const now = Date.now();
+  if (Number.isNaN(amountNum) || amountNum <= 0) return;
 
-    setBalance((prev) => Math.max(0, prev - amountNum));
-    const entry = {
-      id: now,
-      type: "withdraw",
-      amount: amountNum,
-      method: walletForm.method,
-      ts: now,
-    };
-    setWalletHistory((prev) => [entry, ...prev]);
+  const now = Date.now();
 
-    setWalletModal(null);
-    setWalletForm({ amount: "", method: walletForm.method });
+  // реально выводим не больше, чем есть
+  const actualAmount = Math.min(amountNum, balance);
+  if (actualAmount <= 0) return;
+
+  setBalance((prev) => Math.max(0, prev - actualAmount));
+
+  const entry = {
+    id: now,
+    type: "withdraw",
+    amount: actualAmount,
+    method: walletForm.method,
+    ts: now,
   };
 
-  const resetDepositFlow = () => {
-    setDepositStep(1);
-    setDepositAmount("");
-    setDepositError("");
-    setReceiptFileName("");
-  };
+  setWalletHistory((prev) => [entry, ...prev]);
 
-  const handleDepositNext = () => {
+  setWalletModal(null);
+  setWalletForm({ amount: "", method: walletForm.method });
+};
+
+
+const resetDepositFlow = () => {
+  setDepositStep(1);
+  setDepositAmount("");
+  setDepositError("");
+  setReceiptFileName("");
+  setWalletForm((prev) => ({
+    ...prev,
+    amount: "",
+    method: "card",
+  }));
+};
+
+    const handleDepositNext = () => {
     const minAmount = settings.currency === "RUB" ? 1000 : 10;
     const raw = depositAmount.toString().replace(",", ".");
     const amountNum = parseFloat(raw);
@@ -482,24 +836,42 @@ function App() {
     setDepositStep(2);
   };
 
-  const handleDepositSendReceipt = () => {
-    if (!depositAmount || Number.isNaN(depositAmount)) return;
+const handleDepositSendReceipt = () => {
+  if (!depositAmount || Number.isNaN(depositAmount)) return;
 
-    const now = Date.now();
-    setBalance((prev) => prev + depositAmount);
+  if (!receiptFileName) {
+    setDepositError(
+      isEN
+        ? "You did not attach a receipt."
+        : "Вы не прикрепили чек."
+    );
+    return;
+  }
 
-    const entry = {
-      id: now,
-      type: "deposit",
-      amount: depositAmount,
-      method: "card",
-      ts: now,
-    };
-    setWalletHistory((prev) => [entry, ...prev]);
+  const now = Date.now();
 
-    setWalletModal(null);
-    resetDepositFlow();
-  };
+  showOverlay(
+    "FORBEX TRADE",
+    isEN ? "Checking payment…" : "Проверка платежа…",
+    () => {
+      setBalance((prev) => prev + depositAmount);
+
+      const entry = {
+        id: now,
+        type: "deposit",
+        amount: depositAmount,
+        method: walletForm.method || "card",
+        ts: now,
+        status: "checked",
+      };
+      setWalletHistory((prev) => [entry, ...prev]);
+
+      setWalletModal(null);
+      resetDepositFlow();
+    }
+  );
+};
+
 
   // ===== Рендеры вкладок =====
 
@@ -543,7 +915,7 @@ function App() {
           </p>
         </div>
         <div className="coins-list">
-          {popularCoins.map((c) => (
+          {coins.map((c) => (
             <div
               key={c.symbol}
               className="coin-row hover-glow"
@@ -563,7 +935,9 @@ function App() {
                 <div
                   className={
                     "coin-change " +
-                    (c.change.startsWith("-") ? "negative" : "positive")
+                    (c.change.toString().startsWith("-")
+                      ? "negative"
+                      : "positive")
                   }
                 >
                   {c.change}
@@ -584,7 +958,17 @@ function App() {
 
   const renderTrade = () => {
     const currentCoin =
-      popularCoins.find((c) => c.symbol === selectedSymbol) || popularCoins[0];
+      coins.find((c) => c.symbol === selectedSymbol) || coins[0];
+
+    const chartDir =
+      activeTrade?.resultDirection ||
+      lastTradeResult?.chartDirection ||
+      chartDirection ||
+      "idle";
+
+    const minInvest = settings.currency === "RUB" ? 100 : 5;
+    const multipliers = [2, 5, 10];
+    const durations = [10, 30, 60];
 
     return (
       <>
@@ -593,84 +977,273 @@ function App() {
             <h2>{isEN ? "Trading" : "Торговля"}</h2>
             <p>
               {isEN
-                ? "Interface with mock chart. Later you can connect real orders and TradingView widget."
-                : "Интерфейс с фейковым графиком. Позже сюда можно прикрутить реальные ордера и виджет TradingView."}
+                ? "Choose a coin, set amount, direction and time — the result will be calculated automatically."
+                : "Выберите монету, задайте сумму, направление и время — результат сделки посчитается автоматически."}
             </p>
           </div>
+
           <div className="trade-layout">
-            <div className="trade-chart-card">
-              <div className="trade-chart-header">
-                <div className="trade-pair">
-                  {currentCoin.symbol}/USDT
-                  <span className="pair-tag">
-                    {isEN ? "Mock" : "Макет"}
+            {/* Левая часть: график */}
+<div className="trade-chart-card">
+  <div className="trade-chart-header">
+    <div className="trade-pair">
+      {currentCoin.symbol}/USDT
+      <span className="pair-tag">
+        {isEN ? "Chart" : "График"}
+      </span>
+    </div>
+    <div className="trade-price">
+      {currentCoin.price.toLocaleString("ru-RU", {
+        minimumFractionDigits: currentCoin.price < 1 ? 2 : 0,
+      })}{" "}
+      $
+    </div>
+  </div>
+
+  {/* вот тут теперь TradingView */}
+  <TradingViewChart symbol={currentCoin.symbol} />
+
+  <div className="trade-timeframe-row">
+    {["1М", "15М", "1Ч", "4Ч", "1Д"].map((tf, i) => (
+      <button
+        key={tf}
+        className={
+          "tf-pill " + (i === 3 ? "tf-pill-active" : "")
+        }
+        type="button"
+      >
+        {tf}
+      </button>
+    ))}
+  </div>
+</div>
+            {/* Правая часть: форма сделки */}
+            <div className="trade-side">
+              {/* выбор монеты */}
+              <div className="trade-param-row">
+                <div className="trade-input-label">
+                  {isEN ? "Asset" : "Актив для торговли"}
+                </div>
+                <div className="trade-coin-buttons">
+                  {coins.slice(0, 10).map((coin) => (
+                    <button
+                      key={coin.symbol}
+                      type="button"
+                      className={
+                        "trade-coin-btn " +
+                        (selectedSymbol === coin.symbol ? "active" : "")
+                      }
+                      onClick={() => setSelectedSymbol(coin.symbol)}
+                    >
+                      {coin.symbol}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* сумма инвестиций */}
+              <div className="trade-param-row">
+                <div className="trade-input-label">
+                  {isEN
+                    ? "Investment amount"
+                    : "Сумма инвестиций"}
+                </div>
+                <div className="trade-input-with-suffix">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={tradeForm.amount}
+                    onChange={(e) =>
+                      handleTradeInput("amount", e.target.value)
+                    }
+                    placeholder={
+                      settings.currency === "RUB"
+                        ? "Например, 1000"
+                        : "For example, 20"
+                    }
+                  />
+                  <span className="trade-input-suffix">
+                    {settings.currency === "RUB" ? "₽" : "USD"}
                   </span>
                 </div>
-                <div className="trade-price">
-                  {currentCoin.price.toLocaleString("ru-RU", {
-                    minimumFractionDigits: currentCoin.price < 1 ? 2 : 0,
-                  })}{" "}
-                  $
+                <div className="trade-hint">
+                  {isEN
+                    ? `Minimum investment — ${minInvest} ${
+                        settings.currency === "RUB" ? "RUB" : "USD"
+                      }.`
+                    : `Минимальная сумма инвестиций — ${minInvest} ${
+                        settings.currency === "RUB" ? "₽" : "USD"
+                      }.`}
                 </div>
               </div>
-              <div className="fake-chart">
-                <div className="fake-chart-layer layer-1" />
-                <div className="fake-chart-layer layer-2" />
-                <div className="fake-chart-grid" />
-                <div className="fake-chart-label">
-                  TradingView mock
-                </div>
-              </div>
-              <div className="trade-timeframe-row">
-                {["1М", "15М", "1Ч", "4Ч", "1Д"].map((tf, i) => (
-                  <button
-                    key={tf}
-                    className={
-                      "tf-pill " + (i === 3 ? "tf-pill-active" : "")
-                    }
-                  >
-                    {tf}
-                  </button>
-                ))}
-              </div>
-            </div>
 
-            <div className="trade-side">
-              <div className="trade-tabs">
-                <button className="trade-tab active">
-                  {isEN ? "Buy" : "Купить"}
-                </button>
-                <button className="trade-tab">
-                  {isEN ? "Sell" : "Продать"}
-                </button>
-              </div>
-              <div className="trade-info-text">
-                {isEN
-                  ? "Later you can add real order logic here. Now it is just a visual layout."
-                  : "Позже сюда можно добавить логику реальных ордеров. Сейчас это просто визуальный макет."}
-              </div>
-              <div className="trade-input-row">
+              {/* направление */}
+              <div className="trade-param-row">
                 <div className="trade-input-label">
-                  {isEN ? "Price" : "Цена"}
+                  {isEN
+                    ? "Where will the price go?"
+                    : "Куда пойдёт курс актива?"}
                 </div>
-                <div className="trade-input-fake">
-                  {currentCoin.price.toLocaleString("ru-RU", {
-                    minimumFractionDigits: currentCoin.price < 1 ? 2 : 0,
-                  })}{" "}
-                  USDT
+                <div className="trade-direction-row">
+                  <button
+                    type="button"
+                    className={
+                      "trade-direction-btn " +
+                      (tradeForm.direction === "up" ? "active" : "")
+                    }
+                    onClick={() => handleTradeInput("direction", "up")}
+                  >
+                    ⬆{" "}
+                    {isEN
+                      ? "Up (LONG)"
+                      : "Вверх (покупка)"}
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      "trade-direction-btn " +
+                      (tradeForm.direction === "flat" ? "active" : "")
+                    }
+                    onClick={() => handleTradeInput("direction", "flat")}
+                  >
+                    ↔{" "}
+                    {isEN
+                      ? "No change"
+                      : "Не изменится"}
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      "trade-direction-btn " +
+                      (tradeForm.direction === "down" ? "active" : "")
+                    }
+                    onClick={() => handleTradeInput("direction", "down")}
+                  >
+                    ⬇{" "}
+                    {isEN
+                      ? "Down (SHORT)"
+                      : "Вниз (продажа)"}
+                  </button>
+                </div>
+                <div className="trade-hint">
+                  {isEN
+                    ? "If you choose “no change”, you win when the chart stays almost on the same level."
+                    : "Если выберете «Не изменится», вы выигрываете, если график остаётся примерно на одном уровне."}
                 </div>
               </div>
-              <div className="trade-input-row">
+
+              {/* коэффициент */}
+              <div className="trade-param-row">
                 <div className="trade-input-label">
-                  {isEN ? "Amount" : "Количество"}
+                  {isEN
+                    ? "Multiplier"
+                    : "Коэффициент (x)"}
                 </div>
-                <div className="trade-input-fake">0.0000</div>
+                <div className="trade-multiplier-row">
+                  {multipliers.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={
+                        "trade-mult-btn " +
+                        (tradeForm.multiplier === m ? "active" : "")
+                      }
+                      onClick={() => handleTradeInput("multiplier", m)}
+                    >
+                      x{m}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <button className="trade-button-disabled">
-                {isEN
-                  ? "Trading logic will be added later"
-                  : "Торговая логика будет добавлена позже"}
-              </button>
+
+              {/* время ожидания */}
+              <div className="trade-param-row">
+                <div className="trade-input-label">
+                  {isEN
+                    ? "Waiting time"
+                    : "Время ожидания"}
+                </div>
+                <div className="trade-duration-row">
+                  {durations.map((sec) => (
+                    <button
+                      key={sec}
+                      type="button"
+                      className={
+                        "trade-duration-btn " +
+                        (tradeForm.duration === sec ? "active" : "")
+                      }
+                      onClick={() => handleTradeInput("duration", sec)}
+                    >
+                      {sec}{" "}
+                      {isEN ? "sec" : "сек"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ошибка валидации */}
+              {tradeError && (
+                <div className="trade-error">{tradeError}</div>
+              )}
+
+              {/* активная сделка / кнопка открыть */}
+              {activeTrade ? (
+                <div className="trade-active-panel">
+                  <div className="trade-active-title">
+                    {isEN
+                      ? "Trade in progress"
+                      : "Сделка в процессе"}
+                  </div>
+                  <div className="trade-active-row">
+                    <span>
+                      {currentCoin.symbol}/USDT ·{" "}
+                      {activeTrade.direction === "up"
+                        ? isEN
+                          ? "Up"
+                          : "Вверх"
+                        : activeTrade.direction === "down"
+                        ? isEN
+                          ? "Down"
+                          : "Вниз"
+                        : isEN
+                        ? "No change"
+                        : "Не изменится"}{" "}
+                      · x{activeTrade.multiplier}
+                    </span>
+                    <span className="trade-active-countdown">
+                      {formatTimer(tradeCountdown)}
+                    </span>
+                  </div>
+                  <div className="trade-hint">
+                    {isEN
+                      ? "When the timer ends, the platform will calculate the result automatically."
+                      : "Когда таймер дойдёт до нуля, платформа автоматически посчитает результат сделки."}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="trade-start-btn"
+                  onClick={handleStartTrade}
+                >
+                  {isEN ? "Open trade" : "Открыть сделку"}
+                </button>
+              )}
+
+              {/* результат последней сделки */}
+              {lastTradeResult && !activeTrade && (
+                <div
+                  className={
+                    "trade-result " +
+                    (lastTradeResult.status === "win"
+                      ? "win"
+                      : "lose")
+                  }
+                >
+                  {lastTradeResult.message}
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -678,478 +1251,673 @@ function App() {
     );
   };
 
-  const renderWallet = () => {
-    const formatBalance = balance.toLocaleString("ru-RU", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+const renderWallet = () => {
+  const formatBalance = balance.toLocaleString("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
-    const methodLabel = (m) => {
-      if (m === "card")
-        return isEN ? "Bank card" : "Банковская карта";
-      if (m === "usdt") return "USDT TRC-20";
-      if (m === "paypal") return "PayPal";
-      return m;
-    };
+  const methodLabel = (m) => {
+    if (m === "card") return isEN ? "Bank card" : "Банковская карта";
+    if (m === "usdt") return "USDT TRC-20";
+    if (m === "paypal") return "PayPal";
+    if (m === "support") return isEN ? "Via support" : "Через поддержку";
+    return m;
+  };
 
-    const minAmount = settings.currency === "RUB" ? 1000 : 10;
+  const currentMethod = walletForm.method || "card";
+  const isCard = currentMethod === "card";
+  const isUsdt = currentMethod === "usdt";
+  const isPaypal = currentMethod === "paypal";
+  const isSupport = currentMethod === "support";
 
-    return (
-      <>
-        <section className="section-block fade-in delay-1">
-          <div className="section-title">
-            <h2>{isEN ? "Wallet" : "Кошелёк"}</h2>
-            <p>
-              {isEN
-                ? "Manage your Forbex balance: deposits and withdrawals."
-                : "Управляйте балансом Forbex: пополнения и выводы."}
-            </p>
-          </div>
-          <div className="wallet-balance-card">
-            <div className="wallet-badge">
-              {isEN ? "Main balance" : "Основной баланс"}
-            </div>
-            <div className="wallet-amount">
-              {formatBalance} {currencySymbol}
-            </div>
-            <div className="wallet-sub">
-              {isEN
-                ? "Interface for your future logic of balances and payments."
-                : "Интерфейс под твою будущую логику балансов и платежей."}
-            </div>
-            <div className="wallet-actions-row">
-              <button
-                className="wallet-action-btn primary"
-                onClick={() => {
-                  setWalletModal("deposit");
-                  resetDepositFlow();
-                }}
-              >
-                {isEN ? "Deposit" : "Пополнить"}
-              </button>
-              <button
-                className="wallet-action-btn secondary"
-                onClick={() => {
-                  setWalletModal("withdraw");
-                  setWalletForm((prev) => ({
-                    ...prev,
-                    amount: "",
-                  }));
-                }}
-              >
-                {isEN ? "Withdraw" : "Вывести"}
-              </button>
-            </div>
-          </div>
-          <div className="wallet-min-info">
+  const minAmount = settings.currency === "RUB" ? 1000 : 10;
+
+  return (
+    <>
+      <section className="section-block fade-in delay-1">
+        <div className="section-title">
+          <h2>{isEN ? "Wallet" : "Кошелёк"}</h2>
+          <p>
             {isEN
-              ? `Minimum deposit: ${minAmount} ${
-                  settings.currency === "RUB" ? "RUB" : "USD"
-                }`
-              : `Минимальное пополнение: ${minAmount} ${
-                  settings.currency === "RUB" ? "₽" : "USD"
-                }`}
+              ? "Manage your Forbex balance: deposits and withdrawals."
+              : "Управляйте балансом Forbex: пополнения и выводы."}
+          </p>
+        </div>
+        <div className="wallet-balance-card">
+          <div className="wallet-badge">
+            {isEN ? "Main balance" : "Основной баланс"}
           </div>
-        </section>
-
-        <section className="section-block fade-in delay-2">
-          <div className="section-title">
-            <h2>
-              {isEN ? "Recent wallet operations" : "Последние операции кошелька"}
-            </h2>
-            <p>
-              {isEN
-                ? "Short list of the last deposits and withdrawals."
-                : "Короткий список последних пополнений и выводов."}
-            </p>
+          <div className="wallet-amount">
+            {formatBalance} {currencySymbol}
           </div>
-          <div className="wallet-history-short">
-            {walletHistory.length === 0 && (
-              <div className="wallet-empty">
-                {isEN ? "No operations yet." : "Операций ещё не было."}
-              </div>
-            )}
-            {walletHistory.slice(0, 5).map((e) => (
-              <div key={e.id} className="wallet-history-row">
-                <div className="wallet-history-main">
-                  <div className="wallet-history-type">
-                    {e.type === "deposit"
-                      ? isEN
-                        ? "Deposit"
-                        : "Пополнение"
-                      : isEN
-                      ? "Withdrawal"
-                      : "Вывод"}{" "}
-                    — {methodLabel(e.method)}
-                  </div>
-                  <div className="wallet-history-time">
-                    {formatDateTime(e.ts)}
-                  </div>
-                </div>
-                <div
-                  className={
-                    "wallet-history-amount " +
-                    (e.type === "deposit" ? "positive" : "negative")
-                  }
-                >
-                  {e.type === "deposit" ? "+" : "-"}
-                  {e.amount.toLocaleString("ru-RU", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  {currencySymbol}
-                </div>
-              </div>
-            ))}
+          <div className="wallet-sub">
+            {isEN
+              ? "Interface for your future logic of balances and payments."
+              : "Интерфейс под твою будущую логику балансов и платежей."}
           </div>
-        </section>
-
-        {/* Модалка пополнения / вывода */}
-        {walletModal && (
-          <div
-            className="wallet-modal-backdrop"
-            onClick={() => {
-              setWalletModal(null);
-              resetDepositFlow();
-            }}
-          >
-            <div
-              className="wallet-modal"
-              onClick={(e) => e.stopPropagation()}
+          <div className="wallet-actions-row">
+            <button
+              className="wallet-action-btn primary"
+              onClick={() => {
+                setWalletModal("deposit");
+                resetDepositFlow();
+              }}
             >
-              {walletModal === "deposit" && depositStep === 1 && (
-                <>
-                  <div className="wallet-modal-title">
-                    {isEN
-                      ? "Deposit to balance"
-                      : "Пополнить баланс"}
-                  </div>
-                  <div className="wallet-modal-sub">
-                    {isEN
-                      ? "Enter the deposit amount."
-                      : "Введите сумму пополнения."}
-                  </div>
+              {isEN ? "Deposit" : "Пополнить"}
+            </button>
+            <button
+              className="wallet-action-btn secondary"
+              onClick={() => {
+                setWalletModal("withdraw");
+                setWalletForm((prev) => ({
+                  ...prev,
+                  amount: "",
+                  method: "card",
+                }));
+              }}
+            >
+              {isEN ? "Withdraw" : "Вывести"}
+            </button>
+          </div>
+        </div>
+        <div className="wallet-min-info">
+          {isEN
+            ? `Minimum deposit: ${minAmount} ${
+                settings.currency === "RUB" ? "RUB" : "USD"
+              }`
+            : `Минимальное пополнение: ${minAmount} ${
+                settings.currency === "RUB" ? "₽" : "USD"
+              }`}
+        </div>
+      </section>
 
-                  <div className="wallet-modal-input-group">
-                    <label>
+      <section className="section-block fade-in delay-2">
+        <div className="section-title">
+          <h2>
+            {isEN
+              ? "Recent wallet operations"
+              : "Последние операции кошелька"}
+          </h2>
+          <p>
+            {isEN
+              ? "Short list of the last deposits and withdrawals."
+              : "Короткий список последних пополнений и выводов."}
+          </p>
+        </div>
+        <div className="wallet-history-short">
+          {walletHistory.length === 0 && (
+            <div className="wallet-empty">
+              {isEN ? "No operations yet." : "Операций ещё не было."}
+            </div>
+          )}
+          {walletHistory.slice(0, 5).map((e) => (
+            <div key={e.id} className="wallet-history-row">
+              <div className="wallet-history-main">
+                <div className="wallet-history-type">
+                  {e.type === "deposit"
+                    ? isEN
+                      ? "Deposit"
+                      : "Пополнение"
+                    : isEN
+                    ? "Withdrawal"
+                    : "Вывод"}{" "}
+                  — {methodLabel(e.method)}
+                </div>
+                <div className="wallet-history-time">
+                  {formatDateTime(e.ts)}
+                </div>
+              </div>
+              <div
+                className={
+                  "wallet-history-amount " +
+                  (e.type === "deposit" ? "positive" : "negative")
+                }
+              >
+                {e.type === "deposit" ? "+" : "-"}
+                {e.amount.toLocaleString("ru-RU", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                {currencySymbol}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Модалка пополнения / вывода */}
+      {walletModal && (
+        <div
+          className="wallet-modal-backdrop"
+          onClick={() => {
+            setWalletModal(null);
+            resetDepositFlow();
+          }}
+        >
+          <div
+            className="wallet-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ===== ПОПОЛНЕНИЕ: ШАГ 1 — метод + сумма ===== */}
+            {walletModal === "deposit" && depositStep === 1 && (
+              <>
+                <div className="wallet-modal-title">
+                  {isEN ? "Deposit to balance" : "Пополнить баланс"}
+                </div>
+                <div className="wallet-modal-sub">
+                  {isEN
+                    ? "Choose the method and enter the amount you want to deposit."
+                    : "Выберите способ и введите сумму, которую хотите пополнить."}
+                </div>
+
+                <div className="wallet-methods">
+                  <button
+                    className={
+                      "wallet-method-card " +
+                      (walletForm.method === "card" ? "active" : "")
+                    }
+                    onClick={() =>
+                      setWalletForm((prev) => ({ ...prev, method: "card" }))
+                    }
+                    type="button"
+                  >
+                    <div className="wallet-method-title">
+                      {isEN ? "Bank card" : "Банковская карта"}
+                    </div>
+                    <div className="wallet-method-sub">
                       {isEN
-                        ? `Amount (${settings.currency === "RUB" ? "RUB" : "USD"})`
-                        : `Сумма пополнения (${
-                            settings.currency === "RUB" ? "₽" : "USD"
-                          })`}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={depositAmount}
-                      onChange={(e) => {
-                        setDepositAmount(e.target.value);
-                        setDepositError("");
-                      }}
-                      placeholder={
-                        settings.currency === "RUB"
-                          ? "Например, 1000"
-                          : "For example, 20"
-                      }
-                    />
+                        ? "Standard deposit to card."
+                        : "Обычное пополнение по номеру карты."}
+                    </div>
+                    <div className="wallet-method-extra">
+                      VISA / MasterCard / МИР
+                    </div>
+                  </button>
+
+                  <button
+                    className={
+                      "wallet-method-card " +
+                      (walletForm.method === "usdt" ? "active" : "")
+                    }
+                    onClick={() =>
+                      setWalletForm((prev) => ({ ...prev, method: "usdt" }))
+                    }
+                    type="button"
+                  >
+                    <div className="wallet-method-title">USDT TRC-20</div>
+                    <div className="wallet-method-sub">
+                      {isEN
+                        ? "Crypto deposit in TRON network."
+                        : "Крипто-пополнение в сети TRON."}
+                    </div>
+                    <div className="wallet-method-extra">TRC-20</div>
+                  </button>
+
+                  <button
+                    className={
+                      "wallet-method-card " +
+                      (walletForm.method === "paypal" ? "active" : "")
+                    }
+                    onClick={() =>
+                      setWalletForm((prev) => ({ ...prev, method: "paypal" }))
+                    }
+                    type="button"
+                  >
+                    <div className="wallet-method-title">PayPal</div>
+                    <div className="wallet-method-sub">
+                      {isEN
+                        ? "International deposit via PayPal."
+                        : "Международное пополнение через PayPal."}
+                    </div>
+                    <div className="wallet-method-extra">Global</div>
+                  </button>
+
+                  <button
+                    className={
+                      "wallet-method-card " +
+                      (walletForm.method === "support" ? "active" : "")
+                    }
+                    onClick={() =>
+                      setWalletForm((prev) => ({
+                        ...prev,
+                        method: "support",
+                      }))
+                    }
+                    type="button"
+                  >
+                    <div className="wallet-method-title">
+                      {isEN
+                        ? "Deposit via support"
+                        : "Пополнение через поддержку"}
+                    </div>
+                    <div className="wallet-method-sub">
+                      {isEN
+                        ? "Manager will help you with payment."
+                        : "Менеджер поможет провести платёж."}
+                    </div>
+                    <div className="wallet-method-extra">Telegram · OKEX</div>
+                  </button>
+                </div>
+
+                <div className="wallet-modal-input-group">
+                  <label>
+                    {isEN
+                      ? `Amount (${
+                          settings.currency === "RUB" ? "RUB" : "USD"
+                        })`
+                      : `Сумма пополнения (${
+                          settings.currency === "RUB" ? "₽" : "USD"
+                        })`}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={depositAmount}
+                    onChange={(e) => {
+                      setDepositAmount(e.target.value);
+                      setDepositError("");
+                    }}
+                    placeholder={
+                      settings.currency === "RUB"
+                        ? "Например, 1000"
+                        : "For example, 20"
+                    }
+                  />
+                </div>
+
+                {depositError && (
+                  <div className="wallet-modal-note error">
+                    {depositError}
+                  </div>
+                )}
+
+                <div className="wallet-modal-actions">
+                  <button
+                    className="wallet-modal-btn secondary"
+                    type="button"
+                    onClick={() => {
+                      setWalletModal(null);
+                      resetDepositFlow();
+                    }}
+                  >
+                    {isEN ? "Cancel" : "Отмена"}
+                  </button>
+                  <button
+                    className="wallet-modal-btn primary"
+                    type="button"
+                    onClick={handleDepositNext}
+                  >
+                    {isEN ? "Next" : "Далее"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ===== ПОПОЛНЕНИЕ: ШАГ 2 — реквизиты + чек ===== */}
+            {walletModal === "deposit" && depositStep === 2 && (
+              <>
+                <div className="wallet-modal-title">
+                  {isEN ? "Payment details" : "Реквизиты для оплаты"}
+                </div>
+                <div className="wallet-modal-sub">
+                  {isEN
+                    ? "Pay using the details below and upload the receipt."
+                    : "Оплатите по реквизитам ниже и загрузите чек."}
+                </div>
+
+                <div className="payment-details">
+                  <div className="payment-row">
+                    <div className="payment-label">
+                      {isEN ? "Method" : "Способ оплаты"}
+                    </div>
+                    <div className="payment-value">
+                      {methodLabel(currentMethod)}
+                    </div>
                   </div>
 
-                  {depositError && (
-                    <div className="wallet-modal-note error">
-                      {depositError}
+                  <div className="payment-row">
+                    <div className="payment-label">
+                      {isEN ? "Amount" : "Сумма к оплате"}
+                    </div>
+                    <div className="payment-value">
+                      {depositAmount.toLocaleString("ru-RU", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      {settings.currency === "RUB" ? "RUB" : "USD"}
+                    </div>
+                  </div>
+
+                  {/* Реквизиты зависят от метода */}
+                  {isCard && (
+                    <>
+                      <div className="payment-row">
+                        <div className="payment-label">
+                          {isEN ? "Card number" : "Номер карты"}
+                        </div>
+                        <div className="payment-value payment-card-row">
+                          <button
+                            type="button"
+                            className="copy-btn"
+                            onClick={() =>
+                              navigator.clipboard
+                                ?.writeText("5559 8877 0011 1234")
+                                .catch(() => {})
+                            }
+                          >
+                            5559 8877 0011 1234
+                          </button>
+                        </div>
+                      </div>
+                      <div className="payment-row">
+                        <div className="payment-label">ФИО</div>
+                        <div className="payment-value">
+                          Иванов Иван Иванович
+                        </div>
+                      </div>
+                      <div className="payment-row">
+                        <div className="payment-label">
+                          {isEN ? "Bank" : "Банк"}
+                        </div>
+                        <div className="payment-value">Tinkoff Bank</div>
+                      </div>
+                    </>
+                  )}
+
+                  {isUsdt && (
+                    <>
+                      <div className="payment-row">
+                        <div className="payment-label">
+                          {isEN ? "USDT address" : "Адрес USDT TRC-20"}
+                        </div>
+                        <div className="payment-value payment-card-row">
+                          <button
+                            type="button"
+                            className="copy-btn"
+                            onClick={() =>
+                              navigator.clipboard
+                                ?.writeText(
+                                  "TTu8Zk7sR1ExampleTRC20Address"
+                                )
+                                .catch(() => {})
+                            }
+                          >
+                            TTu8Zk7sR1…TRC20
+                          </button>
+                        </div>
+                      </div>
+                      <div className="payment-row">
+                        <div className="payment-label">
+                          {isEN ? "Network" : "Сеть"}
+                        </div>
+                        <div className="payment-value">
+                          TRON (TRC-20)
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {isPaypal && (
+                    <>
+                      <div className="payment-row">
+                        <div className="payment-label">PayPal</div>
+                        <div className="payment-value payment-card-row">
+                          <button
+                            type="button"
+                            className="copy-btn"
+                            onClick={() =>
+                              navigator.clipboard
+                                ?.writeText("okex-payments@example.com")
+                                .catch(() => {})
+                            }
+                          >
+                            okex-payments@example.com
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {isSupport && (
+                    <div className="payment-row">
+                      <div className="payment-label">
+                        {isEN ? "How to pay" : "Как оплатить"}
+                      </div>
+                      <div className="payment-value">
+                        {isEN
+                          ? "Write to support in Telegram and send the receipt there."
+                          : "Напишите в техподдержку Telegram и отправьте чек туда."}
+                      </div>
                     </div>
                   )}
 
-                  <div className="wallet-modal-actions">
-                    <button
-                      className="wallet-modal-btn secondary"
-                      onClick={() => {
-                        setWalletModal(null);
-                        resetDepositFlow();
-                      }}
-                    >
-                      {isEN ? "Cancel" : "Отмена"}
-                    </button>
-                    <button
-                      className="wallet-modal-btn primary"
-                      onClick={handleDepositNext}
-                    >
-                      {isEN ? "Next" : "Далее"}
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {walletModal === "deposit" && depositStep === 2 && (
-                <>
-                  <div className="wallet-modal-title">
-                    {isEN
-                      ? "Payment details"
-                      : "Реквизиты для оплаты"}
-                  </div>
-                  <div className="wallet-modal-sub">
-                    {isEN
-                      ? "Pay using the details below and upload the receipt."
-                      : "Оплатите по реквизитам ниже и загрузите чек."}
-                  </div>
-
-                  <div className="payment-details">
-                    <div className="payment-row">
-                      <div className="payment-label">
-                        {isEN ? "Amount" : "Сумма к оплате"}
-                      </div>
-                      <div className="payment-value">
-                        {depositAmount.toLocaleString("ru-RU", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}{" "}
-                        {settings.currency === "RUB" ? "RUB" : "USD"}
-                      </div>
+                  <div className="payment-row">
+                    <div className="payment-label">
+                      {isEN ? "Time to pay" : "Время на оплату"}
                     </div>
-
-                    <div className="payment-row">
-                      <div className="payment-label">
-                        {isEN ? "Card number" : "Номер карты"}
-                      </div>
-                      <div className="payment-value payment-card-row">
-                        <span>5559 88•• ••77 1234</span>
-                        <button
-                          className="copy-btn"
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard
-                              ?.writeText("5559887771234")
-                              .catch(() => {});
-                          }}
-                        >
-                          📋
-                        </button>
-                      </div>
+                    <div className="payment-value payment-timer">
+                      {formatTimer(paymentTimer)}
                     </div>
-
-                    <div className="payment-row">
-                      <div className="payment-label">ФИО</div>
-                      <div className="payment-value">
-                        Иванов Иван Иванович
-                      </div>
-                    </div>
-
-                    <div className="payment-row">
-                      <div className="payment-label">
-                        {isEN ? "Bank" : "Банк"}
-                      </div>
-                      <div className="payment-value">
-                        Tinkoff Bank
-                      </div>
-                    </div>
-
-                    <div className="payment-row">
-                      <div className="payment-label">
-                        {isEN ? "Time to pay" : "Время на оплату"}
-                      </div>
-                      <div className="payment-value payment-timer">
-                        {formatTimer(paymentTimer)}
-                      </div>
-                    </div>
-
-                    <div className="payment-upload">
-                      <div className="payment-label">
-                        {isEN ? "Upload receipt" : "Загрузить чек"}
-                      </div>
-                      <label className="upload-btn">
-                        <input
-                          type="file"
-                          accept="image/*,.pdf"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setReceiptFileName(file.name);
-                            } else {
-                              setReceiptFileName("");
-                            }
-                          }}
-                        />
-                        <span>
-                          {isEN
-                            ? "Choose file"
-                            : "Выбрать файл"}
-                        </span>
-                      </label>
-                      {receiptFileName && (
-                        <div className="upload-filename">
-                          {receiptFileName}
-                        </div>
-                      )}
-                    </div>
-
-                    <a
-                      href="https://t.me/forbex_support"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="support-link"
-                    >
-                      {isEN
-                        ? "Support in Telegram"
-                        : "Техподдержка в Telegram"}
-                    </a>
                   </div>
 
-                  <div className="wallet-modal-actions">
-                    <button
-                      className="wallet-modal-btn secondary"
-                      onClick={() => {
-                        setWalletModal(null);
-                        resetDepositFlow();
-                      }}
-                    >
-                      {isEN ? "Cancel" : "Отмена"}
-                    </button>
-                    <button
-                      className="wallet-modal-btn primary"
-                      onClick={handleDepositSendReceipt}
-                    >
-                      {isEN
-                        ? "Send receipt"
-                        : "Отправить чек"}
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {walletModal === "withdraw" && (
-                <>
-                  <div className="wallet-modal-title">
-                    {isEN ? "Withdraw funds" : "Вывести средства"}
-                  </div>
-                  <div className="wallet-modal-sub">
-                    {isEN
-                      ? "Choose method and enter withdrawal amount."
-                      : "Выберите метод и укажите сумму вывода."}
-                  </div>
-
-                  <div className="wallet-methods">
-                    <button
-                      className={
-                        "wallet-method-card " +
-                        (walletForm.method === "card" ? "active" : "")
-                      }
-                      onClick={() =>
-                        setWalletForm((prev) => ({
-                          ...prev,
-                          method: "card",
-                        }))
-                      }
-                    >
-                      <div className="wallet-method-title">
-                        {isEN ? "Bank card" : "Банковская карта"}
-                      </div>
-                      <div className="wallet-method-sub">
-                        {isEN
-                          ? "Main withdrawal method"
-                          : "Основной метод вывода"}
-                      </div>
-                    </button>
-
-                    <button
-                      className={
-                        "wallet-method-card " +
-                        (walletForm.method === "usdt" ? "active" : "")
-                      }
-                      onClick={() =>
-                        setWalletForm((prev) => ({
-                          ...prev,
-                          method: "usdt",
-                        }))
-                      }
-                    >
-                      <div className="wallet-method-title">
-                        USDT TRC-20
-                      </div>
-                      <div className="wallet-method-sub">
-                        {isEN
-                          ? "Network TRON"
-                          : "Сеть TRON"}
-                      </div>
-                    </button>
-
-                    <button
-                      className={
-                        "wallet-method-card " +
-                        (walletForm.method === "paypal" ? "active" : "")
-                      }
-                      onClick={() =>
-                        setWalletForm((prev) => ({
-                          ...prev,
-                          method: "paypal",
-                        }))
-                      }
-                    >
-                      <div className="wallet-method-title">
-                        PayPal
-                      </div>
-                      <div className="wallet-method-sub">
-                        {isEN
-                          ? "International withdrawals"
-                          : "Международные выводы"}
-                      </div>
-                    </button>
-                  </div>
-
-                  <div className="wallet-modal-input-group">
-                    <label>
-                      {isEN ? "Amount" : "Сумма"}
+                  <div className="payment-upload">
+                    <div className="payment-label">
+                      {isEN ? "Upload receipt" : "Загрузить чек"}
+                    </div>
+                    <label className="upload-btn">
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setReceiptFileName(file.name);
+                            setDepositError("");
+                          } else {
+                            setReceiptFileName("");
+                          }
+                        }}
+                      />
+                      <span>
+                        {isEN ? "Choose file" : "Выбрать файл"}
+                      </span>
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={walletForm.amount}
-                      onChange={(e) =>
-                        setWalletForm((prev) => ({
-                          ...prev,
-                          amount: e.target.value,
-                        }))
-                      }
-                      placeholder={
-                        settings.currency === "RUB"
-                          ? "Например, 1500"
-                          : "For example, 30"
-                      }
-                    />
+                    {receiptFileName && (
+                      <div className="upload-filename">
+                        {receiptFileName}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="wallet-modal-actions">
-                    <button
-                      className="wallet-modal-btn secondary"
-                      onClick={() => setWalletModal(null)}
-                    >
-                      {isEN ? "Cancel" : "Отмена"}
-                    </button>
-                    <button
-                      className="wallet-modal-btn primary"
-                      onClick={handleWalletConfirmWithdraw}
-                    >
-                      {isEN ? "Confirm" : "Подтвердить"}
-                    </button>
+                  {/* Красивая кнопка техподдержки с самолётиком */}
+                  <a
+                    href="https://t.me/okex_official_support"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="support-link"
+                  >
+                    <div className="support-link-main">
+                      <div className="support-link-title">
+                        {isEN
+                          ? "Support in Telegram"
+                          : "Техподдержка Telegram"}
+                      </div>
+                      <div className="support-link-sub">
+                        @OKEX ·{" "}
+                        {isEN
+                          ? "Official support"
+                          : "официальная поддержка"}
+                      </div>
+                    </div>
+                    <div className="support-link-icon">✈️</div>
+                  </a>
+                </div>
+
+                {depositError && (
+                  <div className="wallet-modal-note error">
+                    {depositError}
                   </div>
-                </>
-              )}
-            </div>
+                )}
+
+                <div className="wallet-modal-actions">
+                  <button
+                    className="wallet-modal-btn secondary"
+                    type="button"
+                    onClick={() => {
+                      setWalletModal(null);
+                      resetDepositFlow();
+                    }}
+                  >
+                    {isEN ? "Cancel" : "Отмена"}
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      "wallet-modal-btn primary " +
+                      (!receiptFileName
+                        ? "wallet-modal-btn-disabled"
+                        : "")
+                    }
+                    disabled={!receiptFileName}
+                    onClick={
+                      receiptFileName
+                        ? handleDepositSendReceipt
+                        : undefined
+                    }
+                  >
+                    {isEN ? "Send receipt" : "Отправить чек"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ===== ВЫВОД СРЕДСТВ ===== */}
+            {walletModal === "withdraw" && (
+              <>
+                <div className="wallet-modal-title">
+                  {isEN ? "Withdraw funds" : "Вывести средства"}
+                </div>
+                <div className="wallet-modal-sub">
+                  {isEN
+                    ? "Choose method and enter withdrawal amount."
+                    : "Выберите метод и укажите сумму вывода."}
+                </div>
+
+                <div className="wallet-methods">
+                  <button
+                    className={
+                      "wallet-method-card " +
+                      (walletForm.method === "card" ? "active" : "")
+                    }
+                    type="button"
+                    onClick={() =>
+                      setWalletForm((prev) => ({ ...prev, method: "card" }))
+                    }
+                  >
+                    <div className="wallet-method-title">
+                      {isEN ? "Bank card" : "Банковская карта"}
+                    </div>
+                    <div className="wallet-method-sub">
+                      {isEN
+                        ? "Main withdrawal method"
+                        : "Основной метод вывода"}
+                    </div>
+                  </button>
+
+                  <button
+                    className={
+                      "wallet-method-card " +
+                      (walletForm.method === "usdt" ? "active" : "")
+                    }
+                    type="button"
+                    onClick={() =>
+                      setWalletForm((prev) => ({ ...prev, method: "usdt" }))
+                    }
+                  >
+                    <div className="wallet-method-title">USDT TRC-20</div>
+                    <div className="wallet-method-sub">
+                      {isEN ? "TRON network" : "Сеть TRON"}
+                    </div>
+                  </button>
+
+                  <button
+                    className={
+                      "wallet-method-card " +
+                      (walletForm.method === "paypal" ? "active" : "")
+                    }
+                    type="button"
+                    onClick={() =>
+                      setWalletForm((prev) => ({
+                        ...prev,
+                        method: "paypal",
+                      }))
+                    }
+                  >
+                    <div className="wallet-method-title">PayPal</div>
+                    <div className="wallet-method-sub">
+                      {isEN
+                        ? "International withdrawals"
+                        : "Международные выводы"}
+                    </div>
+                  </button>
+                </div>
+
+                <div className="wallet-modal-input-group">
+                  <label>{isEN ? "Amount" : "Сумма"}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={walletForm.amount}
+                    onChange={(e) =>
+                      setWalletForm((prev) => ({
+                        ...prev,
+                        amount: e.target.value,
+                      }))
+                    }
+                    placeholder={
+                      settings.currency === "RUB"
+                        ? "Например, 1500"
+                        : "For example, 30"
+                    }
+                  />
+                </div>
+
+                <div className="wallet-modal-actions">
+                  <button
+                    className="wallet-modal-btn secondary"
+                    type="button"
+                    onClick={() => setWalletModal(null)}
+                  >
+                    {isEN ? "Cancel" : "Отмена"}
+                  </button>
+                  <button
+                    className="wallet-modal-btn primary"
+                    type="button"
+                    onClick={handleWalletConfirmWithdraw}
+                  >
+                    {isEN ? "Confirm" : "Подтвердить"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-        )}
-      </>
-    );
-  };
+        </div>
+      )}
+    </>
+  );
+};
 
   const renderHistory = () => {
-    const methodLabel = (m) => {
-      if (m === "card")
-        return isEN ? "Bank card" : "Банковская карта";
-      if (m === "usdt") return "USDT TRC-20";
-      if (m === "paypal") return "PayPal";
-      return m;
-    };
+const methodLabel = (m) => {
+  if (m === "card") return isEN ? "Bank card" : "Банковская карта";
+  if (m === "usdt") return "USDT TRC-20";
+  if (m === "paypal") return "PayPal";
+  if (m === "support") return isEN ? "Via support" : "Через поддержку";
+  return m;
+};
 
     return (
       <>
@@ -1247,6 +2015,71 @@ function App() {
                   </div>
                   <div className="history-time">
                     {formatDateTime(e.ts)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="section-block fade-in delay-3">
+          <div className="section-title">
+            <h2>
+              {isEN ? "Trade history" : "История сделок"}
+            </h2>
+            <p>
+              {isEN
+                ? "All your opened trades: direction, amount, multiplier and result."
+                : "Все ваши открытые сделки: направление, сумма, коэффициент и результат."}
+            </p>
+          </div>
+          <div className="history-block">
+            {tradeHistory.length === 0 && (
+              <div className="history-empty">
+                {isEN
+                  ? "No trades yet."
+                  : "Сделок ещё не было."}
+              </div>
+            )}
+            {tradeHistory.map((t) => (
+              <div key={t.id} className="history-row">
+                <div className="history-main">
+                  <div className="history-type">
+                    {t.symbol}/USDT ·{" "}
+                    {t.direction === "up"
+                      ? (isEN ? "Up" : "Вверх")
+					  : t.direction === "down"
+                      ? (isEN ? "Down" : "Вниз")
+                      : isEN
+					  ? "No change"
+                      : "Не изменится"}{" "}
+                    · x{t.multiplier}
+                  </div>
+                  <div className="history-sub">
+                    {isEN ? "Amount" : "Сумма"}:{" "}
+                    {t.amount.toLocaleString("ru-RU", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{" "}
+                    {currencySymbol}
+                  </div>
+                </div>
+                <div className="history-right">
+                  <div
+                    className={
+                      "history-amount " +
+                      (t.status === "win" ? "positive" : "negative")
+                    }
+                  >
+                    {t.profit > 0 ? "+" : ""}
+                    {t.profit.toLocaleString("ru-RU", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{" "}
+                    {currencySymbol}
+                  </div>
+                  <div className="history-time">
+                    {formatDateTime(t.finishedAt)}
                   </div>
                 </div>
               </div>
@@ -1718,7 +2551,30 @@ function App() {
   if (!user) {
     return (
       <div className="page-root">
-        <div className="app-container">{renderAuth()}</div>
+        <div className="app-container">
+          {overlayLoading && (
+            <div className="boot-loader">
+              <div className="fox-orbit">
+                <div className="fox-core">🦊</div>
+                <div className="orbit-ring orbit-ring-1" />
+                <div className="orbit-ring orbit-ring-2" />
+                <div className="orbit-dot orbit-dot-1" />
+                <div className="orbit-dot orbit-dot-2" />
+              </div>
+              <div className="boot-title">
+                {overlayText.title || "FORBEX TRADE"}
+              </div>
+              <div className="boot-sub">
+                {overlayText.subtitle ||
+                  (isEN
+                    ? "Please, wait…"
+                    : "Пожалуйста, подождите…")}
+              </div>
+            </div>
+          )}
+
+          {renderAuth()}
+        </div>
       </div>
     );
   }
@@ -1726,6 +2582,27 @@ function App() {
   return (
     <div className="page-root">
       <div className="app-container">
+        {overlayLoading && (
+          <div className="boot-loader">
+            <div className="fox-orbit">
+              <div className="fox-core">🦊</div>
+              <div className="orbit-ring orbit-ring-1" />
+              <div className="orbit-ring orbit-ring-2" />
+              <div className="orbit-dot orbit-dot-1" />
+              <div className="orbit-dot orbit-dot-2" />
+            </div>
+            <div className="boot-title">
+              {overlayText.title || "FORBEX TRADE"}
+            </div>
+            <div className="boot-sub">
+              {overlayText.subtitle ||
+                (isEN
+                  ? "Please, wait…"
+                  : "Пожалуйста, подождите…")}
+            </div>
+          </div>
+        )}
+
         {/* Шапка */}
         <header className="header">
           <div className="brand">
