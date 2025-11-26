@@ -1298,7 +1298,14 @@ body {
   color: #6b7280;
 }
 
+/* --- ПРОФИЛЬ (Исправленный) --- */
+
 .profile-card {
+  /* Добавлено: принудительная ширина */
+  width: 100%; 
+  max-width: 100%;
+  box-sizing: border-box; /* На всякий случай дублируем */
+  
   padding: 12px 14px;
   border-radius: 18px;
   background: radial-gradient(circle at top left, #f97316, #020617 60%);
@@ -1321,6 +1328,8 @@ body {
 }
 
 .profile-avatar {
+  /* Фикс: чтобы аватарка не сжималась */
+  flex-shrink: 0; 
   width: 42px;
   height: 42px;
   border-radius: 16px;
@@ -1335,22 +1344,28 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* Фикс: чтобы текст занимал всё доступное место */
+  flex: 1; 
+  min-width: 0; /* Чтобы длинный текст не ломал верстку */
 }
 
 .profile-actions {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Добавлено: ширина на 100% */
+  width: 100%;
 }
 
 .profile-btn {
   border-radius: 999px;
   border: 1px solid #1f2937;
-  padding: 7px 0;
+  padding: 10px 0; /* Чуть увеличил для удобства нажатия */
   font-size: 12px;
   cursor: pointer;
   background: #020617;
   color: #e5e7eb;
+  width: 100%; /* Кнопка во всю ширину */
 }
 
 .profile-btn.logout {
@@ -1360,12 +1375,17 @@ body {
 }
 
 .settings-block {
+  /* Добавлено: ширина на 100% */
+  width: 100%;
+  box-sizing: border-box;
+  
   border-radius: 16px;
   border: 1px solid #f97316;
   background: radial-gradient(circle at top left, #f973161a, #020617 70%);
   padding: 10px 12px;
   font-size: 12px;
   box-shadow: 0 0 22px rgba(248, 113, 22, 0.35);
+  margin-bottom: 10px; /* Отступ снизу для красоты */
 }
 
 .settings-chip {
@@ -1665,12 +1685,4 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* Профиль: всё на всю ширину, без сужения */
-.profile-card,
-.settings-block,
-.profile-actions {
-  width: 100%;
-  max-width: 100%;
 }
