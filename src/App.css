@@ -77,7 +77,6 @@ body {
   color: #9ca3af;
 }
 
-/* Контент */
 .content {
   flex: 1;
   padding: 12px 16px 80px;
@@ -85,6 +84,11 @@ body {
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
+  align-items: stretch;      /* ВАЖНО */
+}
+
+.content > * {
+  width: 100%;               /* ВАЖНО */
 }
 
 .content::-webkit-scrollbar {
@@ -213,10 +217,9 @@ body {
   }
 }
 
-/* Заголовки секций */
 .section-block {
   border-radius: 14px;
-  width: 100%;
+  width: 100%;               /* ВАЖНО */
 }
 
 .section-title {
@@ -1301,11 +1304,10 @@ body {
 /* --- ПРОФИЛЬ (Исправленный) --- */
 
 .profile-card {
-  /* Добавлено: принудительная ширина */
-  width: 100%; 
+  width: 100%;               /* тянем карточку на всю ширину секции */
   max-width: 100%;
-  box-sizing: border-box; /* На всякий случай дублируем */
-  
+  box-sizing: border-box;
+
   padding: 12px 14px;
   border-radius: 18px;
   background: radial-gradient(circle at top left, #f97316, #020617 60%);
@@ -1316,20 +1318,8 @@ body {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.9);
 }
 
-.profile-login {
-  font-size: 16px;
-  font-weight: 700;
-}
-.profile-email {
-  font-size: 12px;
-}
-.profile-created {
-  font-size: 11px;
-}
-
 .profile-avatar {
-  /* Фикс: чтобы аватарка не сжималась */
-  flex-shrink: 0; 
+  flex-shrink: 0;
   width: 42px;
   height: 42px;
   border-radius: 16px;
@@ -1344,28 +1334,26 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  /* Фикс: чтобы текст занимал всё доступное место */
-  flex: 1; 
-  min-width: 0; /* Чтобы длинный текст не ломал верстку */
+  flex: 1;
+  min-width: 0;
 }
 
 .profile-actions {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  /* Добавлено: ширина на 100% */
-  width: 100%;
+  width: 100%;              /* кнопки на всю ширину */
 }
 
 .profile-btn {
+  width: 100%;              /* на всякий случай ещё раз */
   border-radius: 999px;
   border: 1px solid #1f2937;
-  padding: 10px 0; /* Чуть увеличил для удобства нажатия */
+  padding: 10px 0;
   font-size: 12px;
   cursor: pointer;
   background: #020617;
   color: #e5e7eb;
-  width: 100%; /* Кнопка во всю ширину */
 }
 
 .profile-btn.logout {
@@ -1375,17 +1363,15 @@ body {
 }
 
 .settings-block {
-  /* Добавлено: ширина на 100% */
   width: 100%;
   box-sizing: border-box;
-  
+
   border-radius: 16px;
   border: 1px solid #f97316;
   background: radial-gradient(circle at top left, #f973161a, #020617 70%);
   padding: 10px 12px;
   font-size: 12px;
   box-shadow: 0 0 22px rgba(248, 113, 22, 0.35);
-  margin-bottom: 10px; /* Отступ снизу для красоты */
 }
 
 .settings-chip {
@@ -1685,4 +1671,16 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.app-container {
+  width: 100%;
+  max-width: 480px;
+  overflow-x: hidden;
 }

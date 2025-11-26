@@ -2408,126 +2408,127 @@ const methodLabel = (m) => {
     );
   };
 
-  const renderProfile = () => {
-    if (!user) return null;
+const renderProfile = () => {
+  if (!user) return null;
 
-    return (
-      <>
-        <section className="section-block fade-in delay-1">
-          <div className="profile-card">
-            <div className="profile-avatar">🦊</div>
-            <div className="profile-main">
-              <div className="profile-login">{user.login}</div>
-              <div className="profile-email">{user.email}</div>
-              <div className="profile-created">
-                {isEN
-                  ? `On Forbex since ${formatDateTime(user.createdAt)}`
-                  : `На Forbex с ${formatDateTime(user.createdAt)}`}
-              </div>
+  return (
+    <>
+      {/* карточка профиля */}
+      <section className="section-block fade-in delay-1">
+        <div className="profile-card">
+          <div className="profile-avatar">🦊</div>
+          <div className="profile-main">
+            <div className="profile-login">{user.login}</div>
+            <div className="profile-email">{user.email}</div>
+            <div className="profile-created">
+              {isEN
+                ? `On Forbex since ${formatDateTime(user.createdAt)}`
+                : `На Forbex с ${formatDateTime(user.createdAt)}`}
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="section-block fade-in delay-2">
-          <div className="section-title">
-            <h2>
-              {isEN ? "Account data" : "Данные аккаунта"}
-            </h2>
-            <p>
-              {isEN
-                ? "Registration, password and verification settings."
-                : "Регистрация, пароль и верификация."}
-            </p>
-          </div>
-          <div className="profile-actions">
-            <button
-              className="profile-btn"
-              onClick={() => setPasswordModalOpen(true)}
-            >
-              {isEN ? "Change password" : "Сменить пароль"}
-            </button>
+      {/* блок "Данные аккаунта" */}
+      <section className="section-block fade-in delay-2">
+        <div className="section-title">
+          <h2>{isEN ? "Account data" : "Данные аккаунта"}</h2>
+          <p>
+            {isEN
+              ? "Registration, password and verification settings."
+              : "Регистрация, пароль и верификация."}
+          </p>
+        </div>
+        <div className="profile-actions">
+          <button
+            className="profile-btn"
+            onClick={() => setPasswordModalOpen(true)}
+          >
+            {isEN ? "Change password" : "Сменить пароль"}
+          </button>
 
-            <button className="profile-btn">
-              {isEN
-                ? "Verification (coming soon)"
-                : "Верификация (скоро)"}
-            </button>
-          </div>
-        </section>
+          <button className="profile-btn">
+            {isEN
+              ? "Verification (coming soon)"
+              : "Верификация (скоро)"}
+          </button>
+        </div>
+      </section>
 
-        <section className="section-block fade-in delay-3">
-          <div className="section-title">
-            <h2>{isEN ? "Settings" : "Настройки"}</h2>
-            <p>
-              {isEN
-                ? "Language and currency for the interface."
-                : "Язык и валюта интерфейса."}
-            </p>
-          </div>
+      {/* настройки языка/валюты */}
+      <section className="section-block fade-in delay-3">
+        <div className="section-title">
+          <h2>{isEN ? "Settings" : "Настройки"}</h2>
+          <p>
+            {isEN
+              ? "Language and currency for the interface."
+              : "Язык и валюта интерфейса."}
+          </p>
+        </div>
 
-          <div className="settings-block">
-            <div className="settings-row">
-              <div className="settings-label">
-                {isEN ? "Interface language" : "Язык интерфейса"}
-              </div>
-              <div className="settings-chips">
-                <button
-                  className={
-                    "settings-chip " +
-                    (settings.language === "ru" ? "active" : "")
-                  }
-                  onClick={() => updateSettings({ language: "ru" })}
-                >
-                  🇷🇺 Русский
-                </button>
-                <button
-                  className={
-                    "settings-chip " +
-                    (settings.language === "en" ? "active" : "")
-                  }
-                  onClick={() => updateSettings({ language: "en" })}
-                >
-                  🇺🇸 English
-                </button>
-              </div>
+        <div className="settings-block">
+          <div className="settings-row">
+            <div className="settings-label">
+              {isEN ? "Interface language" : "Язык интерфейса"}
             </div>
-
-            <div className="settings-row">
-              <div className="settings-label">
-                {isEN ? "Currency" : "Валюта"}
-              </div>
-              <div className="settings-chips">
-                <button
-                  className={
-                    "settings-chip " +
-                    (settings.currency === "RUB" ? "active" : "")
-                  }
-                  onClick={() => updateSettings({ currency: "RUB" })}
-                >
-                  ₽ RUB
-                </button>
-                <button
-                  className={
-                    "settings-chip " +
-                    (settings.currency === "USD" ? "active" : "")
-                  }
-                  onClick={() => updateSettings({ currency: "USD" })}
-                >
-                  $ USD
-                </button>
-              </div>
+            <div className="settings-chips">
+              <button
+                className={
+                  "settings-chip " +
+                  (settings.language === "ru" ? "active" : "")
+                }
+                onClick={() => updateSettings({ language: "ru" })}
+              >
+                🇷🇺 Русский
+              </button>
+              <button
+                className={
+                  "settings-chip " +
+                  (settings.language === "en" ? "active" : "")
+                }
+                onClick={() => updateSettings({ language: "en" })}
+              >
+                🇺🇸 English
+              </button>
             </div>
           </div>
-        </section>
 
-        <section className="section-block fade-in delay-4">
-          <div className="profile-actions">
-            <button className="profile-btn logout" onClick={handleLogout}>
-              {isEN ? "Log out" : "Выйти из аккаунта"}
-            </button>
+          <div className="settings-row">
+            <div className="settings-label">
+              {isEN ? "Currency" : "Валюта"}
+            </div>
+            <div className="settings-chips">
+              <button
+                className={
+                  "settings-chip " +
+                  (settings.currency === "RUB" ? "active" : "")
+                }
+                onClick={() => updateSettings({ currency: "RUB" })}
+              >
+                ₽ RUB
+              </button>
+              <button
+                className={
+                  "settings-chip " +
+                  (settings.currency === "USD" ? "active" : "")
+                }
+                onClick={() => updateSettings({ currency: "USD" })}
+              >
+                $ USD
+              </button>
+            </div>
           </div>
-        </section>
+        </div>
+      </section>
 
+      {/* кнопка выхода */}
+      <section className="section-block fade-in delay-4">
+        <div className="profile-actions">
+          <button className="profile-btn logout" onClick={handleLogout}>
+            {isEN ? "Log out" : "Выйти из аккаунта"}
+          </button>
+        </div>
+      </section>
         {passwordModalOpen && (
           <div
             className="wallet-modal-backdrop"
