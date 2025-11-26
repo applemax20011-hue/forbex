@@ -1666,3 +1666,11 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Профиль: всё на всю ширину, без сужения */
+.profile-card,
+.settings-block,
+.profile-actions {
+  width: 100%;
+  max-width: 100%;
+}
