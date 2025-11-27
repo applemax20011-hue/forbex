@@ -1171,8 +1171,19 @@ const resetDepositFlow = () => {
   };
 
 const handleDepositSendReceipt = () => {
-  if (!depositAmount || Number.isNaN(depositAmount)) return;
+  const amountNum = Number(depositAmount);
 
+  // 1. Проверяем сумму (и сразу даём пользователю текст, а не тихий return)
+  if (!amountNum || Number.isNaN(amountNum)) {
+    setDepositError(
+      isEN
+        ? "Deposit amount is not set. Go back and enter the amount."
+        : "Сумма пополнения не указана. Вернитесь назад и введите сумму."
+    );
+    return;
+  }
+
+  // 2. Есть ли файл
   if (!receiptFileName) {
     setDepositError(
       isEN
@@ -1182,7 +1193,10 @@ const handleDepositSendReceipt = () => {
     return;
   }
 
-  if (!TELEGRAM_ID) {
+  // 3. Берём Telegram ID из WebApp
+  const tgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+
+  if (!tgId) {
     setDepositError(
       isEN
         ? "Open this WebApp from Telegram to make a deposit."
@@ -1197,27 +1211,26 @@ const handleDepositSendReceipt = () => {
     "FORBEX TRADE",
     isEN ? "Checking payment…" : "Проверка платежа…",
     () => {
-      // 1. Локально показываем pending (чисто для UI)
+      // 4. Локально добавляем pending-операцию
       const entry = {
         id: now,
         type: "deposit",
-        amount: Number(depositAmount),
+        amount: amountNum,
         method: walletForm.method || "card",
         ts: now,
         status: "pending",
       };
       setWalletHistory((prev) => [entry, ...prev]);
 
-      // 2. Шлём на бэкенд, чтобы он создал депозит и отправил запрос воркеру/админу
+      // 5. Отправляем на бэкенд
       fetch(`${API_BASE}/api/deposits/create-from-webapp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          telegram_id: TELEGRAM_ID,
-          amount: Number(depositAmount),
-          currency: settings.currency, // 'RUB' или 'USD'
+          telegram_id: tgId,
+          amount: amountNum,
+          currency: settings.currency,
           method: walletForm.method || "card",
-          // сюда же можешь передать имя загруженного файла/расширение и т.п.
         }),
       })
         .then((r) => r.json())
@@ -1233,6 +1246,7 @@ const handleDepositSendReceipt = () => {
     }
   );
 };
+
   // ===== Рендеры вкладок =====
 
 const renderHome = () => (
