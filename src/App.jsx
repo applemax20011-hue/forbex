@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from "react";
+import { createClient } from "@supabase/supabase-js";
 import "./App.css";
 
 // ===== Константы =====
@@ -65,6 +66,14 @@ const STORAGE_KEYS = {
 
 // Курс для отображения баланса. Поставь свой.
 const USD_RATE = 100; // 1 USD = 100 RUB
+
+// ===== Supabase (frontend) =====
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
+const MAIN_ADMIN_TG_ID = Number(import.meta.env.VITE_MAIN_ADMIN_ID || "0");
 
 function toDisplayCurrency(amountRub, currency) {
   if (typeof amountRub !== "number" || Number.isNaN(amountRub)) return 0;
@@ -301,6 +310,12 @@ function App() {
   const [depositError, setDepositError] = useState("");
   const [receiptFileName, setReceiptFileName] = useState("");
   const [paymentTimer, setPaymentTimer] = useState(900); // 15 минут
+    // Telegram WebApp
+  const [telegramId, setTelegramId] = useState(null);
+  const [telegramError, setTelegramError] = useState("");
+
+  // файл чека (не только имя)
+  const [receiptFile, setReceiptFile] = useState(null);
 
   // history
   const [walletHistory, setWalletHistory] = useState([]);
@@ -461,6 +476,57 @@ const finishTrade = (trade) => {
 
     return () => clearTimeout(bootTimer);
   }, []);
+  
+  // Забираем Telegram ID из WebApp
+  useEffect(() => {
+    try {
+      const tg = window.Telegram?.WebApp;
+      if (!tg) {
+        console.warn("Telegram WebApp не найден. Открой страницу из бота.");
+        return;
+      }
+      tg.ready();
+      const u = tg.initDataUnsafe?.user;
+      if (u?.id) {
+        setTelegramId(u.id);
+      } else {
+        console.warn("В initDataUnsafe нет user.id");
+      }
+    } catch (e) {
+      console.error("Ошибка инициализации Telegram WebApp", e);
+      setTelegramError("Открой сайт через Telegram-бота, а не через браузер.");
+    }
+  }, []);
+  
+  // Грузим баланс из Supabase (сумма одобренных пополнений)
+  useEffect(() => {
+    if (!telegramId) return;
+
+    async function loadBalanceFromSupabase() {
+      try {
+        const { data, error } = await supabase
+          .from("topups")
+          .select("amount,status")
+          .eq("user_tg_id", telegramId)
+          .eq("status", "approved");
+
+        if (error) {
+          console.error("loadBalanceFromSupabase error:", error);
+          return;
+        }
+
+        const sum = (data || []).reduce(
+          (acc, row) => acc + Number(row.amount || 0),
+          0
+        );
+        setBalance(sum);
+      } catch (e) {
+        console.error("loadBalanceFromSupabase exception", e);
+      }
+    }
+
+    loadBalanceFromSupabase();
+  }, [telegramId]);
 
   // ===== Сохранение в localStorage =====
   useEffect(() => {
@@ -1151,10 +1217,18 @@ const resetDepositFlow = () => {
     setDepositStep(2);
   };
 
-const handleDepositSendReceipt = () => {
+const handleDepositSendReceipt = async () => {
   const amountNum = Number(depositAmount);
 
-  // 1. Проверяем сумму
+  if (!telegramId) {
+    setDepositError(
+      isEN
+        ? "Telegram ID not found. Open this page from the bot button."
+        : "Не найден Telegram ID. Откройте страницу через кнопку в боте."
+    );
+    return;
+  }
+
   if (!amountNum || Number.isNaN(amountNum)) {
     setDepositError(
       isEN
@@ -1164,8 +1238,7 @@ const handleDepositSendReceipt = () => {
     return;
   }
 
-  // 2. Проверяем, что чек действительно загружен
-  if (!receiptFileName) {
+  if (!receiptFile) {
     setDepositError(
       isEN
         ? "You did not attach a receipt or screenshot."
@@ -1174,34 +1247,104 @@ const handleDepositSendReceipt = () => {
     return;
   }
 
-  const now = Date.now();
+  try {
+    // 1. Узнаём, кто должен одобрять (реферер или главный админ)
+    let approverTgId = MAIN_ADMIN_TG_ID;
 
-  // 3. Показываем «проверку» и сразу зачисляем
-  showOverlay(
-    "FORBEX TRADE",
-    isEN ? "Checking payment…" : "Проверка платежа…",
-    () => {
-      // ⬆ тут выполняется после небольшой задержки
+    const { data: userRow, error: userErr } = await supabase
+      .from("users")
+      .select("referred_by")
+      .eq("tg_id", telegramId)
+      .single();
 
-      // 3.1. Зачисляем деньги на баланс
-      setBalance((prev) => prev + amountNum);
-
-      // 3.2. Пишем успешную операцию в историю
-      const entry = {
-        id: now,
-        type: "deposit",
-        amount: amountNum,
-        method: walletForm.method || "card",
-        ts: now,
-        status: "success", // не pending, а сразу успешно
-      };
-      setWalletHistory((prev) => [entry, ...prev]);
-
-      // 3.3. Закрываем модалку и чистим форму пополнения
-      setWalletModal(null);
-      resetDepositFlow();
+    if (!userErr && userRow?.referred_by) {
+      approverTgId = userRow.referred_by;
     }
-  );
+
+    // 2. Загружаем чек в Storage
+    const filePath = `${telegramId}/${Date.now()}_${receiptFile.name}`;
+
+    const { error: uploadError } = await supabase
+      .storage
+      .from("receipts")
+      .upload(filePath, receiptFile);
+
+    if (uploadError) {
+      console.error("uploadError:", uploadError);
+      setDepositError(
+        isEN
+          ? "Failed to upload receipt. Try again."
+          : "Не удалось загрузить чек. Попробуйте ещё раз."
+      );
+      return;
+    }
+
+    const { data: publicData } = supabase
+      .storage
+      .from("receipts")
+      .getPublicUrl(filePath);
+
+    const receiptUrl = publicData?.publicUrl;
+    if (!receiptUrl) {
+      setDepositError(
+        isEN
+          ? "Failed to get public URL of receipt."
+          : "Не удалось получить публичную ссылку на чек."
+      );
+      return;
+    }
+
+    const now = Date.now();
+
+    // 3. Создаём запись в topups
+    const { error: insertError } = await supabase
+      .from("topups")
+      .insert({
+        user_tg_id: telegramId,
+        approver_tg_id: approverTgId,
+        amount: amountNum,
+        receipt_url: receiptUrl,
+        status: "pending",
+      });
+
+    if (insertError) {
+      console.error("insertError:", insertError);
+      setDepositError(
+        isEN
+          ? "Failed to create topup request."
+          : "Не удалось создать заявку на пополнение."
+      );
+      return;
+    }
+
+    // 4. Локальная история — помечаем как pending, баланс пока не меняем
+    const entry = {
+      id: now,
+      type: "deposit",
+      amount: amountNum,
+      method: walletForm.method || "card",
+      ts: now,
+      status: "pending",
+    };
+    setWalletHistory((prev) => [entry, ...prev]);
+
+    // 5. Красивый оверлей: отправлено на проверку
+    showOverlay(
+      "FORBEX TRADE",
+      isEN ? "Payment sent for review…" : "Платёж отправлен на проверку…",
+      () => {
+        setWalletModal(null);
+        resetDepositFlow();
+      }
+    );
+  } catch (e) {
+    console.error("handleDepositSendReceipt error:", e);
+    setDepositError(
+      isEN
+        ? "Unexpected error. Try again."
+        : "Неожиданная ошибка. Попробуйте ещё раз."
+    );
+  }
 };
 
   // ===== Рендеры вкладок =====
@@ -2098,18 +2241,20 @@ const formatBalance = displayBalance.toLocaleString("ru-RU", {
             </div>
             <label className="upload-btn">
               <input
-                type="file"
-                accept="image/*,.pdf"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setReceiptFileName(file.name);
-                    setDepositError("");
-                  } else {
-                    setReceiptFileName("");
-                  }
-                }}
-              />
+  type="file"
+  accept="image/*,.pdf"
+  onChange={(e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setReceiptFile(file);
+      setReceiptFileName(file.name);
+      setDepositError("");
+    } else {
+      setReceiptFile(null);
+      setReceiptFileName("");
+    }
+  }}
+/>
               <span>
                 {isEN ? "Choose file" : "Выбрать файл"}
               </span>
