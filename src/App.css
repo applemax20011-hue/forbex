@@ -1705,3 +1705,9 @@ body {
   box-sizing: border-box !important;
 }
 
+body {
+  display: block !important;
+  place-items: initial !important;
+  min-width: 0 !important;
+}
+
