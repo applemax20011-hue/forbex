@@ -62,6 +62,19 @@ const STORAGE_KEYS = {
   stats: "forbex_stats",            // для активных юзеров и сделок
 };
 
+// Курс для отображения баланса. Поставь свой.
+const USD_RATE = 100; // 1 USD = 100 RUB
+
+function toDisplayCurrency(amountRub, currency) {
+  if (typeof amountRub !== "number" || Number.isNaN(amountRub)) return 0;
+
+  if (currency === "USD") {
+    return amountRub / USD_RATE; // было 500 000 RUB → 5 000 USD (если курс 100)
+  }
+  // по умолчанию RUB
+  return amountRub;
+}
+
 function ScenarioLightweightChart({ points, scenario, progress }) {
   const svgRef = useRef(null);
 
@@ -1141,30 +1154,30 @@ const resetDepositFlow = () => {
 const handleDepositSendReceipt = () => {
   if (!depositAmount || Number.isNaN(depositAmount)) return;
 
+  // без файла — просто ошибка
   if (!receiptFileName) {
     setDepositError(
       isEN
-        ? "You did not attach a receipt."
-        : "Вы не прикрепили чек."
+        ? "You did not attach a receipt or screenshot."
+        : "Вы не прикрепили чек или скриншот оплаты."
     );
     return;
   }
 
   const now = Date.now();
 
+  // ВАЖНО: здесь баланс НЕ пополняем — только создаём запись "на проверке"
   showOverlay(
     "FORBEX TRADE",
     isEN ? "Checking payment…" : "Проверка платежа…",
     () => {
-      setBalance((prev) => prev + depositAmount);
-
       const entry = {
         id: now,
         type: "deposit",
-        amount: depositAmount,
+        amount: Number(depositAmount), // храним в RUB
         method: walletForm.method || "card",
         ts: now,
-        status: "checked",
+        status: "pending", // <-- на проверке
       };
       setWalletHistory((prev) => [entry, ...prev]);
 
@@ -1173,8 +1186,6 @@ const handleDepositSendReceipt = () => {
     }
   );
 };
-
-
   // ===== Рендеры вкладок =====
 
 const renderHome = () => (
@@ -1598,10 +1609,13 @@ const renderTrade = () => {
   };
 
 const renderWallet = () => {
-  const formatBalance = balance.toLocaleString("ru-RU", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+const displayBalance = toDisplayCurrency(balance, settings.currency);
+
+const formatBalance = displayBalance.toLocaleString("ru-RU", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 
   const methodLabel = (m) => {
     if (m === "card") return isEN ? "Bank card" : "Банковская карта";
@@ -1697,40 +1711,42 @@ const renderWallet = () => {
               {isEN ? "No operations yet." : "Операций ещё не было."}
             </div>
           )}
-          {walletHistory.slice(0, 5).map((e) => (
-            <div key={e.id} className="wallet-history-row">
-              <div className="wallet-history-main">
-                <div className="wallet-history-type">
-                  {e.type === "deposit"
-                    ? isEN
-                      ? "Deposit"
-                      : "Пополнение"
-                    : isEN
-                    ? "Withdrawal"
-                    : "Вывод"}{" "}
-                  — {methodLabel(e.method)}
-                </div>
-                <div className="wallet-history-time">
-                  {formatDateTime(e.ts)}
-                </div>
-              </div>
-              <div
-                className={
-                  "wallet-history-amount " +
-                  (e.type === "deposit" ? "positive" : "negative")
-                }
-              >
-                {e.type === "deposit" ? "+" : "-"}
-                {e.amount.toLocaleString("ru-RU", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}{" "}
-                {currencySymbol}
-              </div>
-            </div>
-          ))}
+{walletHistory.slice(0, 5).map((e) => {
+  const displayAmount = toDisplayCurrency(e.amount, settings.currency);
+  return (
+    <div key={e.id} className="wallet-history-row">
+      <div className="wallet-history-main">
+        <div className="wallet-history-type">
+          {e.type === "deposit"
+            ? isEN ? "Deposit" : "Пополнение"
+            : isEN ? "Withdrawal" : "Вывод"}{" "}
+          — {methodLabel(e.method)}
+          {e.status === "pending" && (
+            <span style={{ marginLeft: 4, color: "#fde68a", fontSize: 10 }}>
+              {isEN ? "(on review)" : "(на проверке)"}
+            </span>
+          )}
         </div>
-      </section>
+        <div className="wallet-history-time">
+          {formatDateTime(e.ts)}
+        </div>
+      </div>
+      <div
+        className={
+          "wallet-history-amount " +
+          (e.type === "deposit" ? "positive" : "negative")
+        }
+      >
+        {e.type === "deposit" ? "+" : "-"}
+        {displayAmount.toLocaleString("ru-RU", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}{" "}
+        {currencySymbol}
+      </div>
+    </div>
+  );
+})}
 
       {/* Модалка пополнения / вывода */}
       {walletModal && (
@@ -1901,243 +1917,262 @@ const renderWallet = () => {
               </>
             )}
 
-            {/* ===== ПОПОЛНЕНИЕ: ШАГ 2 — реквизиты + чек ===== */}
-            {walletModal === "deposit" && depositStep === 2 && (
-              <>
-                <div className="wallet-modal-title">
-                  {isEN ? "Payment details" : "Реквизиты для оплаты"}
-                </div>
-                <div className="wallet-modal-sub">
-                  {isEN
-                    ? "Pay using the details below and upload the receipt."
-                    : "Оплатите по реквизитам ниже и загрузите чек."}
-                </div>
+{/* ===== ПОПОЛНЕНИЕ: ШАГ 2 — реквизиты + чек / поддержка ===== */}
+{walletModal === "deposit" && depositStep === 2 && (
+  <>
+    <div className="wallet-modal-title">
+      {isEN ? "Payment details" : "Реквизиты для оплаты"}
+    </div>
+    <div className="wallet-modal-sub">
+      {isSupport
+        ? (isEN
+            ? "Pay via Telegram support using the contact below."
+            : "Оплатите через техподдержку Telegram по контакту ниже.")
+        : (isEN
+            ? "Pay using the details below and upload the receipt."
+            : "Оплатите по реквизитам ниже и загрузите чек.")}
+    </div>
 
-                <div className="payment-details">
-                  <div className="payment-row">
-                    <div className="payment-label">
-                      {isEN ? "Method" : "Способ оплаты"}
-                    </div>
-                    <div className="payment-value">
-                      {methodLabel(currentMethod)}
-                    </div>
-                  </div>
+    <div className="payment-details">
+      {/* Метод */}
+      <div className="payment-row">
+        <div className="payment-label">
+          {isEN ? "Method" : "Способ оплаты"}
+        </div>
+        <div className="payment-value">
+          {methodLabel(currentMethod)}
+        </div>
+      </div>
 
-                  <div className="payment-row">
-                    <div className="payment-label">
-                      {isEN ? "Amount" : "Сумма к оплате"}
-                    </div>
-                    <div className="payment-value">
-                      {depositAmount.toLocaleString("ru-RU", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}{" "}
-                      {settings.currency === "RUB" ? "RUB" : "USD"}
-                    </div>
-                  </div>
+      {/* Сумма */}
+      <div className="payment-row">
+        <div className="payment-label">
+          {isEN ? "Amount" : "Сумма к оплате"}
+        </div>
+        <div className="payment-value">
+          {depositAmount.toLocaleString("ru-RU", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}{" "}
+          {settings.currency === "RUB" ? "RUB" : "USD"}
+        </div>
+      </div>
 
-                  {/* Реквизиты зависят от метода */}
-                  {isCard && (
-                    <>
-                      <div className="payment-row">
-                        <div className="payment-label">
-                          {isEN ? "Card number" : "Номер карты"}
-                        </div>
-                        <div className="payment-value payment-card-row">
-                          <button
-                            type="button"
-                            className="copy-btn"
-                            onClick={() =>
-                              navigator.clipboard
-                                ?.writeText("5559 8877 0011 1234")
-                                .catch(() => {})
-                            }
-                          >
-                            5559 8877 0011 1234
-                          </button>
-                        </div>
-                      </div>
-                      <div className="payment-row">
-                        <div className="payment-label">ФИО</div>
-                        <div className="payment-value">
-                          Иванов Иван Иванович
-                        </div>
-                      </div>
-                      <div className="payment-row">
-                        <div className="payment-label">
-                          {isEN ? "Bank" : "Банк"}
-                        </div>
-                        <div className="payment-value">Tinkoff Bank</div>
-                      </div>
-                    </>
-                  )}
+      {/* Реквизиты зависят от метода */}
+      {isCard && (
+        <>
+          <div className="payment-row">
+            <div className="payment-label">
+              {isEN ? "Card number" : "Номер карты"}
+            </div>
+            <div className="payment-value payment-card-row">
+              <button
+                type="button"
+                className="copy-btn"
+                onClick={() =>
+                  navigator.clipboard
+                    ?.writeText("5559 8877 0011 1234")
+                    .catch(() => {})
+                }
+              >
+                5559 8877 0011 1234
+              </button>
+            </div>
+          </div>
+          <div className="payment-row">
+            <div className="payment-label">ФИО</div>
+            <div className="payment-value">
+              Иванов Иван Иванович
+            </div>
+          </div>
+          <div className="payment-row">
+            <div className="payment-label">
+              {isEN ? "Bank" : "Банк"}
+            </div>
+            <div className="payment-value">Tinkoff Bank</div>
+          </div>
+        </>
+      )}
 
-                  {isUsdt && (
-                    <>
-                      <div className="payment-row">
-                        <div className="payment-label">
-                          {isEN ? "USDT address" : "Адрес USDT TRC-20"}
-                        </div>
-                        <div className="payment-value payment-card-row">
-                          <button
-                            type="button"
-                            className="copy-btn"
-                            onClick={() =>
-                              navigator.clipboard
-                                ?.writeText(
-                                  "TTu8Zk7sR1ExampleTRC20Address"
-                                )
-                                .catch(() => {})
-                            }
-                          >
-                            TTu8Zk7sR1…TRC20
-                          </button>
-                        </div>
-                      </div>
-                      <div className="payment-row">
-                        <div className="payment-label">
-                          {isEN ? "Network" : "Сеть"}
-                        </div>
-                        <div className="payment-value">
-                          TRON (TRC-20)
-                        </div>
-                      </div>
-                    </>
-                  )}
+      {isUsdt && (
+        <>
+          <div className="payment-row">
+            <div className="payment-label">
+              {isEN ? "USDT address" : "Адрес USDT TRC-20"}
+            </div>
+            <div className="payment-value payment-card-row">
+              <button
+                type="button"
+                className="copy-btn"
+                onClick={() =>
+                  navigator.clipboard
+                    ?.writeText("TTu8Zk7sR1ExampleTRC20Address")
+                    .catch(() => {})
+                }
+              >
+                TTu8Zk7sR1…TRC20
+              </button>
+            </div>
+          </div>
+          <div className="payment-row">
+            <div className="payment-label">
+              {isEN ? "Network" : "Сеть"}
+            </div>
+            <div className="payment-value">
+              TRON (TRC-20)
+            </div>
+          </div>
+        </>
+      )}
 
-                  {isPaypal && (
-                    <>
-                      <div className="payment-row">
-                        <div className="payment-label">PayPal</div>
-                        <div className="payment-value payment-card-row">
-                          <button
-                            type="button"
-                            className="copy-btn"
-                            onClick={() =>
-                              navigator.clipboard
-                                ?.writeText("okex-payments@example.com")
-                                .catch(() => {})
-                            }
-                          >
-                            okex-payments@example.com
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
+      {isPaypal && (
+        <>
+          <div className="payment-row">
+            <div className="payment-label">PayPal</div>
+            <div className="payment-value payment-card-row">
+              <button
+                type="button"
+                className="copy-btn"
+                onClick={() =>
+                  navigator.clipboard
+                    ?.writeText("okex-payments@example.com")
+                    .catch(() => {})
+                }
+              >
+                okex-payments@example.com
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
-                  {isSupport && (
-                    <div className="payment-row">
-                      <div className="payment-label">
-                        {isEN ? "How to pay" : "Как оплатить"}
-                      </div>
-                      <div className="payment-value">
-                        {isEN
-                          ? "Write to support in Telegram and send the receipt there."
-                          : "Напишите в техподдержку Telegram и отправьте чек туда."}
-                      </div>
-                    </div>
-                  )}
+      {/* Только текст для поддержки */}
+      {isSupport && (
+        <div className="payment-row">
+          <div className="payment-label">
+            {isEN ? "How to pay" : "Как оплатить"}
+          </div>
+          <div className="payment-value">
+            {isEN
+              ? "Write to Telegram support and send the receipt there."
+              : "Напишите в техподдержку Telegram и отправьте чек туда."}
+          </div>
+        </div>
+      )}
 
-                  <div className="payment-row">
-                    <div className="payment-label">
-                      {isEN ? "Time to pay" : "Время на оплату"}
-                    </div>
-                    <div className="payment-value payment-timer">
-                      {formatTimer(paymentTimer)}
-                    </div>
-                  </div>
+      {/* Таймер + загрузка чека только для card/usdt/paypal */}
+      {!isSupport && (
+        <>
+          <div className="payment-row">
+            <div className="payment-label">
+              {isEN ? "Time to pay" : "Время на оплату"}
+            </div>
+            <div className="payment-value payment-timer">
+              {formatTimer(paymentTimer)}
+            </div>
+          </div>
 
-                  <div className="payment-upload">
-                    <div className="payment-label">
-                      {isEN ? "Upload receipt" : "Загрузить чек"}
-                    </div>
-                    <label className="upload-btn">
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setReceiptFileName(file.name);
-                            setDepositError("");
-                          } else {
-                            setReceiptFileName("");
-                          }
-                        }}
-                      />
-                      <span>
-                        {isEN ? "Choose file" : "Выбрать файл"}
-                      </span>
-                    </label>
-                    {receiptFileName && (
-                      <div className="upload-filename">
-                        {receiptFileName}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Красивая кнопка техподдержки с самолётиком */}
-                  <a
-                    href="https://t.me/okex_official_support"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="support-link"
-                  >
-                    <div className="support-link-main">
-                      <div className="support-link-title">
-                        {isEN
-                          ? "Support in Telegram"
-                          : "Техподдержка Telegram"}
-                      </div>
-                      <div className="support-link-sub">
-                        @OKEX ·{" "}
-                        {isEN
-                          ? "Official support"
-                          : "официальная поддержка"}
-                      </div>
-                    </div>
-                    <div className="support-link-icon">✈️</div>
-                  </a>
-                </div>
-
-                {depositError && (
-                  <div className="wallet-modal-note error">
-                    {depositError}
-                  </div>
-                )}
-
-                <div className="wallet-modal-actions">
-                  <button
-                    className="wallet-modal-btn secondary"
-                    type="button"
-                    onClick={() => {
-                      setWalletModal(null);
-                      resetDepositFlow();
-                    }}
-                  >
-                    {isEN ? "Cancel" : "Отмена"}
-                  </button>
-                  <button
-                    type="button"
-                    className={
-                      "wallet-modal-btn primary " +
-                      (!receiptFileName
-                        ? "wallet-modal-btn-disabled"
-                        : "")
-                    }
-                    disabled={!receiptFileName}
-                    onClick={
-                      receiptFileName
-                        ? handleDepositSendReceipt
-                        : undefined
-                    }
-                  >
-                    {isEN ? "Send receipt" : "Отправить чек"}
-                  </button>
-                </div>
-              </>
+          <div className="payment-upload">
+            <div className="payment-label">
+              {isEN ? "Upload receipt" : "Загрузить чек"}
+            </div>
+            <label className="upload-btn">
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setReceiptFileName(file.name);
+                    setDepositError("");
+                  } else {
+                    setReceiptFileName("");
+                  }
+                }}
+              />
+              <span>
+                {isEN ? "Choose file" : "Выбрать файл"}
+              </span>
+            </label>
+            {receiptFileName && (
+              <div className="upload-filename">
+                {receiptFileName}
+              </div>
             )}
+          </div>
+        </>
+      )}
+
+      {/* Кнопка техподдержки – и для support, и для остальных */}
+      <a
+        href="https://t.me/okex_official_support"
+        target="_blank"
+        rel="noreferrer"
+        className="support-link"
+      >
+        <div className="support-link-main">
+          <div className="support-link-title">
+            {isEN
+              ? "Support in Telegram"
+              : "Техподдержка Telegram"}
+          </div>
+          <div className="support-link-sub">
+            @OKEX ·{" "}
+            {isEN
+              ? "Official support"
+              : "официальная поддержка"}
+          </div>
+        </div>
+        <div className="support-link-icon">✈️</div>
+      </a>
+    </div>
+
+    {/* Ошибка только для методов, где есть чек */}
+    {!isSupport && depositError && (
+      <div className="wallet-modal-note error">
+        {depositError}
+      </div>
+    )}
+
+    <div className="wallet-modal-actions">
+      <button
+        className="wallet-modal-btn secondary"
+        type="button"
+        onClick={() => {
+          setWalletModal(null);
+          resetDepositFlow();
+        }}
+      >
+        {isEN ? "Cancel" : "Отмена"}
+      </button>
+
+      {/* Для карты/USDT/PayPal – кнопка "Отправить чек" */}
+      {!isSupport && (
+        <button
+          type="button"
+          className="wallet-modal-btn primary"
+          onClick={handleDepositSendReceipt}
+        >
+          {isEN ? "Send receipt" : "Отправить чек"}
+        </button>
+      )}
+
+      {/* Для поддержки – просто закрыть окно */}
+      {isSupport && (
+        <button
+          type="button"
+          className="wallet-modal-btn primary"
+          onClick={() => {
+            setWalletModal(null);
+            resetDepositFlow();
+          }}
+        >
+          {isEN ? "Close" : "Закрыть"}
+        </button>
+      )}
+    </div>
+  </>
+)}
 
             {/* ===== ВЫВОД СРЕДСТВ ===== */}
             {walletModal === "withdraw" && (
@@ -2256,80 +2291,82 @@ const renderWallet = () => {
   );
 };
 
-  const renderHistory = () => {
-const methodLabel = (m) => {
-  if (m === "card") return isEN ? "Bank card" : "Банковская карта";
-  if (m === "usdt") return "USDT TRC-20";
-  if (m === "paypal") return "PayPal";
-  if (m === "support") return isEN ? "Via support" : "Через поддержку";
-  return m;
-};
+const renderHistory = () => {
+  const methodLabel = (m) => {
+    if (m === "card") return isEN ? "Bank card" : "Банковская карта";
+    if (m === "usdt") return "USDT TRC-20";
+    if (m === "paypal") return "PayPal";
+    if (m === "support") return isEN ? "Via support" : "Через поддержку";
+    return m;
+  };
 
-    return (
-      <>
-        <section className="section-block fade-in delay-1">
-          <div className="section-title">
-            <h2>
-              {isEN ? "Login history" : "История входов"}
-            </h2>
-            <p>
+  return (
+    <>
+      {/* История входов */}
+      <section className="section-block fade-in delay-1">
+        <div className="section-title">
+          <h2>{isEN ? "Login history" : "История входов"}</h2>
+          <p>
+            {isEN
+              ? "When and with which account you logged in to Forbex."
+              : "Когда и с каким аккаунтом заходили в Forbex."}
+          </p>
+        </div>
+        <div className="history-block">
+          {loginHistory.length === 0 && (
+            <div className="history-empty">
               {isEN
-                ? "When and with which account you logged in to Forbex."
-                : "Когда и с каким аккаунтом заходили в Forbex."}
-            </p>
-          </div>
-          <div className="history-block">
-            {loginHistory.length === 0 && (
-              <div className="history-empty">
-                {isEN
-                  ? "No logins recorded yet."
-                  : "Входов пока не зафиксировано."}
-              </div>
-            )}
-            {loginHistory.map((e) => (
-              <div key={e.id} className="history-row">
-                <div className="history-main">
-                  <div className="history-type">
-                    {e.type === "register"
-                      ? isEN
-                        ? "Registration"
-                        : "Регистрация"
-                      : isEN
-                      ? "Login"
-                      : "Вход"}
-                  </div>
-                  <div className="history-sub">
-                    {e.login} · {e.email}
-                  </div>
+                ? "No logins recorded yet."
+                : "Входов пока не зафиксировано."}
+            </div>
+          )}
+          {loginHistory.map((e) => (
+            <div key={e.id} className="history-row">
+              <div className="history-main">
+                <div className="history-type">
+                  {e.type === "register"
+                    ? isEN
+                      ? "Registration"
+                      : "Регистрация"
+                    : isEN
+                    ? "Login"
+                    : "Вход"}
                 </div>
-                <div className="history-time">
-                  {formatDateTime(e.ts)}
+                <div className="history-sub">
+                  {e.login} · {e.email}
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
+              <div className="history-time">{formatDateTime(e.ts)}</div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-        <section className="section-block fade-in delay-2">
-          <div className="section-title">
-            <h2>
-              {isEN ? "Wallet history" : "История кошелька"}
-            </h2>
-            <p>
+      {/* История кошелька */}
+      <section className="section-block fade-in delay-2">
+        <div className="section-title">
+          <h2>{isEN ? "Wallet history" : "История кошелька"}</h2>
+          <p>
+            {isEN
+              ? "Deposits and withdrawals saved in the local storage."
+              : "Пополнения и выводы, сохранённые в локальное хранилище."}
+          </p>
+        </div>
+        <div className="history-block">
+          {walletHistory.length === 0 && (
+            <div className="history-empty">
               {isEN
-                ? "Deposits and withdrawals saved in the local storage."
-                : "Пополнения и выводы, сохранённые в локальное хранилище."}
-            </p>
-          </div>
-          <div className="history-block">
-            {walletHistory.length === 0 && (
-              <div className="history-empty">
-                {isEN
-                  ? "No wallet operations yet."
-                  : "Операций по кошельку ещё не было."}
-              </div>
-            )}
-            {walletHistory.map((e) => (
+                ? "No wallet operations yet."
+                : "Операций по кошельку ещё не было."}
+            </div>
+          )}
+          {walletHistory.map((e) => {
+            const displayAmount = toDisplayCurrency(
+              e.amount,
+              settings.currency
+            );
+
+            return (
               <div key={e.id} className="history-row">
                 <div className="history-main">
                   <div className="history-type">
@@ -2340,6 +2377,17 @@ const methodLabel = (m) => {
                       : isEN
                       ? "Withdrawal"
                       : "Вывод"}
+                    {e.status === "pending" && (
+                      <span
+                        style={{
+                          marginLeft: 4,
+                          color: "#fde68a",
+                          fontSize: 10,
+                        }}
+                      >
+                        {isEN ? "(on review)" : "(на проверке)"}
+                      </span>
+                    )}
                   </div>
                   <div className="history-sub">
                     {methodLabel(e.method)}
@@ -2353,7 +2401,7 @@ const methodLabel = (m) => {
                     }
                   >
                     {e.type === "deposit" ? "+" : "-"}
-                    {e.amount.toLocaleString("ru-RU", {
+                    {displayAmount.toLocaleString("ru-RU", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}{" "}
@@ -2364,46 +2412,58 @@ const methodLabel = (m) => {
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
+            );
+          })}
+        </div>
+      </section>
 
-        <section className="section-block fade-in delay-3">
-          <div className="section-title">
-            <h2>
-              {isEN ? "Trade history" : "История сделок"}
-            </h2>
-            <p>
-              {isEN
-                ? "All your opened trades: direction, amount, multiplier and result."
-                : "Все ваши открытые сделки: направление, сумма, коэффициент и результат."}
-            </p>
-          </div>
-          <div className="history-block">
-            {tradeHistory.length === 0 && (
-              <div className="history-empty">
-                {isEN
-                  ? "No trades yet."
-                  : "Сделок ещё не было."}
-              </div>
-            )}
-            {tradeHistory.map((t) => (
+      {/* История сделок */}
+      <section className="section-block fade-in delay-3">
+        <div className="section-title">
+          <h2>{isEN ? "Trade history" : "История сделок"}</h2>
+          <p>
+            {isEN
+              ? "All your opened trades: direction, amount, multiplier and result."
+              : "Все ваши открытые сделки: направление, сумма, коэффициент и результат."}
+          </p>
+        </div>
+        <div className="history-block">
+          {tradeHistory.length === 0 && (
+            <div className="history-empty">
+              {isEN ? "No trades yet." : "Сделок ещё не было."}
+            </div>
+          )}
+          {tradeHistory.map((t) => {
+            const amountDisplay = toDisplayCurrency(
+              t.amount,
+              settings.currency
+            );
+            const profitDisplay = toDisplayCurrency(
+              t.profit,
+              settings.currency
+            );
+
+            return (
               <div key={t.id} className="history-row">
                 <div className="history-main">
                   <div className="history-type">
                     {t.symbol}/USDT ·{" "}
                     {t.direction === "up"
-                      ? (isEN ? "Up" : "Вверх")
-					  : t.direction === "down"
-                      ? (isEN ? "Down" : "Вниз")
+                      ? isEN
+                        ? "Up"
+                        : "Вверх"
+                      : t.direction === "down"
+                      ? isEN
+                        ? "Down"
+                        : "Вниз"
                       : isEN
-					  ? "No change"
+                      ? "No change"
                       : "Не изменится"}{" "}
                     · x{t.multiplier}
                   </div>
                   <div className="history-sub">
                     {isEN ? "Amount" : "Сумма"}:{" "}
-                    {t.amount.toLocaleString("ru-RU", {
+                    {amountDisplay.toLocaleString("ru-RU", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}{" "}
@@ -2417,8 +2477,8 @@ const methodLabel = (m) => {
                       (t.status === "win" ? "positive" : "negative")
                     }
                   >
-                    {t.profit > 0 ? "+" : ""}
-                    {t.profit.toLocaleString("ru-RU", {
+                    {profitDisplay > 0 ? "+" : ""}
+                    {profitDisplay.toLocaleString("ru-RU", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}{" "}
@@ -2429,12 +2489,13 @@ const methodLabel = (m) => {
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
+            );
+          })}
+        </div>
+      </section>
+    </>
+  );
+};
 
 const renderProfile = () => {
   if (!user) return null;

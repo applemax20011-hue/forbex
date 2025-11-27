@@ -1013,11 +1013,11 @@ body {
 
 .wallet-modal {
   width: 100%;
-  max-width: 420px;
+  max-width: 480px;              /* было 420 — сделаем шире */
   background: #020617;
-  border-radius: 18px; /* круглая карточка, а не лист снизу */
+  border-radius: 20px;           /* чуть более округлое */
   border: 1px solid #111827;
-  padding: 14px 16px 16px;
+  padding: 16px 18px 18px;       /* побольше отступы */
   box-shadow: 0 22px 48px rgba(0, 0, 0, 0.9);
   max-height: 90vh;
   overflow-y: auto;
@@ -1077,12 +1077,12 @@ body {
 }
 
 .wallet-modal-input-group input {
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid #111827;
   background: #020617;
   color: #f9fafb;
-  padding: 6px 8px;
-  font-size: 12px;
+  padding: 8px 10px;          /* было 6px 8px */
+  font-size: 14px;            /* было 12px */
 }
 
 .wallet-modal-input-group input:focus {
@@ -1138,12 +1138,12 @@ body {
 
 /* Детали оплаты при пополнении */
 .payment-details {
-  margin-top: 6px;
-  border-radius: 12px;
+  margin-top: 8px;
+  border-radius: 14px;
   border: 1px solid #111827;
   background: #020617;
-  padding: 6px 8px 8px;
-  font-size: 11px;
+  padding: 8px 10px 10px;
+  font-size: 12px;            /* было 11px */
 }
 
 .payment-row {
@@ -1155,10 +1155,11 @@ body {
 
 .payment-label {
   color: #9ca3af;
+  font-size: 12px;
 }
-
 .payment-value {
   text-align: right;
+  font-size: 12px;
 }
 
 .payment-card-row {
