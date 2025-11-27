@@ -30,23 +30,23 @@ const INITIAL_COINS = [
   { symbol: "LINK", name: "Chainlink", price: 19.4, change: "+2.1%", volume: "360M" },
 ];
 
-const COIN_API_MAP = {
-  BTC: "bitcoin",
-  ETH: "ethereum",
-  LTC: "litecoin",
-  ADA: "cardano",
-  DOT: "polkadot",
-  MATIC: "matic-network",
-  AVAX: "avalanche-2",
-  UNI: "uniswap",
-  XRP: "ripple",
-  DOGE: "dogecoin",
-  SHIB: "shiba-inu",
-  TON: "toncoin",
-  BNB: "binancecoin",
-  TRX: "tron",
-  SOL: "solana",
-  LINK: "chainlink",
+const COIN_ICONS = {
+  BTC: "₿",
+  ETH: "Ξ",
+  LTC: "Ł",
+  ADA: "A",
+  DOT: "•",
+  MATIC: "M",
+  AVAX: "A",
+  UNI: "U",
+  XRP: "✕",
+  DOGE: "Ð",
+  SHIB: "🐶",
+  TON: "TON",
+  BNB: "BNB",
+  TRX: "T",
+  SOL: "S",
+  LINK: "🔗",
 };
 
 const STORAGE_KEYS = {
@@ -58,26 +58,8 @@ const STORAGE_KEYS = {
   loginHistory: "forbex_login_history",
   settings: "forbex_settings",
   tradeHistory: "forbex_trade_history",
-  registrationTs: "forbex_registration_ts",   // ← добавили
-};
-
-const TV_SYMBOLS = {
-  BTC: "BINANCE:BTCUSDT",
-  ETH: "BINANCE:ETHUSDT",
-  LTC: "BINANCE:LTCUSDT",
-  ADA: "BINANCE:ADAUSDT",
-  DOT: "BINANCE:DOTUSDT",
-  MATIC: "BINANCE:MATICUSDT",
-  AVAX: "BINANCE:AVAXUSDT",
-  UNI: "BINANCE:UNIUSDT",
-  XRP: "BINANCE:XRPUSDT",
-  DOGE: "BINANCE:DOGEUSDT",
-  SHIB: "BINANCE:SHIBUSDT",
-  TON: "BYBIT:TONUSDT",
-  BNB: "BINANCE:BNBUSDT",
-  TRX: "BINANCE:TRXUSDT",
-  SOL: "BINANCE:SOLUSDT",
-  LINK: "BINANCE:LINKUSDT",
+  registrationTs: "forbex_registration_ts",
+  stats: "forbex_stats",            // для активных юзеров и сделок
 };
 
 function ScenarioLightweightChart({ points, scenario, progress }) {
@@ -105,13 +87,13 @@ function ScenarioLightweightChart({ points, scenario, progress }) {
     const width = 100;
     const height = 100;
 
-    const path = data
-      .map((p) => {
-        const x = ((p.time - minT) / tRange) * width;
-        const y = height - ((p.value - minV) / vRange) * height;
-        return `${x.toFixed(2)},${y.toFixed(2)}`;
-      })
-      .join(" ");
+const path = data
+  .map((p) => {
+    const x = ((p.time - minT) / tRange) * width;
+    const y = height - ((p.value - minV) / vRange) * height;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  })
+  .join(" ");
 
     return { path, width, height };
   }, [points, progress]);
@@ -132,12 +114,12 @@ function ScenarioLightweightChart({ points, scenario, progress }) {
     scenario && scenario.endsWith("win") ? "#22c55e" : "#f97316";
 
   return (
-    <svg
-      ref={svgRef}
-      viewBox={`0 0 ${width} ${height}`}
-      className="lw-chart-svg"
-      style={{ width: "100%", height: "260px" }}
-    >
+<svg
+  ref={svgRef}
+  viewBox={`0 0 ${width} ${height}`}
+  className="lw-chart-svg"
+  style={{ width: "100%", height: "260px" }}
+>
       {/* фон-сетка (просто декоративная) */}
       <defs>
         <pattern
@@ -210,58 +192,6 @@ function generateScenarioPoints(scenario, startPoint) {
   return points;
 }
 
-function TradingViewChart({ symbol }) {
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    const tvSymbol = TV_SYMBOLS[symbol] || "BINANCE:BTCUSDT";
-
-    function createWidget() {
-      if (!window.TradingView || !containerRef.current) return;
-
-      // очищаем контейнер перед созданием нового виджета
-      containerRef.current.innerHTML = "";
-
-      new window.TradingView.widget({
-        autosize: true,
-        symbol: tvSymbol,
-        interval: "15",
-        timezone: "Etc/UTC",
-        theme: "dark",
-        style: "1",
-        locale: "en",
-        toolbar_bg: "#0f172a",
-        hide_top_toolbar: false,
-        hide_legend: false,
-        hide_side_toolbar: false,
-        allow_symbol_change: false,
-        container_id: containerRef.current.id,
-      });
-    }
-
-    // подключаем скрипт, если его ещё нет на странице
-    if (!document.getElementById("tradingview-widget-script")) {
-      const script = document.createElement("script");
-      script.id = "tradingview-widget-script";
-      script.src = "https://s3.tradingview.com/tv.js";
-      script.type = "text/javascript";
-      script.async = true;
-      script.onload = createWidget;
-      document.body.appendChild(script);
-    } else {
-      createWidget();
-    }
-  }, [symbol]);
-
-  return (
-    <div
-      id={`tv_chart_${symbol}`}
-      ref={containerRef}
-      style={{ width: "100%", height: "160px" }}
-    />
-  );
-}
-
 // ===== Вспомогательные функции =====
 
 function formatDateTime(ts) {
@@ -319,6 +249,11 @@ function App() {
   const [authError, setAuthError] = useState("");
   
   const [coins, setCoins] = useState(INITIAL_COINS);
+    const [stats, setStats] = useState({
+    activeUsers: 24580,
+    trades24h: 312400,
+    lastReset: Date.now(),
+  });
 
   // доп. шаг после регистрации (выбор языка/валюты)
   const [pendingUser, setPendingUser] = useState(null);
@@ -453,6 +388,7 @@ const finishTrade = (trade) => {
         STORAGE_KEYS.tradeHistory
       );
       const savedSettings = localStorage.getItem(STORAGE_KEYS.settings);
+      const savedStats = localStorage.getItem(STORAGE_KEYS.stats);
 
       if (savedWalletHistory) {
         setWalletHistory(JSON.parse(savedWalletHistory));
@@ -475,7 +411,14 @@ const finishTrade = (trade) => {
           // ignore
         }
       }
-
+	    if (savedStats) {
+        try {
+          const parsed = JSON.parse(savedStats);
+          setStats((prev) => ({ ...prev, ...parsed }));
+        } catch {
+          // ignore
+        }
+      }
       const rememberFlag = savedRemember === "true";
       if (savedUser && savedPass && rememberFlag) {
         const parsedUser = JSON.parse(savedUser);
@@ -525,10 +468,71 @@ const finishTrade = (trade) => {
         STORAGE_KEYS.tradeHistory,
         JSON.stringify(tradeHistory)
       );
+      localStorage.setItem(
+        STORAGE_KEYS.stats,
+        JSON.stringify(stats)
+      );
     } catch {
       // ignore
     }
-  }, [balance, walletHistory, loginHistory, settings, tradeHistory]);
+  }, [balance, walletHistory, loginHistory, settings, tradeHistory, stats]);
+  
+  // симуляция активности: активные юзеры и сделки за 24ч
+  useEffect(() => {
+    const MIN_USERS = 2000;
+    const MAX_USERS = 50000;
+    const MIN_TRADES = 300000;
+    const MAX_TRADES = 1000000;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    const tick = () => {
+      setStats((prev) => {
+        const now = Date.now();
+        const needReset =
+          !prev.lastReset || now - prev.lastReset >= DAY_MS;
+
+        const baseUsers = needReset
+          ? MIN_USERS + Math.floor(Math.random() * 3000)
+          : prev.activeUsers;
+        const baseTrades = needReset
+          ? MIN_TRADES + Math.floor(Math.random() * 50000)
+          : prev.trades24h;
+
+        const lastReset = needReset ? now : prev.lastReset || now;
+
+        const nextUsers = Math.min(
+          MAX_USERS,
+          baseUsers + Math.floor(Math.random() * 250 + 30)
+        );
+        const nextTrades = Math.min(
+          MAX_TRADES,
+          baseTrades + Math.floor(Math.random() * 8000 + 500)
+        );
+
+        // если упёрлись в потолок, начинаем новый цикл
+        if (nextUsers >= MAX_USERS || nextTrades >= MAX_TRADES) {
+          return {
+            activeUsers:
+              MIN_USERS + Math.floor(Math.random() * 3000),
+            trades24h:
+              MIN_TRADES + Math.floor(Math.random() * 50000),
+            lastReset: now,
+          };
+        }
+
+        return {
+          activeUsers: nextUsers,
+          trades24h: nextTrades,
+          lastReset,
+        };
+      });
+    };
+
+    // сразу дергаем, чтобы цифры ожили
+    tick();
+    const id = setInterval(tick, 60_000); // каждую минуту
+    return () => clearInterval(id);
+  }, []);
 
   // таймер 15 минут на оплату
   useEffect(() => {
@@ -587,30 +591,40 @@ function formatVolume(num) {
   
 // подгружаем реальные цены монет (CoinGecko)
 // подгружаем реальные цены монет (CoinGecko: price + 24h change + volume)
+// подгружаем реальные цены монет (CoinMarketCap: price + 24h change + volume)
 useEffect(() => {
   async function fetchCoinPrices() {
     try {
-      const ids = Object.values(COIN_API_MAP).join(",");
-      const res = await fetch(
-        `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&price_change_percentage=24h`
-      );
-      if (!res.ok) return;
+      // список символов для запроса
+      const symbols = coins.map((c) => c.symbol).join(",");
 
-      const data = await res.json();
-      const byId = {};
-      data.forEach((item) => {
-        byId[item.id] = item;
-      });
+      const res = await fetch(
+        `/cmc-api/v1/cryptocurrency/quotes/latest?symbol=${symbols}&convert=USD`,
+        {
+          headers: {
+            "X-CMC_PRO_API_KEY": import.meta.env.VITE_CMC_API_KEY,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        console.warn("CMC quotes not ok", res.status);
+        return;
+      }
+
+      const json = await res.json();
+      const data = json.data || {};
 
       setCoins((prev) =>
         prev.map((coin) => {
-          const apiId = COIN_API_MAP[coin.symbol];
-          const apiData = apiId ? byId[apiId] : null;
-          if (!apiData) return coin;
+          const info = data[coin.symbol];
+          const usd = info?.quote?.USD;
 
-          const price = apiData.current_price;
-          const changeNum = apiData.price_change_percentage_24h;
-          const volumeNum = apiData.total_volume;
+          if (!usd) return coin;
+
+          const price = usd.price;
+          const changeNum = usd.percent_change_24h;
+          const volumeNum = usd.volume_24h;
 
           if (typeof price !== "number" || Number.isNaN(price)) {
             return coin;
@@ -636,14 +650,14 @@ useEffect(() => {
         })
       );
     } catch (e) {
-      console.error("Failed to load coin prices", e);
+      console.error("Failed to load coin prices (CMC)", e);
     }
   }
 
-  fetchCoinPrices();                  // первый раз
-  const id = setInterval(fetchCoinPrices, 15000); // обновление
+  fetchCoinPrices(); // первый раз
+  const id = setInterval(fetchCoinPrices, 15000); // обновление каждые 15 сек
   return () => clearInterval(id);
-}, []);
+}, [coins.length]);
 
   // проста фейковая история, если CoinGecko не ответил
   const buildFallbackHistory = () => {
@@ -665,45 +679,65 @@ useEffect(() => {
     return arr;
   };
 
+// подгружаем историю цены для графика (CoinGecko)
+// подгружаем историю цены для графика (CoinMarketCap)
+// подгружаем историю цены для графика (CoinMarketCap)
+// пока НЕТ активной сделки — график реальный.
+// когда сделка идёт (activeTrade != null) — график не трогаем.
 useEffect(() => {
-  async function fetchHistory() {
-    const apiId = COIN_API_MAP[selectedSymbol];
-    if (!apiId) return;
+  // если есть активная сделка — не перезаписываем график из API
+  if (activeTrade) {
+    return;
+  }
+
+  async function fetchHistoryCMC() {
+    const symbol = selectedSymbol; // BTC / ETH / ...
 
     try {
+      const now = Math.floor(Date.now() / 1000);
+      const hourAgo = now - 60 * 60;
+
       const res = await fetch(
-        `https://api.coingecko.com/api/v3/coins/${apiId}/market_chart?vs_currency=usd&days=1&interval=minute`
+        `/cmc-api/v1/cryptocurrency/ohlcv/historical?symbol=${symbol}` +
+          `&convert=USD&time_start=${hourAgo}&time_end=${now}&time_period=hourly&interval=5m`,
+        {
+          headers: {
+            "X-CMC_PRO_API_KEY": import.meta.env.VITE_CMC_API_KEY,
+          },
+        }
       );
 
       if (!res.ok) {
-        console.warn("market_chart not ok, use fallback");
-        const fallback = buildFallbackHistory();
-        setBaseChartPoints(fallback);
-        setChartScenario("idle");
-        setChartProgress(1);
-        setChartPoints(fallback);
-        return;
+        console.warn("CMC market_chart not ok:", res.status);
+        throw new Error("Bad status " + res.status);
       }
 
-      const data = await res.json();
-      const prices = data.prices || [];
+      const ct = res.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) {
+        console.warn("CMC history: not JSON:", ct);
+        throw new Error("Not JSON");
+      }
 
-      let last = prices.slice(-60).map(([ts, price]) => ({
-        time: Math.floor(ts / 1000),
-        value: price,
+      const json = await res.json();
+      const quotes = json.data?.quotes || [];
+
+      let last = quotes.slice(-60).map((q) => ({
+        time: Math.floor(new Date(q.time_close).getTime() / 1000),
+        value: q.quote?.USD?.close ?? 0,
       }));
 
-      if (!last.length) {
-        console.warn("no prices, use fallback");
+      if (!last.length || !last.some((p) => p.value)) {
+        console.warn("CMC history: no points, using fallback");
         last = buildFallbackHistory();
       }
 
+      // здесь мы обновляем базовую реальную историю и текущий график
       setBaseChartPoints(last);
       setChartScenario("idle");
       setChartProgress(1);
       setChartPoints(last);
     } catch (e) {
-      console.error("Failed to load history for chart", e);
+      console.warn("Failed to load history for chart from CMC, fallback:", e);
       const fallback = buildFallbackHistory();
       setBaseChartPoints(fallback);
       setChartScenario("idle");
@@ -712,8 +746,8 @@ useEffect(() => {
     }
   }
 
-  fetchHistory();
-}, [selectedSymbol, coins]); // добавь сюда coins
+  fetchHistoryCMC();
+}, [selectedSymbol, coins, activeTrade]);
 
   // ===== helpers =====
   const showOverlay = (title, subtitle, callback, delay = 1100) => {
@@ -922,10 +956,10 @@ const handleLogin = () => {
     setTradeError("");
   };
 
-  const handleStartTrade = () => {
-    const raw = tradeForm.amount.toString().replace(",", ".");
-    const amountNum = parseFloat(raw);
-    const minInvest = settings.currency === "RUB" ? 100 : 5;
+const handleStartTrade = () => {
+  const raw = tradeForm.amount.toString().replace(",", ".");
+  const amountNum = parseFloat(raw);
+  const minInvest = settings.currency === "RUB" ? 100 : 5;
 
     if (Number.isNaN(amountNum) || amountNum <= 0) {
       setTradeError(
@@ -990,62 +1024,47 @@ const handleLogin = () => {
       scenario = willWin ? "flat-win" : "flat-lose";
     }
 
-setChartScenario(scenario);
+  setChartScenario(scenario);
+  const lastBasePoint =
+    baseChartPoints.length > 0
+      ? baseChartPoints[baseChartPoints.length - 1]
+      : null;
+  const future = generateScenarioPoints(scenario, lastBasePoint);
+  const historyTail = baseChartPoints.slice(-40);
 
-// берём последнюю реальную точку (текущую цену)
-const lastBasePoint =
-  baseChartPoints.length > 0
-    ? baseChartPoints[baseChartPoints.length - 1]
-    : null;
+  setChartPoints([...historyTail, ...future]);
+  setChartProgress(0);
+  setActiveTrade(trade);
+}; // <--- ВОТ ЭТОЙ СКОБКИ У ТЕБЯ НЕТ
 
-// генерим "будущее" от неё
-const future = generateScenarioPoints(scenario, lastBasePoint);
-
-// для красоты берём хвост истории + будущее
-const historyTail = baseChartPoints.slice(-40);
-setChartPoints([...historyTail, ...future]);
-
-setChartProgress(0); // линия будет прорисовываться по таймеру
-                           // начинаем с нуля
-
-    // блокируем сумму и запускаем сделку
-    setBalance((prev) => prev - amountNum);
-    setChartDirection(resultDirection);
-    setActiveTrade(trade);
-  }; // ← ВОТ ЭТА СТРОКА НУЖНА
-
-  const handlePasswordChange = () => {
-    const { oldPassword, newPassword, confirmPassword } = passwordForm;
-    try {
-      const savedPass = localStorage.getItem(STORAGE_KEYS.password);
-      if (!savedPass) {
-        setPasswordError("Пароль не найден. Попробуйте выйти и войти заново.");
-        return;
-      }
-      if (oldPassword !== savedPass) {
-        setPasswordError("Старый пароль указан неверно.");
-        return;
-      }
-      if (newPassword.length < 4) {
-        setPasswordError("Новый пароль должен быть от 4 символов.");
-        return;
-      }
-      if (newPassword !== confirmPassword) {
-        setPasswordError("Пароли не совпадают.");
-        return;
-      }
-
-      localStorage.setItem(STORAGE_KEYS.password, newPassword);
-      setPasswordSuccess("Пароль успешно изменён.");
-      setPasswordForm({
-        oldPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-    } catch {
-      setPasswordError("Не удалось изменить пароль.");
+// ===== смена пароля =====
+const handlePasswordChange = () => {
+  const { oldPassword, newPassword, confirmPassword } = passwordForm;
+  try {
+    const savedPass = localStorage.getItem(STORAGE_KEYS.password);
+    if (!savedPass) {
+      setPasswordError("Пароль не найден. Попробуйте выйти и войти заново.");
+      return;
     }
-  };
+    if (oldPassword !== savedPass) {
+      setPasswordError("Старый пароль указан неверно.");
+      return;
+    }
+    if (newPassword.length < 4) {
+      setPasswordError("Новый пароль должен быть от 4 символов.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Пароли не совпадают.");
+      return;
+    }
+    localStorage.setItem(STORAGE_KEYS.password, newPassword);
+    setPasswordSuccess("Пароль успешно изменён.");
+    setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
+  } catch {
+    setPasswordError("Не удалось изменить пароль.");
+  }
+};
 
   // кошелёк: депозит / вывод
 
@@ -1158,86 +1177,95 @@ const handleDepositSendReceipt = () => {
 
   // ===== Рендеры вкладок =====
 
-  const renderHome = () => (
-    <>
-      <section className="section-block fade-in delay-1">
-        <div className="home-hero">
-          <div className="home-badge">
-            {isEN ? "🔥 New trading platform" : "🔥 Новая торговая платформа"}
-          </div>
-          <h1 className="home-title">FORBEX TRADE</h1>
-          <p className="home-sub">
-            {isEN
-              ? "Exchange in warm fox colors: quick spot, convenient wallet and detailed history in one WebApp."
-              : "Биржа в тёплых лисьих тонах: быстрый спот, удобный кошелёк и аккуратная история операций в одном WebApp."}
-          </p>
-          <div className="home-stats-row">
-            <div className="home-stat-card">
-              <div className="home-stat-label">
-                {isEN ? "Active users" : "Активных пользователей"}
-              </div>
-              <div className="home-stat-value">24 580+</div>
+const renderHome = () => (
+  <>
+    <section className="section-block fade-in delay-1">
+      <div className="home-hero">
+        <div className="home-badge">
+          {isEN ? "🔥 New trading platform" : "🔥 Новая торговая платформа"}
+        </div>
+        <h1 className="home-title">FORBEX TRADE</h1>
+        <p className="home-sub">
+          {isEN
+            ? "Exchange in warm fox colors: quick spot, convenient wallet and detailed history in one WebApp."
+            : "Биржа в тёплых лисьих тонах: быстрый спот, удобный кошелёк и аккуратная история операций в одном WebApp."}
+        </p>
+        <div className="home-stats-row">
+          <div className="home-stat-card">
+            <div className="home-stat-label">
+              {isEN ? "Active users" : "Активных пользователей"}
             </div>
-            <div className="home-stat-card">
-              <div className="home-stat-label">
-                {isEN ? "Trades / 24h" : "Сделок за 24ч"}
-              </div>
-              <div className="home-stat-value">312 400+</div>
+            <div className="home-stat-value">
+              {stats.activeUsers.toLocaleString("ru-RU")}+
+            </div>
+          </div>
+          <div className="home-stat-card">
+            <div className="home-stat-label">
+              {isEN ? "Trades / 24h" : "Сделок за 24ч"}
+            </div>
+            <div className="home-stat-value">
+              {stats.trades24h.toLocaleString("ru-RU")}+
             </div>
           </div>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <section className="section-block fade-in delay-2">
-        <div className="section-title">
-          <h2>{isEN ? "Popular coins" : "Популярные монеты"}</h2>
-          <p>
-            {isEN
-              ? "Top-10 assets that traders watch right now."
-              : "Топ-10 активов, за которыми следят прямо сейчас."}
-          </p>
-        </div>
-        <div className="coins-list">
-          {coins.map((c) => (
-            <div
-              key={c.symbol}
-              className="coin-row hover-glow"
-              onClick={() => setSelectedSymbol(c.symbol)}
-            >
-              <div className="coin-left">
+    <section className="section-block fade-in delay-2">
+      <div className="section-title">
+        <h2>{isEN ? "Popular coins" : "Популярные монеты"}</h2>
+        <p>
+          {isEN
+            ? "Top-10 assets that traders watch right now."
+            : "Топ-10 активов, за которыми следят прямо сейчас."}
+        </p>
+      </div>
+      <div className="coins-list">
+        {coins.map((c) => (
+          <div
+            key={c.symbol}
+            className="coin-row hover-glow"
+            onClick={() => setSelectedSymbol(c.symbol)}
+          >
+            <div className="coin-left">
+              <div className="coin-logo">
+                {COIN_ICONS[c.symbol] || c.symbol[0]}
+              </div>
+              <div className="coin-text">
                 <div className="coin-symbol">{c.symbol}</div>
                 <div className="coin-name">{c.name}</div>
               </div>
-              <div className="coin-center">
-                <div className="coin-price">
-                  {c.price.toLocaleString("ru-RU", {
-                    minimumFractionDigits: c.price < 1 ? 2 : 0,
-                  })}{" "}
-                  $
-                </div>
-                <div
-                  className={
-                    "coin-change " +
-                    (c.change.toString().startsWith("-")
-                      ? "negative"
-                      : "positive")
-                  }
-                >
-                  {c.change}
-                </div>
+            </div>
+            <div className="coin-center">
+              <div className="coin-price">
+                {c.price.toLocaleString("ru-RU", {
+                  minimumFractionDigits: c.price < 1 ? 2 : 0,
+                })}{" "}
+                $
               </div>
-              <div className="coin-right">
-                <div className="coin-volume-label">
-                  {isEN ? "Volume 24h" : "Объём 24ч"}
-                </div>
-                <div className="coin-volume-value">{c.volume}</div>
+              <div
+                className={
+                  "coin-change " +
+                  (c.change.toString().startsWith("-")
+                    ? "negative"
+                    : "positive")
+                }
+              >
+                {c.change}
               </div>
             </div>
-          ))}
-        </div>
-      </section>
-    </>
-  );
+            <div className="coin-right">
+              <div className="coin-volume-label">
+                {isEN ? "Volume 24h" : "Объём 24ч"}
+              </div>
+              <div className="coin-volume-value">{c.volume}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  </>
+);
 
 const renderTrade = () => {
   const currentCoin =

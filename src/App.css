@@ -324,7 +324,27 @@ body {
 }
 
 .coin-left {
-  min-width: 78px;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coin-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 20%, #1f2937, #020617);
+  border: 1px solid #1f2937;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.coin-text {
+  display: flex;
+  flex-direction: column;
 }
 
 .coin-symbol {
@@ -701,8 +721,9 @@ body {
   border: 1px solid #1f2937;
   background: #020617;
   color: #e5e7eb;
-  font-size: 11px;
-  padding: 5px 10px; /* кнопки чуть крупнее */
+  font-size: 12px;
+  padding: 8px 12px;
+  min-height: 36px; /* выше, но не шире */
   cursor: pointer;
 }
 
@@ -831,13 +852,18 @@ body {
   color: #6b7280;
 }
 
-/* Кошелёк */
 .wallet-balance-card {
   padding: 10px 12px;
   border-radius: 16px;
   background: radial-gradient(circle at top right, #22c55e33, #020617 55%);
   border: 1px solid #15803d;
   box-shadow: 0 18px 36px rgba(21, 128, 61, 0.45);
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.wallet-balance-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 22px 44px rgba(21, 128, 61, 0.65);
 }
 
 .wallet-badge {
@@ -900,10 +926,13 @@ body {
 
 /* Короткая история кошелька */
 .wallet-history-short {
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid #111827;
-  background: #020617;
-  padding: 6px 8px;
+  background: radial-gradient(circle at top left, #020617, #020617 60%);
+  padding: 8px 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .wallet-empty {
@@ -912,11 +941,35 @@ body {
 }
 
 .wallet-history-row {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
-  border-bottom: 1px solid #020617;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: radial-gradient(
+    circle at left,
+    rgba(15, 23, 42, 0.95),
+    #020617 70%
+  );
+  border: 1px solid #111827;
+}
+
+.wallet-history-row::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #22c55e;
+  transform: translateY(-50%);
+}
+
+.wallet-history-row:hover {
+  border-color: #22c55e;
+  box-shadow: 0 10px 24px rgba(22, 163, 74, 0.5);
 }
 
 .wallet-history-row:last-child {
@@ -1248,10 +1301,13 @@ body {
 
 /* История */
 .history-block {
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid #111827;
-  background: #020617;
-  padding: 6px 8px;
+  background: radial-gradient(circle at top left, #020617, #020617 60%);
+  padding: 8px 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .history-empty {
@@ -1260,11 +1316,35 @@ body {
 }
 
 .history-row {
+  position: relative;
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 0;
-  border-bottom: 1px solid #020617;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: radial-gradient(
+    circle at left,
+    rgba(15, 23, 42, 0.95),
+    #020617 70%
+  );
+  border: 1px solid #111827;
+}
+
+.history-row::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #f97316;
+  transform: translateY(-50%);
+}
+
+.history-row:hover {
+  border-color: #f97316;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.9);
 }
 
 .history-row:last-child {
@@ -1349,7 +1429,7 @@ body {
 }
 
 .profile-btn {
-  width: 100%;              /* на всякий случай ещё раз */
+  width: 100%;
   border-radius: 999px;
   border: 1px solid #1f2937;
   padding: 10px 0;
@@ -1357,12 +1437,28 @@ body {
   cursor: pointer;
   background: #020617;
   color: #e5e7eb;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+    background 0.15s ease, transform 0.1s ease;
 }
 
+.profile-btn:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.7);
+  background: radial-gradient(circle at top, #0f172a, #020617 70%);
+  transform: translateY(-1px);
+}
+
+/* выход — отдельно, с красным свечением */
 .profile-btn.logout {
   background: #020617;
   border-color: #ef4444;
   color: #fecaca;
+}
+
+.profile-btn.logout:hover {
+  border-color: #dc2626;
+  background: radial-gradient(circle at top, #7f1d1d, #020617 70%);
+  box-shadow: 0 0 20px rgba(248, 113, 22, 0.9);
 }
 
 .settings-block {
