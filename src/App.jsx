@@ -309,13 +309,16 @@ function App() {
   const [depositAmount, setDepositAmount] = useState("");
   const [depositError, setDepositError] = useState("");
   const [receiptFileName, setReceiptFileName] = useState("");
+  const [isSendingReceipt, setIsSendingReceipt] = useState(false); // <--- НОВОЕ
   const [paymentTimer, setPaymentTimer] = useState(900); // 15 минут
     // Telegram WebApp
   const [telegramId, setTelegramId] = useState(null);
   const [telegramError, setTelegramError] = useState("");
 
   // файл чека (не только имя)
+    // файл чека (не только имя)
   const [receiptFile, setReceiptFile] = useState(null);
+  const [toast, setToast] = useState(null); // <<< НОВЫЙ СТЕЙТ ДЛЯ ПЛАШКИ
 
   // history
   const [walletHistory, setWalletHistory] = useState([]);
@@ -827,7 +830,72 @@ useEffect(() => {
   }
 
   fetchHistoryCMC();
-}, [selectedSymbol, coins, activeTrade]);
+}, [selectedSymbol, activeTrade]);
+
+useEffect(() => {
+  if (!toast) return;
+  const id = setTimeout(() => setToast(null), 4000);
+  return () => clearTimeout(id);
+}, [toast]);
+
+useEffect(() => {
+  if (!telegramId) return;
+
+  const channel = supabase
+    .channel(`topups_user_${telegramId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'topups',
+        filter: `user_tg_id=eq.${telegramId}`,
+      },
+      (payload) => {
+        const oldStatus = payload.old?.status;
+        const newStatus = payload.new?.status;
+        const amount = Number(payload.new?.amount || 0);
+        const topupId = payload.new?.id;
+
+        if (!newStatus || oldStatus === newStatus) return;
+
+        // 1) Обновляем локальную историю по topupId
+        setWalletHistory((prev) =>
+          prev.map((e) =>
+            e.topupId && e.topupId === topupId
+              ? { ...e, status: newStatus }
+              : e
+          )
+        );
+
+        // 2) Баланс и тост
+        if (newStatus === "approved") {
+          if (amount > 0) {
+            setBalance((prev) => prev + amount);
+          }
+
+          setToast({
+            type: "success",
+            text: isEN
+              ? `Your balance has been topped up by ${amount} ${settings.currency === "RUB" ? "RUB" : "USD"}.`
+              : `Ваш баланс был успешно пополнен на ${amount} ${settings.currency === "RUB" ? "₽" : "USD"}.`,
+          });
+        } else if (newStatus === "rejected") {
+          setToast({
+            type: "error",
+            text: isEN
+              ? "Your deposit was rejected. Check the payment details or contact support."
+              : "Ваше пополнение было отклонено. Проверьте реквизиты оплаты или обратитесь в поддержку.",
+          });
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [telegramId, isEN, settings.currency]);
 
   // ===== helpers =====
   const showOverlay = (title, subtitle, callback, delay = 1100) => {
@@ -864,44 +932,129 @@ useEffect(() => {
 
   const validateEmail = (email) => /\S+@\S+\.\S+/.test(email);
 
-  const handleRegister = () => {
-    const { login, email, password, remember } = authForm;
+// РЕГИСТРАЦИЯ ЧЕРЕЗ SUPABASE
+const handleRegister = async () => {
+  const { login, email, password, remember } = authForm;
 
-    if (!login.trim() || !email.trim() || !password.trim()) {
-      setAuthError("Заполните все поля.");
-      return;
-    }
-    if (login.trim().length < 4) {
-      setAuthError("Логин должен быть от 4 символов.");
-      return;
-    }
-    if (!validateEmail(email.trim())) {
-      setAuthError("Введите корректный email (с @ и доменом).");
-      return;
-    }
-    if (password.length < 4) {
-      setAuthError("Пароль должен быть от 4 символов.");
+  // базовая валидация как раньше
+  if (!login.trim() || !email.trim() || !password.trim()) {
+    setAuthError("Заполните все поля.");
+    return;
+  }
+  if (login.trim().length < 4) {
+    setAuthError("Логин должен быть от 4 символов.");
+    return;
+  }
+  if (!validateEmail(email.trim())) {
+    setAuthError("Введите корректный email (с @ и доменом).");
+    return;
+  }
+  if (password.length < 4) {
+    setAuthError("Пароль должен быть от 4 символов.");
+    return;
+  }
+
+  const trimmedLogin = login.trim();
+  const trimmedEmail = email.trim().toLowerCase();
+
+  setAuthError("");
+  setOverlayText({
+    title: "FORBEX TRADE",
+    subtitle: "Создаём аккаунт…",
+  });
+  setOverlayLoading(true);
+
+  try {
+    // 1. Проверяем, есть ли уже такой логин или email
+    const { data: existingRows, error: existingError } = await supabase
+      .from("_user") // <<< ЕСЛИ ТАБЛИЦА НАЗЫВАЕТСЯ ИНАЧЕ — ПОМЕНЯЙ ЗДЕСЬ
+      .select("id, login, email")
+      .or(`login.eq.${trimmedLogin},email.eq.${trimmedEmail}`)
+      .limit(1);
+
+    if (existingError) {
+      console.error("handleRegister check existing error:", existingError);
+      setAuthError("Ошибка при проверке аккаунта. Попробуйте ещё раз.");
       return;
     }
 
+    const existing = existingRows?.[0];
+
+    if (existing) {
+      if (existing.login === trimmedLogin) {
+        setAuthError("Такой логин уже зарегистрирован.");
+      } else {
+        setAuthError("Этот email уже используется. Попробуйте войти.");
+      }
+      return;
+    }
+
+    // 2. Хэшируем пароль (SHA-256)
+    const enc = new TextEncoder().encode(password);
+    const buf = await crypto.subtle.digest("SHA-256", enc);
+    const hashArray = Array.from(new Uint8Array(buf));
+    const passwordHash = hashArray
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    const createdAtIso = new Date().toISOString();
+
+    // 3. Создаём пользователя в Supabase
+    const { data: insertedRows, error: insertError } = await supabase
+      .from("_user") // <<< имя таблицы
+      .insert({
+        login: trimmedLogin,
+        email: trimmedEmail,
+        password_hash: passwordHash, // колонка password_hash
+        created_at: createdAtIso,    // колонка created_at / CreatedAt
+      })
+      .select()
+      .limit(1);
+
+    if (insertError) {
+      console.error("handleRegister insert error:", insertError);
+      setAuthError("Не удалось создать аккаунт. Попробуйте ещё раз.");
+      return;
+    }
+
+    const inserted = insertedRows?.[0];
+    const createdAtTs = inserted?.created_at
+      ? new Date(inserted.created_at).getTime()
+      : Date.now();
+
+    // пользователь, который пойдёт в pendingUser
     const newUser = {
-      login: login.trim(),
-      email: email.trim(),
-      createdAt: Date.now(),
+      id: inserted?.id,
+      login: inserted?.login ?? trimmedLogin,
+      email: inserted?.email ?? trimmedEmail,
+      createdAt: createdAtTs,
     };
 
-    showOverlay(
-      "FORBEX TRADE",
-      "Регистрация…",
-      () => {
-      setPendingUser(newUser);
-      setPostRegisterStep(true);
-      setTempSettings({
-        language: "ru",
-        currency: "RUB",
-      });
+    // шаг выбора языка/валюты — оставляем твою логику
+    setPendingUser(newUser);
+    setPostRegisterStep(true);
+    setTempSettings({
+      language: "ru",
+      currency: "RUB",
+    });
+
+    // сохраним пароль/remember и timestamp, чтобы completeRegistration мог это доиспользовать
+    try {
+      localStorage.setItem(STORAGE_KEYS.password, password);
+      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+      localStorage.setItem(
+        STORAGE_KEYS.registrationTs,
+        String(createdAtTs)
+      );
+    } catch (e) {
+      console.warn("localStorage error (register):", e);
     }
-  );
+  } catch (e) {
+    console.error("handleRegister error:", e);
+    setAuthError("Неожиданная ошибка. Попробуйте ещё раз.");
+  } finally {
+    setOverlayLoading(false);
+  }
 };
 
 const completeRegistration = () => {
@@ -951,59 +1104,106 @@ const completeRegistration = () => {
   );
 };
 
-const handleLogin = () => {
+// ЛОГИН ЧЕРЕЗ SUPABASE
+const handleLogin = async () => {
   const { login, email, password, remember } = authForm;
+  const loginOrEmail = (login || email).trim();
+
+  if (!loginOrEmail || !password.trim()) {
+    setAuthError("Введите логин/email и пароль.");
+    return;
+  }
+
+  setAuthError("");
+  setOverlayText({
+    title: "FORBEX TRADE",
+    subtitle: "Проверяем данные…",
+  });
+  setOverlayLoading(true);
 
   try {
-    const savedUserStr = localStorage.getItem(STORAGE_KEYS.user);
-    const savedPass = localStorage.getItem(STORAGE_KEYS.password);
+    const trimmedId = loginOrEmail.toLowerCase();
 
-    if (!savedUserStr || !savedPass) {
-      setAuthError("Аккаунт не найден. Сначала зарегистрируйтесь.");
+    // 1. Ищем пользователя по логину ИЛИ email
+    const { data: rows, error } = await supabase
+      .from("_user") // <<< имя таблицы
+      .select("id, login, email, password_hash, created_at")
+      .or(
+        `login.eq.${loginOrEmail.trim()},email.eq.${trimmedId}`
+      )
+      .limit(1);
+
+    if (error) {
+      console.error("handleLogin select error:", error);
+      setAuthError("Ошибка при обращении к серверу. Попробуйте ещё раз.");
       return;
     }
 
-    const savedUser = JSON.parse(savedUserStr);
-    const loginOrEmail = login.trim() || email.trim();
+    const row = rows?.[0];
 
-    if (
-      loginOrEmail !== savedUser.login &&
-      loginOrEmail !== savedUser.email
-    ) {
-      setAuthError("Неверный логин или email.");
+    if (!row) {
+      setAuthError("Аккаунт с таким логином или email не найден.");
       return;
     }
 
-    if (password !== savedPass) {
+    // 2. Хэшируем введённый пароль и сравниваем
+    const enc = new TextEncoder().encode(password);
+    const buf = await crypto.subtle.digest("SHA-256", enc);
+    const hashArray = Array.from(new Uint8Array(buf));
+    const passwordHash = hashArray
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    if (row.password_hash !== passwordHash) {
       setAuthError("Неверный пароль.");
       return;
     }
 
-    // постоянная дата регистрации
-    const savedRegTs = localStorage.getItem(STORAGE_KEYS.registrationTs);
-    const createdAt =
-      savedRegTs ? Number(savedRegTs) : savedUser.createdAt || Date.now();
+    // 3. Успешный вход
+    const createdAtTs = row.created_at
+      ? new Date(row.created_at).getTime()
+      : Date.now();
 
-    const userWithCreatedAt = { ...savedUser, createdAt };
+    const userWithCreatedAt = {
+      id: row.id,
+      login: row.login,
+      email: row.email,
+      createdAt: createdAtTs,
+    };
 
     setUser(userWithCreatedAt);
-    localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-    localStorage.setItem(
-      STORAGE_KEYS.user,
-      JSON.stringify(userWithCreatedAt)
-    );
 
+    // сохраняем в localStorage, как и раньше
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.user,
+        JSON.stringify(userWithCreatedAt)
+      );
+      localStorage.setItem(STORAGE_KEYS.password, password);
+      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+      localStorage.setItem(
+        STORAGE_KEYS.registrationTs,
+        String(createdAtTs)
+      );
+    } catch (e) {
+      console.warn("localStorage error (login):", e);
+    }
+
+    // история входов
     const entry = {
       id: Date.now(),
       type: "login",
-      login: savedUser.login,
-      email: savedUser.email,
+      login: row.login,
+      email: row.email,
       ts: Date.now(),
       device: navigator.userAgent || "",
     };
     setLoginHistory((prev) => [entry, ...prev]);
-  } catch {
-    setAuthError("Ошибка входа. Попробуйте ещё раз.");
+  } catch (e) {
+    console.error("handleLogin error:", e);
+    setAuthError("Неожиданная ошибка. Попробуйте ещё раз.");
+  } finally {
+    setOverlayLoading(false);
   }
 };
 
@@ -1220,38 +1420,59 @@ const resetDepositFlow = () => {
 const handleDepositSendReceipt = async () => {
   const amountNum = Number(depositAmount);
 
-  // 1. Проверяем, что есть Telegram ID
-  if (!telegramId) {
-    setDepositError(
-      isEN
-        ? "Telegram ID not found. Open this page from the bot button."
-        : "Не найден Telegram ID. Откройте страницу через кнопку в боте."
-    );
-    return;
-  }
-
-  // 2. Проверяем сумму
-  if (!amountNum || Number.isNaN(amountNum)) {
-    setDepositError(
-      isEN
-        ? "Deposit amount is not set. Go back and enter the amount."
-        : "Сумма пополнения не указана. Вернитесь назад и введите сумму."
-    );
-    return;
-  }
-
-  // 3. Проверяем, что файл выбран
-  if (!receiptFile) {
-    setDepositError(
-      isEN
-        ? "You did not attach a receipt or screenshot."
-        : "Вы не прикрепили чек или скриншот оплаты."
-    );
-    return;
-  }
+  // если уже отправляем — игнорим повторные клики
+  if (isSendingReceipt) return;
+  setIsSendingReceipt(true);
 
   try {
-    // 4. Определяем, кто будет одобрять пополнение (реферер или главный админ)
+    // 1. Проверяем, что есть Telegram ID
+    if (!telegramId) {
+      setDepositError(
+        isEN
+          ? "Telegram ID not found. Open this page from the bot button."
+          : "Не найден Telegram ID. Откройте страницу через кнопку в боте."
+      );
+      return;
+    }
+
+    // 2. Проверяем сумму
+    if (!amountNum || Number.isNaN(amountNum)) {
+      setDepositError(
+        isEN
+          ? "Deposit amount is not set. Go back and enter the amount."
+          : "Сумма пополнения не указана. Вернитесь назад и введите сумму."
+      );
+      return;
+    }
+
+    // 3. Проверяем, что файл выбран
+    if (!receiptFile) {
+      setDepositError(
+        isEN
+          ? "You did not attach a receipt or screenshot."
+          : "Вы не прикрепили чек или скриншот оплаты."
+      );
+      return;
+    }
+
+    // 4. Проверяем, нет ли уже pending-заявки у этого пользователя
+    const { data: existingPending, error: pendingErr } = await supabase
+      .from("topups")
+      .select("id,status")
+      .eq("user_tg_id", telegramId)
+      .eq("status", "pending")
+      .limit(1);
+
+    if (!pendingErr && existingPending && existingPending.length > 0) {
+      setDepositError(
+        isEN
+          ? "You already have a deposit on review. Wait for a decision."
+          : "У вас уже есть пополнение на проверке. Дождитесь решения."
+      );
+      return;
+    }
+
+    // 5. Определяем, кто будет одобрять пополнение (реферер или главный админ)
     let approverTgId = MAIN_ADMIN_TG_ID;
 
     const { data: userRow, error: userErr } = await supabase
@@ -1264,9 +1485,8 @@ const handleDepositSendReceipt = async () => {
       approverTgId = userRow.referred_by;
     }
 
-    // 5. Загружаем чек в Storage (bucket "receipts")
+    // 6. Загружаем чек в Storage (bucket "receipts")
     const filePath = `${telegramId}/${Date.now()}_${receiptFile.name}`;
-
     const { error: uploadError } = await supabase.storage
       .from("receipts")
       .upload(filePath, receiptFile);
@@ -1281,7 +1501,7 @@ const handleDepositSendReceipt = async () => {
       return;
     }
 
-    // 6. Получаем публичный URL файла
+    // 7. Получаем публичный URL файла
     const { data: publicData } = supabase.storage
       .from("receipts")
       .getPublicUrl(filePath);
@@ -1298,14 +1518,18 @@ const handleDepositSendReceipt = async () => {
 
     const now = Date.now();
 
-    // 7. Создаём запись в таблице topups
-    const { error: insertError } = await supabase.from("topups").insert({
-      user_tg_id: telegramId,
-      approver_tg_id: approverTgId,
-      amount: amountNum,
-      receipt_url: receiptUrl,
-      status: "pending",
-    });
+    // 8. Создаём запись в topups и забираем id
+    const { data: inserted, error: insertError } = await supabase
+      .from("topups")
+      .insert({
+        user_tg_id: telegramId,
+        approver_tg_id: approverTgId,
+        amount: amountNum,
+        receipt_url: receiptUrl,
+        status: "pending",
+      })
+      .select()
+      .single();
 
     if (insertError) {
       console.error("insertError:", insertError);
@@ -1317,9 +1541,12 @@ const handleDepositSendReceipt = async () => {
       return;
     }
 
-    // 8. Локально добавляем запись в историю (pending)
+    const topupId = inserted?.id;
+
+    // 9. Локальная история (привязываем topupId + pending)
     const entry = {
       id: now,
+      topupId,               // <--- ВАЖНО ДЛЯ РЕАЛТАЙМА
       type: "deposit",
       amount: amountNum,
       method: walletForm.method || "card",
@@ -1328,7 +1555,7 @@ const handleDepositSendReceipt = async () => {
     };
     setWalletHistory((prev) => [entry, ...prev]);
 
-    // 9. Красивый оверлей "отправлено на проверку"
+    // 10. Оверлей "отправлено на проверку"
     showOverlay(
       "FORBEX TRADE",
       isEN ? "Payment sent for review…" : "Платёж отправлен на проверку…",
@@ -1344,6 +1571,8 @@ const handleDepositSendReceipt = async () => {
         ? "Unexpected error. Try again."
         : "Неожиданная ошибка. Попробуйте ещё раз."
     );
+  } finally {
+    setIsSendingReceipt(false);
   }
 };
 
@@ -1874,6 +2103,27 @@ const formatBalance = displayBalance.toLocaleString("ru-RU", {
           )}
 {walletHistory.slice(0, 5).map((e) => {
   const displayAmount = toDisplayCurrency(e.amount, settings.currency);
+
+  let statusLabel = "";
+  if (e.status === "pending") {
+    statusLabel = isEN ? "on review" : "на проверке";
+  } else if (e.status === "approved") {
+    statusLabel = isEN ? "approved" : "одобрено";
+  } else if (e.status === "rejected") {
+    statusLabel = isEN ? "rejected" : "отклонено";
+  }
+
+  let amountClass = "wallet-history-amount";
+  if (e.type === "deposit") {
+    if (e.status === "pending") amountClass += " pending";
+    else if (e.status === "approved") amountClass += " positive";
+    else if (e.status === "rejected") amountClass += " negative";
+  } else {
+    amountClass += " negative";
+  }
+
+  const sign = e.type === "deposit" ? "+" : "-";
+
   return (
     <div key={e.id} className="wallet-history-row">
       <div className="wallet-history-main">
@@ -1882,9 +2132,20 @@ const formatBalance = displayBalance.toLocaleString("ru-RU", {
             ? isEN ? "Deposit" : "Пополнение"
             : isEN ? "Withdrawal" : "Вывод"}{" "}
           — {methodLabel(e.method)}
-          {e.status === "pending" && (
-            <span style={{ marginLeft: 4, color: "#fde68a", fontSize: 10 }}>
-              {isEN ? "(on review)" : "(на проверке)"}
+          {statusLabel && (
+            <span
+              style={{
+                marginLeft: 4,
+                fontSize: 10,
+                color:
+                  e.status === "pending"
+                    ? "#fbbf24" // оранжевый
+                    : e.status === "approved"
+                    ? "#22c55e" // зелёный
+                    : "#f87171", // красный
+              }}
+            >
+              ({statusLabel})
             </span>
           )}
         </div>
@@ -1892,13 +2153,8 @@ const formatBalance = displayBalance.toLocaleString("ru-RU", {
           {formatDateTime(e.ts)}
         </div>
       </div>
-      <div
-        className={
-          "wallet-history-amount " +
-          (e.type === "deposit" ? "positive" : "negative")
-        }
-      >
-        {e.type === "deposit" ? "+" : "-"}
+      <div className={amountClass}>
+        {sign}
         {displayAmount.toLocaleString("ru-RU", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
@@ -2313,15 +2569,17 @@ const formatBalance = displayBalance.toLocaleString("ru-RU", {
 
       {/* Для карты/USDT/PayPal – кнопка "Отправить чек" */}
       {!isSupport && (
-        <button
-          type="button"
-          className="wallet-modal-btn primary"
-          onClick={handleDepositSendReceipt}
-        >
-          {isEN ? "Send receipt" : "Отправить чек"}
-        </button>
+<button
+  type="button"
+  className="wallet-modal-btn primary"
+  onClick={handleDepositSendReceipt}
+  disabled={isSendingReceipt}
+>
+  {isSendingReceipt
+    ? isEN ? "Sending…" : "Отправляем…"
+    : isEN ? "Send receipt" : "Отправить чек"}
+</button>
       )}
-
       {/* Для поддержки – просто закрыть окно */}
       {isSupport && (
         <button
@@ -3231,6 +3489,18 @@ const renderProfile = () => {
             </button>
           ))}
         </nav>
+
+        {/* Тост справа снизу */}
+        {toast && (
+          <div className={`toast-root toast-${toast.type}`}>
+            <div className="toast-title">
+              {toast.type === "success"
+                ? (isEN ? "Balance updated" : "Баланс пополнен")
+                : (isEN ? "Operation status" : "Статус операции")}
+            </div>
+            <div className="toast-text">{toast.text}</div>
+          </div>
+        )}
       </div>
     </div>
   );
