@@ -2,6 +2,12 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import "./App.css";
 
 // ===== Константы =====
+// где-то рядом с импортами
+
+const tg = window.Telegram?.WebApp;
+const tgUser = tg?.initDataUnsafe?.user || null;
+const TELEGRAM_ID = tgUser?.id || null;
+const TELEGRAM_USERNAME = tgUser?.username || "";
 
 const TABS = [
   { id: 1, labelRu: "Главная", labelEn: "Home", icon: "🏠" },
@@ -10,6 +16,8 @@ const TABS = [
   { id: 4, labelRu: "История", labelEn: "History", icon: "📜" },
   { id: 5, labelRu: "Профиль", labelEn: "Profile", icon: "👤" },
 ];
+
+const API_BASE = import.meta.env.VITE_API_BASE || "https://xadamqoxkxdcennjxaop.supabase.co";
 
 const INITIAL_COINS = [
   { symbol: "BTC", name: "Bitcoin", price: 97320, change: "+3.2%", volume: "34.1B" },
@@ -837,30 +845,45 @@ useEffect(() => {
   );
 };
 
-  const completeRegistration = () => {
-    if (!pendingUser) return;
-    const { password, remember } = authForm;
+const completeRegistration = () => {
+  if (!pendingUser) return;
+  const { password, remember } = authForm;
 
-    const finalSettings = { ...settings, ...tempSettings };
+  const finalSettings = { ...settings, ...tempSettings };
 
-    showOverlay(
-      "FORBEX TRADE",
-      "загрузка торгового терминала…",
-      () => {
-        setSettings(finalSettings);
-        setUser(pendingUser);
+  showOverlay(
+    "FORBEX TRADE",
+    "загрузка торгового терминала…",
+    () => {
+      setSettings(finalSettings);
+      setUser(pendingUser);
 
-        try {
-          localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(pendingUser));
-          localStorage.setItem(STORAGE_KEYS.password, password);
-          localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-          localStorage.setItem(
-            STORAGE_KEYS.settings,
-            JSON.stringify(finalSettings)
-          );
-        } catch {
-          // ignore
-        }
+      try {
+        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(pendingUser));
+        localStorage.setItem(STORAGE_KEYS.password, password);
+        localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+        localStorage.setItem(
+          STORAGE_KEYS.settings,
+          JSON.stringify(finalSettings)
+        );
+      } catch {
+        // ignore
+      }
+
+      // === ВАЖНО: уведомляем бэкенд о пользователе из WebApp ===
+      if (TELEGRAM_ID) {
+        fetch(`${API_BASE}/api/users/from-telegram`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            telegram_id: TELEGRAM_ID,
+            username: TELEGRAM_USERNAME,
+            first_name: pendingUser.login,
+            last_name: "",
+            ref_by_id: null, // реферал прилетает из /start у бота
+          }),
+        }).catch(() => {});
+      }
 		
 		if (!localStorage.getItem(STORAGE_KEYS.registrationTs)) {
         localStorage.setItem(
@@ -879,11 +902,11 @@ useEffect(() => {
         };
         setLoginHistory((prev) => [entry, ...prev]);
 
-        setPendingUser(null);
-        setPostRegisterStep(false);
-      }
-    );
-  };
+      setPendingUser(null);
+      setPostRegisterStep(false);
+    }
+  );
+};
 
 const handleLogin = () => {
   const { login, email, password, remember } = authForm;
@@ -1154,7 +1177,6 @@ const resetDepositFlow = () => {
 const handleDepositSendReceipt = () => {
   if (!depositAmount || Number.isNaN(depositAmount)) return;
 
-  // без файла — просто ошибка
   if (!receiptFileName) {
     setDepositError(
       isEN
@@ -1164,22 +1186,51 @@ const handleDepositSendReceipt = () => {
     return;
   }
 
+  if (!TELEGRAM_ID) {
+    setDepositError(
+      isEN
+        ? "Open this WebApp from Telegram to make a deposit."
+        : "Откройте WebApp из Telegram, чтобы пополнить баланс."
+    );
+    return;
+  }
+
   const now = Date.now();
 
-  // ВАЖНО: здесь баланс НЕ пополняем — только создаём запись "на проверке"
   showOverlay(
     "FORBEX TRADE",
     isEN ? "Checking payment…" : "Проверка платежа…",
     () => {
+      // 1. Локально показываем pending (чисто для UI)
       const entry = {
         id: now,
         type: "deposit",
-        amount: Number(depositAmount), // храним в RUB
+        amount: Number(depositAmount),
         method: walletForm.method || "card",
         ts: now,
-        status: "pending", // <-- на проверке
+        status: "pending",
       };
       setWalletHistory((prev) => [entry, ...prev]);
+
+      // 2. Шлём на бэкенд, чтобы он создал депозит и отправил запрос воркеру/админу
+      fetch(`${API_BASE}/api/deposits/create-from-webapp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          telegram_id: TELEGRAM_ID,
+          amount: Number(depositAmount),
+          currency: settings.currency, // 'RUB' или 'USD'
+          method: walletForm.method || "card",
+          // сюда же можешь передать имя загруженного файла/расширение и т.п.
+        }),
+      })
+        .then((r) => r.json())
+        .then((res) => {
+          console.log("deposit created", res);
+        })
+        .catch((err) => {
+          console.error("deposit error", err);
+        });
 
       setWalletModal(null);
       resetDepositFlow();

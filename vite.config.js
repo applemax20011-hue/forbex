@@ -18,3 +18,4 @@ export default defineConfig({
     },
   },
 });
+VITE_API_BASE=https://forbexbackend.onrender.com
