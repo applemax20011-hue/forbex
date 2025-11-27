@@ -1220,6 +1220,7 @@ const resetDepositFlow = () => {
 const handleDepositSendReceipt = async () => {
   const amountNum = Number(depositAmount);
 
+  // 1. Проверяем, что есть Telegram ID
   if (!telegramId) {
     setDepositError(
       isEN
@@ -1229,6 +1230,7 @@ const handleDepositSendReceipt = async () => {
     return;
   }
 
+  // 2. Проверяем сумму
   if (!amountNum || Number.isNaN(amountNum)) {
     setDepositError(
       isEN
@@ -1238,6 +1240,7 @@ const handleDepositSendReceipt = async () => {
     return;
   }
 
+  // 3. Проверяем, что файл выбран
   if (!receiptFile) {
     setDepositError(
       isEN
@@ -1248,7 +1251,7 @@ const handleDepositSendReceipt = async () => {
   }
 
   try {
-    // 1. Узнаём, кто должен одобрять (реферер или главный админ)
+    // 4. Определяем, кто будет одобрять пополнение (реферер или главный админ)
     let approverTgId = MAIN_ADMIN_TG_ID;
 
     const { data: userRow, error: userErr } = await supabase
@@ -1261,11 +1264,10 @@ const handleDepositSendReceipt = async () => {
       approverTgId = userRow.referred_by;
     }
 
-    // 2. Загружаем чек в Storage
+    // 5. Загружаем чек в Storage (bucket "receipts")
     const filePath = `${telegramId}/${Date.now()}_${receiptFile.name}`;
 
-    const { error: uploadError } = await supabase
-      .storage
+    const { error: uploadError } = await supabase.storage
       .from("receipts")
       .upload(filePath, receiptFile);
 
@@ -1279,8 +1281,8 @@ const handleDepositSendReceipt = async () => {
       return;
     }
 
-    const { data: publicData } = supabase
-      .storage
+    // 6. Получаем публичный URL файла
+    const { data: publicData } = supabase.storage
       .from("receipts")
       .getPublicUrl(filePath);
 
@@ -1296,16 +1298,14 @@ const handleDepositSendReceipt = async () => {
 
     const now = Date.now();
 
-    // 3. Создаём запись в topups
-    const { error: insertError } = await supabase
-      .from("topups")
-      .insert({
-        user_tg_id: telegramId,
-        approver_tg_id: approverTgId,
-        amount: amountNum,
-        receipt_url: receiptUrl,
-        status: "pending",
-      });
+    // 7. Создаём запись в таблице topups
+    const { error: insertError } = await supabase.from("topups").insert({
+      user_tg_id: telegramId,
+      approver_tg_id: approverTgId,
+      amount: amountNum,
+      receipt_url: receiptUrl,
+      status: "pending",
+    });
 
     if (insertError) {
       console.error("insertError:", insertError);
@@ -1317,7 +1317,7 @@ const handleDepositSendReceipt = async () => {
       return;
     }
 
-    // 4. Локальная история — помечаем как pending, баланс пока не меняем
+    // 8. Локально добавляем запись в историю (pending)
     const entry = {
       id: now,
       type: "deposit",
@@ -1328,7 +1328,7 @@ const handleDepositSendReceipt = async () => {
     };
     setWalletHistory((prev) => [entry, ...prev]);
 
-    // 5. Красивый оверлей: отправлено на проверку
+    // 9. Красивый оверлей "отправлено на проверку"
     showOverlay(
       "FORBEX TRADE",
       isEN ? "Payment sent for review…" : "Платёж отправлен на проверку…",
