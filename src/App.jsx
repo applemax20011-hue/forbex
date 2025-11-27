@@ -967,7 +967,7 @@ const handleRegister = async () => {
   try {
     // 1. Проверяем, есть ли уже такой логин или email
     const { data: existingRows, error: existingError } = await supabase
-      .from("_user") // <<< ЕСЛИ ТАБЛИЦА НАЗЫВАЕТСЯ ИНАЧЕ — ПОМЕНЯЙ ЗДЕСЬ
+      .from("app_users") // <<< ЕСЛИ ТАБЛИЦА НАЗЫВАЕТСЯ ИНАЧЕ — ПОМЕНЯЙ ЗДЕСЬ
       .select("id, login, email")
       .or(`login.eq.${trimmedLogin},email.eq.${trimmedEmail}`)
       .limit(1);
@@ -1001,7 +1001,7 @@ const handleRegister = async () => {
 
     // 3. Создаём пользователя в Supabase
     const { data: insertedRows, error: insertError } = await supabase
-      .from("_user") // <<< имя таблицы
+      .from("app_users") // <<< имя таблицы
       .insert({
         login: trimmedLogin,
         email: trimmedEmail,
@@ -1126,7 +1126,7 @@ const handleLogin = async () => {
 
     // 1. Ищем пользователя по логину ИЛИ email
     const { data: rows, error } = await supabase
-      .from("_user") // <<< имя таблицы
+      .from("app_users") // <<< имя таблицы
       .select("id, login, email, password_hash, created_at")
       .or(
         `login.eq.${loginOrEmail.trim()},email.eq.${trimmedId}`
