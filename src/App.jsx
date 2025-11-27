@@ -4,11 +4,6 @@ import "./App.css";
 // ===== Константы =====
 // где-то рядом с импортами
 
-const tg = window.Telegram?.WebApp;
-const tgUser = tg?.initDataUnsafe?.user || null;
-const TELEGRAM_ID = tgUser?.id || null;
-const TELEGRAM_USERNAME = tgUser?.username || "";
-
 const TABS = [
   { id: 1, labelRu: "Главная", labelEn: "Home", icon: "🏠" },
   { id: 2, labelRu: "Торговля", labelEn: "Trade", icon: "📈" },
@@ -268,6 +263,7 @@ function App() {
     remember: true,
   });
   const [authError, setAuthError] = useState("");
+  const [tgUser, setTgUser] = useState(null);
   
   const [coins, setCoins] = useState(INITIAL_COINS);
     const [stats, setStats] = useState({
