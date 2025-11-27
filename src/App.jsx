@@ -2336,7 +2336,9 @@ const renderHistory = () => {
                   {e.login} · {e.email}
                 </div>
               </div>
-              <div className="history-time">{formatDateTime(e.ts)}</div>
+              <div className="history-time">
+                {formatDateTime(e.ts)}
+              </div>
             </div>
           ))}
         </div>
@@ -2361,22 +2363,15 @@ const renderHistory = () => {
             </div>
           )}
           {walletHistory.map((e) => {
-            const displayAmount = toDisplayCurrency(
-              e.amount,
-              settings.currency
-            );
+            const displayAmount = toDisplayCurrency(e.amount, settings.currency);
 
             return (
               <div key={e.id} className="history-row">
                 <div className="history-main">
                   <div className="history-type">
                     {e.type === "deposit"
-                      ? isEN
-                        ? "Deposit"
-                        : "Пополнение"
-                      : isEN
-                      ? "Withdrawal"
-                      : "Вывод"}
+                      ? isEN ? "Deposit" : "Пополнение"
+                      : isEN ? "Withdrawal" : "Вывод"}
                     {e.status === "pending" && (
                       <span
                         style={{
@@ -2470,6 +2465,7 @@ const renderHistory = () => {
                     {currencySymbol}
                   </div>
                 </div>
+
                 <div className="history-right">
                   <div
                     className={
