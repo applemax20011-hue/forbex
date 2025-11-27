@@ -15,7 +15,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/cmc-api/, ""),
       },
+      // если хочешь проксить свой бэкенд:
+      // "/api": {
+      //   target: "https://forbexbackend.onrender.com",
+      //   changeOrigin: true,
+      //   secure: false,
+      // },
     },
   },
 });
-VITE_API_BASE=https://forbexbackend.onrender.com
