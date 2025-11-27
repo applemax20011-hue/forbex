@@ -1747,6 +1747,8 @@ const formatBalance = displayBalance.toLocaleString("ru-RU", {
     </div>
   );
 })}
+        </div> {/* wallet-history-short */}
+      </section>
 
       {/* Модалка пополнения / вывода */}
       {walletModal && (
