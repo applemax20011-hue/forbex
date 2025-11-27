@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import "./App.css";
 
@@ -347,6 +347,7 @@ function App() {
   const [tradeHistory, setTradeHistory] = useState([]);
   
   // отдельная функция, которую вызывает useEffect с таймером
+// отдельная функция, которую вызывает useEffect с таймером
 const finishTrade = (trade) => {
   const win = trade.resultDirection === trade.direction; // up / down / flat
   const profit = win
@@ -357,9 +358,11 @@ const finishTrade = (trade) => {
     setBalance((prev) => prev + trade.amount * trade.multiplier);
   }
 
+  const finishedAt = Date.now();
+
   const finished = {
     ...trade,
-    finishedAt: Date.now(),
+    finishedAt,
     status: win ? "win" : "lose",
     profit,
   };
@@ -367,18 +370,41 @@ const finishTrade = (trade) => {
   setTradeHistory((prev) => [finished, ...prev]);
   setActiveTrade(null);
   setLastTradeResult({
-      status: win ? "win" : "lose",
-      chartDirection: trade.resultDirection,
-      message: win
-        ? isEN
-          ? "Congratulations! The asset price moved in your direction."
-          : "Поздравляем! Стоимость актива пошла в вашу сторону."
-        : isEN
-        ? "The asset price moved against your forecast. The investment failed."
-        : "Стоимость актива пошла против вашего прогноза. Инвестиция не удалась.",
+    status: win ? "win" : "lose",
+    chartDirection: trade.resultDirection,
+    message: win
+      ? isEN
+        ? "Congratulations! The asset price moved in your direction."
+        : "Поздравляем! Стоимость актива пошла в вашу сторону."
+      : isEN
+      ? "The asset price moved against your forecast. The investment failed."
+      : "Стоимость актива пошла против вашего прогноза. Инвестиция не удалась.",
   });
 
   setChartDirection(trade.resultDirection);
+
+  // сохраняем сделку в Supabase
+  (async () => {
+    try {
+      if (!user) return;
+
+      await supabase.from("trade_history").insert({
+        user_id: user.id,
+        symbol: trade.symbol,
+        amount: trade.amount,
+        direction: trade.direction,
+        result_direction: trade.resultDirection,
+        multiplier: trade.multiplier,
+        duration: trade.duration,
+        status: win ? "win" : "lose",
+        profit,
+        started_at: new Date(trade.startedAt).toISOString(),
+        finished_at: new Date(finishedAt).toISOString(),
+      });
+    } catch (e) {
+      console.error("trade_history insert error:", e);
+    }
+  })();
 };
 
   // смена пароля
@@ -400,85 +426,125 @@ const finishTrade = (trade) => {
   
   const isEN = settings.language === "en";
   const currencySymbol = settings.currency === "RUB" ? "₽" : "USD";
+  
+// Загружаем историю логинов и сделок из Supabase
+useEffect(() => {
+  if (!user) return;
 
-  // ===== Инициализация из localStorage =====
-  useEffect(() => {
-    const bootTimer = setTimeout(() => setBooting(false), 1300);
-
+  async function loadUserHistoriesFromSupabase() {
     try {
-      const savedUser = localStorage.getItem(STORAGE_KEYS.user);
-      const savedPass = localStorage.getItem(STORAGE_KEYS.password);
-      const savedRemember = localStorage.getItem(STORAGE_KEYS.remember);
-      const savedBalance = localStorage.getItem(STORAGE_KEYS.balance);
-      const savedWalletHistory = localStorage.getItem(
-        STORAGE_KEYS.walletHistory
-      );
-      const savedLoginHistory = localStorage.getItem(
-        STORAGE_KEYS.loginHistory
-      );
-      const savedTradeHistory = localStorage.getItem(
-        STORAGE_KEYS.tradeHistory
-      );
-      const savedSettings = localStorage.getItem(STORAGE_KEYS.settings);
-      const savedStats = localStorage.getItem(STORAGE_KEYS.stats);
+      const [loginsRes, tradesRes] = await Promise.all([
+        supabase
+          .from("login_history")
+          .select("id, type, login, email, device, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(100),
+        supabase
+          .from("trade_history")
+          .select(
+            "id, symbol, amount, direction, result_direction, multiplier, duration, status, profit, started_at, finished_at"
+          )
+          .eq("user_id", user.id)
+          .order("finished_at", { ascending: false })
+          .limit(100),
+      ]);
 
-      if (savedWalletHistory) {
-        setWalletHistory(JSON.parse(savedWalletHistory));
-      }
-      if (savedLoginHistory) {
-        setLoginHistory(JSON.parse(savedLoginHistory));
-      }
-      if (savedTradeHistory) {
-        setTradeHistory(JSON.parse(savedTradeHistory));
-      }
-      if (savedBalance) {
-        const num = parseFloat(savedBalance);
-        if (!Number.isNaN(num)) setBalance(num);
-      }
-      if (savedSettings) {
-        try {
-          const parsed = JSON.parse(savedSettings);
-          setSettings((prev) => ({ ...prev, ...parsed }));
-        } catch {
-          // ignore
-        }
-      }
-	    if (savedStats) {
-        try {
-          const parsed = JSON.parse(savedStats);
-          setStats((prev) => ({ ...prev, ...parsed }));
-        } catch {
-          // ignore
-        }
-      }
-      const rememberFlag = savedRemember === "true";
-      if (savedUser && savedPass && rememberFlag) {
-        const parsedUser = JSON.parse(savedUser);
-        setUser(parsedUser);
-        setAuthForm((prev) => ({
-          ...prev,
-          login: parsedUser.login || "",
-          email: parsedUser.email || "",
-          password: savedPass || "",
-          remember: rememberFlag,
+      if (!loginsRes.error) {
+        const loginRows = (loginsRes.data || []).map((row) => ({
+          id: row.id,
+          type: row.type,
+          login: row.login,
+          email: row.email,
+          device: row.device,
+          ts: row.created_at
+            ? new Date(row.created_at).getTime()
+            : Date.now(),
         }));
-      } else if (savedUser && savedPass) {
-        // есть сохранённый аккаунт, но без автологина
-        const parsedUser = JSON.parse(savedUser);
-        setAuthForm((prev) => ({
-          ...prev,
-          login: parsedUser.login || "",
-          email: parsedUser.email || "",
-          password: savedPass || "",
-          remember: rememberFlag,
-        }));
+        setLoginHistory(loginRows);
+      } else {
+        console.error("loadUserHistories logins error:", loginsRes.error);
       }
-    } catch {
-      // ignore
+
+      if (!tradesRes.error) {
+        const tradeRows = (tradesRes.data || []).map((row) => ({
+          id: row.id,
+          symbol: row.symbol,
+          amount: Number(row.amount || 0),
+          direction: row.direction,
+          resultDirection: row.result_direction,
+          multiplier: row.multiplier,
+          duration: row.duration,
+          profit: Number(row.profit || 0),
+          status: row.status,
+          startedAt: row.started_at
+            ? new Date(row.started_at).getTime()
+            : undefined,
+          finishedAt: row.finished_at
+            ? new Date(row.finished_at).getTime()
+            : undefined,
+        }));
+        setTradeHistory(tradeRows);
+      } else {
+        console.error("loadUserHistories trades error:", tradesRes.error);
+      }
+    } catch (e) {
+      console.error("loadUserHistoriesFromSupabase exception", e);
+    }
+  }
+
+  loadUserHistoriesFromSupabase();
+}, [user]);
+
+// ===== Инициализация из localStorage =====
+useEffect(() => {
+  const bootTimer = setTimeout(() => setBooting(false), 1300);
+
+  try {
+    const savedUser = localStorage.getItem(STORAGE_KEYS.user);
+    const savedPass = localStorage.getItem(STORAGE_KEYS.password);
+    const savedRemember = localStorage.getItem(STORAGE_KEYS.remember);
+    const savedSettings = localStorage.getItem(STORAGE_KEYS.settings);
+
+    // настройки языка/валюты
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        setSettings((prev) => ({ ...prev, ...parsed }));
+      } catch {
+        // ignore
+      }
     }
 
-    return () => clearTimeout(bootTimer);
-  }, []);
+    const rememberFlag = savedRemember === "true";
+
+    // автологин
+    if (savedUser && savedPass && rememberFlag) {
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
+      setAuthForm((prev) => ({
+        ...prev,
+        login: parsedUser.login || "",
+        email: parsedUser.email || "",
+        password: savedPass || "",
+        remember: rememberFlag,
+      }));
+    } else if (savedUser && savedPass) {
+      const parsedUser = JSON.parse(savedUser);
+      setAuthForm((prev) => ({
+        ...prev,
+        login: parsedUser.login || "",
+        email: parsedUser.email || "",
+        password: savedPass || "",
+        remember: rememberFlag,
+      }));
+    }
+  } catch {
+    // ignore
+  }
+
+  return () => clearTimeout(bootTimer);
+}, []);
   
   // Забираем Telegram ID из WebApp
   useEffect(() => {
@@ -531,34 +597,17 @@ const finishTrade = (trade) => {
     loadBalanceFromSupabase();
   }, [telegramId]);
 
-  // ===== Сохранение в localStorage =====
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.balance, String(balance));
-      localStorage.setItem(
-        STORAGE_KEYS.walletHistory,
-        JSON.stringify(walletHistory)
-      );
-      localStorage.setItem(
-        STORAGE_KEYS.loginHistory,
-        JSON.stringify(loginHistory)
-      );
-      localStorage.setItem(
-        STORAGE_KEYS.settings,
-        JSON.stringify(settings)
-      );
-      localStorage.setItem(
-        STORAGE_KEYS.tradeHistory,
-        JSON.stringify(tradeHistory)
-      );
-      localStorage.setItem(
-        STORAGE_KEYS.stats,
-        JSON.stringify(stats)
-      );
-    } catch {
-      // ignore
-    }
-  }, [balance, walletHistory, loginHistory, settings, tradeHistory, stats]);
+// ===== Сохранение настроек в localStorage =====
+useEffect(() => {
+  try {
+    localStorage.setItem(
+      STORAGE_KEYS.settings,
+      JSON.stringify(settings)
+    );
+  } catch {
+    // ignore
+  }
+}, [settings]);
   
   // симуляция активности: активные юзеры и сделки за 24ч
   useEffect(() => {
@@ -838,56 +887,125 @@ useEffect(() => {
   return () => clearTimeout(id);
 }, [toast]);
 
+// Грузим баланс и историю кошелька из Supabase
+const loadWalletDataFromSupabase = useCallback(async () => {
+  if (!telegramId) return;
+
+  try {
+    const [topupsRes, withdrawsRes] = await Promise.all([
+      supabase
+        .from("topups")
+        .select("id, amount, status, method, created_at")
+        .eq("user_tg_id", telegramId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("wallet_withdrawals")
+        .select("id, amount, method, created_at")
+        .eq("user_tg_id", telegramId)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (topupsRes.error) {
+      console.error("loadWalletData topups error:", topupsRes.error);
+    }
+    if (withdrawsRes.error) {
+      console.error(
+        "loadWalletData withdrawals error:",
+        withdrawsRes.error
+      );
+    }
+
+    const topups = topupsRes.data || [];
+    const withdrawals = withdrawsRes.data || [];
+
+    const approvedDepositSum = topups
+      .filter((t) => t.status === "approved")
+      .reduce((acc, t) => acc + Number(t.amount || 0), 0);
+
+    const withdrawSum = withdrawals.reduce(
+      (acc, w) => acc + Number(w.amount || 0),
+      0
+    );
+
+    setBalance(Math.max(0, approvedDepositSum - withdrawSum));
+
+    const history = [];
+
+    topups.forEach((row) => {
+      history.push({
+        id: `topup-${row.id}`,
+        topupId: row.id,
+        type: "deposit",
+        amount: Number(row.amount || 0),
+        method: row.method || "card",
+        ts: row.created_at
+          ? new Date(row.created_at).getTime()
+          : Date.now(),
+        status: row.status || "pending",
+      });
+    });
+
+    withdrawals.forEach((row) => {
+      history.push({
+        id: `wd-${row.id}`,
+        type: "withdraw",
+        amount: Number(row.amount || 0),
+        method: row.method || "card",
+        ts: row.created_at
+          ? new Date(row.created_at).getTime()
+          : Date.now(),
+      });
+    });
+
+    history.sort((a, b) => b.ts - a.ts);
+    setWalletHistory(history);
+  } catch (e) {
+    console.error("loadWalletDataFromSupabase exception", e);
+  }
+}, [telegramId]);
+
+useEffect(() => {
+  loadWalletDataFromSupabase();
+}, [loadWalletDataFromSupabase]);
+
+// Реaltime: слушаем изменения по topups для этого Telegram ID
 useEffect(() => {
   if (!telegramId) return;
 
   const channel = supabase
-    .channel(`topups_user_${telegramId}`)
+    .channel(`topups-realtime-${telegramId}`)
     .on(
-      'postgres_changes',
+      "postgres_changes",
       {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'topups',
+        event: "UPDATE",      // нам интересны изменения статуса
+        schema: "public",
+        table: "topups",
         filter: `user_tg_id=eq.${telegramId}`,
       },
-      (payload) => {
-        const oldStatus = payload.old?.status;
-        const newStatus = payload.new?.status;
-        const amount = Number(payload.new?.amount || 0);
-        const topupId = payload.new?.id;
+      async (payload) => {
+        const row = payload.new;
+        if (!row) return;
 
-        if (!newStatus || oldStatus === newStatus) return;
+        // Обновляем кошелёк/баланс из базы, чтобы всё было синхронно
+        await loadWalletDataFromSupabase();
 
-        // 1) Обновляем локальную историю по topupId
-        setWalletHistory((prev) =>
-          prev.map((e) =>
-            e.topupId && e.topupId === topupId
-              ? { ...e, status: newStatus }
-              : e
-          )
-        );
-
-        // 2) Баланс и тост
-        if (newStatus === "approved") {
-          if (amount > 0) {
-            setBalance((prev) => prev + amount);
-          }
-
+        // Показываем плашку
+        if (row.status === "approved") {
           setToast({
             type: "success",
             text: isEN
-              ? `Your balance has been topped up by ${amount} ${settings.currency === "RUB" ? "RUB" : "USD"}.`
-              : `Ваш баланс был успешно пополнен на ${amount} ${settings.currency === "RUB" ? "₽" : "USD"}.`,
+              ? `Deposit ${row.amount} has been approved.`
+              : `Ваше пополнение на ${row.amount} одобрено.`,
           });
-        } else if (newStatus === "rejected") {
+        } else if (row.status === "rejected") {
           setToast({
             type: "error",
             text: isEN
-              ? "Your deposit was rejected. Check the payment details or contact support."
-              : "Ваше пополнение было отклонено. Проверьте реквизиты оплаты или обратитесь в поддержку.",
+              ? `Deposit ${row.amount} has been rejected.`
+              : `Ваше пополнение на ${row.amount} отклонено.`,
           });
         }
+        // если статус pending → pending, можно ничего не делать
       }
     )
     .subscribe();
@@ -895,7 +1013,7 @@ useEffect(() => {
   return () => {
     supabase.removeChannel(channel);
   };
-}, [telegramId, isEN, settings.currency]);
+}, [telegramId, isEN, loadWalletDataFromSupabase]);
 
   // ===== helpers =====
   const showOverlay = (title, subtitle, callback, delay = 1100) => {
@@ -913,17 +1031,37 @@ useEffect(() => {
     }, delay);
   };
 
-  const updateSettings = (patch) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      try {
-        localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  };
+const updateSettings = (patch) => {
+  setSettings((prev) => {
+    const next = { ...prev, ...patch };
+
+    // сохраняем в localStorage
+    try {
+      localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next));
+    } catch (e) {
+      console.warn("localStorage settings update error:", e);
+    }
+
+    // пишем настройки в Supabase (таблица user_settings)
+    if (user && user.id) {
+      (async () => {
+        try {
+          await supabase
+            .from("user_settings")
+            .upsert({
+              user_id: user.id,
+              language: next.language,
+              currency: next.currency,
+            });
+        } catch (err) {
+          console.error("user_settings upsert error:", err);
+        }
+      })();
+    }
+
+    return next;
+  });
+};
 
   const handleAuthInput = (field, value) => {
     setAuthForm((prev) => ({ ...prev, [field]: value }));
@@ -1059,44 +1197,78 @@ const handleRegister = async () => {
 
 const completeRegistration = () => {
   if (!pendingUser) return;
-  const { password, remember } = authForm;
 
+  const { password, remember } = authForm;
   const finalSettings = { ...settings, ...tempSettings };
+  const nowIso = new Date().toISOString();
+  const nowTs = Date.now();
 
   showOverlay(
     "FORBEX TRADE",
     "загрузка торгового терминала…",
     () => {
+      // применяем настройки локально
       setSettings(finalSettings);
       setUser(pendingUser);
 
+      // localStorage
       try {
-        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(pendingUser));
+        localStorage.setItem(
+          STORAGE_KEYS.user,
+          JSON.stringify(pendingUser)
+        );
         localStorage.setItem(STORAGE_KEYS.password, password);
         localStorage.setItem(STORAGE_KEYS.remember, String(remember));
         localStorage.setItem(
           STORAGE_KEYS.settings,
           JSON.stringify(finalSettings)
         );
-      } catch {
-        // ignore
+        if (!localStorage.getItem(STORAGE_KEYS.registrationTs)) {
+          localStorage.setItem(
+            STORAGE_KEYS.registrationTs,
+            String(pendingUser.createdAt || nowTs)
+          );
+        }
+      } catch (e) {
+        console.warn("localStorage error (completeRegistration):", e);
       }
-		if (!localStorage.getItem(STORAGE_KEYS.registrationTs)) {
-        localStorage.setItem(
-          STORAGE_KEYS.registrationTs,
-          String(pendingUser.createdAt)
-        );
-       }
 
-        const entry = {
-          id: Date.now(),
-          type: "register",
-          login: pendingUser.login,
-          email: pendingUser.email,
-          ts: Date.now(),
-          device: navigator.userAgent || "",
-        };
-        setLoginHistory((prev) => [entry, ...prev]);
+      // пишем в локальную историю входов
+      const entry = {
+        id: nowTs,
+        type: "register",
+        login: pendingUser.login,
+        email: pendingUser.email,
+        ts: nowTs,
+        device: navigator.userAgent || "",
+      };
+      setLoginHistory((prev) => [entry, ...prev]);
+
+      // сохраняем настройки и лог регистрации в Supabase
+      (async () => {
+        try {
+          if (pendingUser.id) {
+            // user_settings
+            await supabase.from("user_settings").upsert({
+              user_id: pendingUser.id,
+              language: finalSettings.language,
+              currency: finalSettings.currency,
+            });
+
+            // login_history (подправь названия колонок, если у тебя другие)
+            await supabase.from("login_history").insert({
+              user_id: pendingUser.id,
+              event_type: "register",   // если колонка называется type – поменяй на type
+              login: pendingUser.login,
+              email: pendingUser.email,
+              ts: nowIso,               // если колонка created_at – поставь created_at: nowIso
+              device: navigator.userAgent || "",
+            });
+          }
+        } catch (e) {
+          console.error("supabase completeRegistration error:", e);
+        }
+      })();
 
       setPendingUser(null);
       setPostRegisterStep(false);
@@ -1105,9 +1277,10 @@ const completeRegistration = () => {
 };
 
 // ЛОГИН ЧЕРЕЗ SUPABASE
+// ЛОГИН ЧЕРЕЗ SUPABASE
 const handleLogin = async () => {
   const { login, email, password, remember } = authForm;
-  const loginOrEmail = (login || email).trim();
+  const loginOrEmail = (login || email || "").trim();
 
   if (!loginOrEmail || !password.trim()) {
     setAuthError("Введите логин/email и пароль.");
@@ -1122,15 +1295,13 @@ const handleLogin = async () => {
   setOverlayLoading(true);
 
   try {
-    const trimmedId = loginOrEmail.toLowerCase();
+    const lowered = loginOrEmail.toLowerCase();
 
-    // 1. Ищем пользователя по логину ИЛИ email
+    // ищем по логину ИЛИ email
     const { data: rows, error } = await supabase
-      .from("app_users") // <<< имя таблицы
+      .from("app_users")
       .select("id, login, email, password_hash, created_at")
-      .or(
-        `login.eq.${loginOrEmail.trim()},email.eq.${trimmedId}`
-      )
+      .or(`login.eq.${loginOrEmail.trim()},email.eq.${lowered}`)
       .limit(1);
 
     if (error) {
@@ -1140,13 +1311,12 @@ const handleLogin = async () => {
     }
 
     const row = rows?.[0];
-
     if (!row) {
       setAuthError("Аккаунт с таким логином или email не найден.");
       return;
     }
 
-    // 2. Хэшируем введённый пароль и сравниваем
+    // проверяем пароль (SHA-256)
     const enc = new TextEncoder().encode(password);
     const buf = await crypto.subtle.digest("SHA-256", enc);
     const hashArray = Array.from(new Uint8Array(buf));
@@ -1159,7 +1329,6 @@ const handleLogin = async () => {
       return;
     }
 
-    // 3. Успешный вход
     const createdAtTs = row.created_at
       ? new Date(row.created_at).getTime()
       : Date.now();
@@ -1171,9 +1340,34 @@ const handleLogin = async () => {
       createdAt: createdAtTs,
     };
 
-    setUser(userWithCreatedAt);
+    // грузим настройки пользователя из user_settings
+    let loadedSettings = null;
+    try {
+      const { data: sRow, error: sErr } = await supabase
+        .from("user_settings")
+        .select("language, currency")
+        .eq("user_id", row.id)
+        .maybeSingle(); // если нет строки — вернётся null
 
-    // сохраняем в localStorage, как и раньше
+      if (!sErr && sRow) {
+        loadedSettings = {
+          language: sRow.language || "ru",
+          currency: sRow.currency || "RUB",
+        };
+      }
+    } catch (e) {
+      console.error("load user_settings error:", e);
+    }
+
+    const finalSettings = {
+      language: loadedSettings?.language || "ru",
+      currency: loadedSettings?.currency || "RUB",
+    };
+
+    setUser(userWithCreatedAt);
+    setSettings((prev) => ({ ...prev, ...finalSettings }));
+
+    // localStorage
     try {
       localStorage.setItem(
         STORAGE_KEYS.user,
@@ -1185,20 +1379,40 @@ const handleLogin = async () => {
         STORAGE_KEYS.registrationTs,
         String(createdAtTs)
       );
+      localStorage.setItem(
+        STORAGE_KEYS.settings,
+        JSON.stringify(finalSettings)
+      );
     } catch (e) {
       console.warn("localStorage error (login):", e);
     }
 
-    // история входов
+    // локальная история логинов
+    const nowTs = Date.now();
     const entry = {
-      id: Date.now(),
+      id: nowTs,
       type: "login",
       login: row.login,
       email: row.email,
-      ts: Date.now(),
+      ts: nowTs,
       device: navigator.userAgent || "",
     };
     setLoginHistory((prev) => [entry, ...prev]);
+
+    // лог в Supabase
+    try {
+      const nowIso = new Date().toISOString();
+      await supabase.from("login_history").insert({
+        user_id: row.id,
+        event_type: "login",   // если колонка называется type – поменяй
+        login: row.login,
+        email: row.email,
+        ts: nowIso,            // если колонка created_at – поменяй
+        device: navigator.userAgent || "",
+      });
+    } catch (e) {
+      console.error("supabase login_history login error:", e);
+    }
   } catch (e) {
     console.error("handleLogin error:", e);
     setAuthError("Неожиданная ошибка. Попробуйте ещё раз.");
@@ -1207,21 +1421,33 @@ const handleLogin = async () => {
   }
 };
 
-  const handleLogout = () => {
-    if (user) {
-      const entry = {
-        id: Date.now(),
+const handleLogout = async () => {
+  if (user) {
+    const entry = {
+      id: Date.now(),
+      type: "logout",
+      login: user.login,
+      email: user.email,
+      ts: Date.now(),
+      device: navigator.userAgent || "",
+    };
+    setLoginHistory((prev) => [entry, ...prev]);
+
+    try {
+      await supabase.from("login_history").insert({
+        user_id: user.id,
         type: "logout",
         login: user.login,
         email: user.email,
-        ts: Date.now(),
         device: navigator.userAgent || "",
-      };
-      setLoginHistory((prev) => [entry, ...prev]);
+      });
+    } catch (e) {
+      console.error("supabase login_history logout error:", e);
     }
-    setUser(null);
-    setActiveTab(1);
-  };
+  }
+  setUser(null);
+  setActiveTab(1);
+};
 
   // смена пароля
   const handlePasswordInput = (field, value) => {
@@ -1316,31 +1542,83 @@ const handleStartTrade = () => {
   setActiveTrade(trade);
 }; // <--- ВОТ ЭТОЙ СКОБКИ У ТЕБЯ НЕТ
 
-// ===== смена пароля =====
-const handlePasswordChange = () => {
+const handlePasswordChange = async () => {
   const { oldPassword, newPassword, confirmPassword } = passwordForm;
+
+  if (!user) {
+    setPasswordError("Пользователь не найден.");
+    return;
+  }
+
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    setPasswordError("Заполните все поля.");
+    return;
+  }
+  if (newPassword.length < 4) {
+    setPasswordError("Новый пароль должен быть от 4 символов.");
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    setPasswordError("Пароли не совпадают.");
+    return;
+  }
+
   try {
-    const savedPass = localStorage.getItem(STORAGE_KEYS.password);
-    if (!savedPass) {
-      setPasswordError("Пароль не найден. Попробуйте выйти и войти заново.");
+    // 1. Берём текущий хэш из Supabase
+    const { data, error } = await supabase
+      .from("app_users")
+      .select("password_hash")
+      .eq("id", user.id)
+      .single();
+
+    if (error || !data) {
+      console.error("password select error:", error);
+      setPasswordError("Не удалось проверить текущий пароль.");
       return;
     }
-    if (oldPassword !== savedPass) {
+
+    // 2. Хэшируем oldPassword и сравниваем
+    const encOld = new TextEncoder().encode(oldPassword);
+    const bufOld = await crypto.subtle.digest("SHA-256", encOld);
+    const oldHash = Array.from(new Uint8Array(bufOld))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    if (oldHash !== data.password_hash) {
       setPasswordError("Старый пароль указан неверно.");
       return;
     }
-    if (newPassword.length < 4) {
-      setPasswordError("Новый пароль должен быть от 4 символов.");
+
+    // 3. Хэшируем новый пароль
+    const encNew = new TextEncoder().encode(newPassword);
+    const bufNew = await crypto.subtle.digest("SHA-256", encNew);
+    const newHash = Array.from(new Uint8Array(bufNew))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // 4. Обновляем Supabase
+    const { error: updateError } = await supabase
+      .from("app_users")
+      .update({ password_hash: newHash })
+      .eq("id", user.id);
+
+    if (updateError) {
+      console.error("password update error:", updateError);
+      setPasswordError("Не удалось изменить пароль.");
       return;
     }
-    if (newPassword !== confirmPassword) {
-      setPasswordError("Пароли не совпадают.");
-      return;
+
+    // 5. Обновляем localStorage (для автологина)
+    try {
+      localStorage.setItem(STORAGE_KEYS.password, newPassword);
+    } catch (e) {
+      console.warn("localStorage password update error:", e);
     }
-    localStorage.setItem(STORAGE_KEYS.password, newPassword);
+
     setPasswordSuccess("Пароль успешно изменён.");
     setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
-  } catch {
+  } catch (e) {
+    console.error("handlePasswordChange error:", e);
     setPasswordError("Не удалось изменить пароль.");
   }
 };
@@ -1348,7 +1626,8 @@ const handlePasswordChange = () => {
   // кошелёк: депозит / вывод
 
 // кошелёк: депозит / вывод
-const handleWalletConfirmWithdraw = () => {
+// кошелёк: депозит / вывод
+const handleWalletConfirmWithdraw = async () => {
   const raw = walletForm.amount.toString().replace(",", ".");
   const amountNum = parseFloat(raw);
 
@@ -1360,6 +1639,7 @@ const handleWalletConfirmWithdraw = () => {
   const actualAmount = Math.min(amountNum, balance);
   if (actualAmount <= 0) return;
 
+  // оптимистично обновляем локальный баланс
   setBalance((prev) => Math.max(0, prev - actualAmount));
 
   const entry = {
@@ -1374,6 +1654,20 @@ const handleWalletConfirmWithdraw = () => {
 
   setWalletModal(null);
   setWalletForm({ amount: "", method: walletForm.method });
+
+  // сохраняем вывод в Supabase
+  if (!telegramId) return;
+
+  try {
+    await supabase.from("wallet_withdrawals").insert({
+      user_tg_id: telegramId,
+      amount: actualAmount,
+      method: walletForm.method,
+      status: "done",
+    });
+  } catch (e) {
+    console.error("wallet_withdrawals insert error:", e);
+  }
 };
 
 

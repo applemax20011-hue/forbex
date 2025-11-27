@@ -1405,6 +1405,9 @@ body {
 .history-amount.negative {
   color: #f97316;
 }
+.history-amount.pending {
+  color: #f97316; /* оранжевый для "на проверке" */
+}
 
 .history-time {
   font-size: 10px;
@@ -1871,5 +1874,3 @@ body {
   place-items: initial !important;
   min-width: 0 !important;
 }
-
-
