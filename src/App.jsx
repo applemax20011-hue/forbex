@@ -2499,6 +2499,15 @@ const renderWallet = () => {
     }
   };
 
+  // локальный helper, чтобы не было "methodLabel is not defined"
+  const methodLabel = (m) => {
+    if (m === "card") return isEN ? "Bank card" : "Банковская карта";
+    if (m === "usdt") return "USDT TRC-20";
+    if (m === "paypal") return "PayPal";
+    if (m === "support") return isEN ? "Via support" : "Через поддержку";
+    return m;
+  };
+
   // шаги пополнения
   const handleDepositStep = () => {
     if (depositStep === 1) {
@@ -2549,16 +2558,6 @@ const renderWallet = () => {
     }
   };
 
-  const getMethodName = (m) => {
-    if (m === "card") return isEN ? "Bank card" : "Банковская карта";
-    if (m === "usdt") return "USDT TRC-20";
-    if (m === "paypal") return "PayPal";
-    if (m === "support") return isEN ? "Via support" : "Через поддержку";
-    return m;
-  };
-
-  const canGoNextFromStep1 = !!walletForm.method;
-
   return (
     <>
       {/* Баланс */}
@@ -2607,6 +2606,9 @@ const renderWallet = () => {
         <div className="section-title">
           <h2>{isEN ? "Recent operations" : "Последние операции кошелька"}</h2>
         </div>
+
+        {/* ВАЖНО: обёртка history-block, которой не хватало */}
+        <div className="history-block">
           {walletHistory.map((e) => {
             const displayAmount = toDisplayCurrency(
               e.amount,
@@ -2718,6 +2720,7 @@ const renderWallet = () => {
               </div>
             );
           })}
+
           {walletHistory.length === 0 && (
             <div className="wallet-empty" style={{ padding: 8 }}>
               {isEN ? "No operations" : "Нет операций"}
@@ -2976,7 +2979,6 @@ const renderWallet = () => {
                             <div className="payment-value">
                               Tinkoff
                             </div>
-                            {/* Кнопку копирования банка убрали */}
                           </div>
                         </>
                       )}
@@ -3265,7 +3267,9 @@ const renderWallet = () => {
           </div>
         </div>
       )}
-
+    </>
+  );
+};
 
 const renderHistory = () => {
   const methodLabel = (m) => {
