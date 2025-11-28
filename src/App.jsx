@@ -2886,7 +2886,7 @@ const handleWithdrawSubmit = async () => {
                   </div>
                 )}
 
-                {/* Шаг 1: выбор способа */}
+{/* Шаг 1: выбор способа */}
                 {depositStep === 1 && (
                   <div className="wallet-methods">
                     <div
@@ -2903,7 +2903,8 @@ const handleWithdrawSubmit = async () => {
                       className={
                         "wallet-method-card " +
                         (walletForm.method === "card" ? "active" : "") +
-                        (!walletForm.method ? " pulse-white" : "")
+                        // ИЗМЕНЕНИЕ ЗДЕСЬ: добавляем pulse-priority, если ничего не выбрано или выбрана карта
+                        (!walletForm.method || walletForm.method === "card" ? " pulse-priority" : "")
                       }
                       onClick={() =>
                         setWalletForm((p) => ({ ...p, method: "card" }))
@@ -3246,21 +3247,52 @@ const handleWithdrawSubmit = async () => {
                 </div>
 
                 {/* ШАГ 1: выбор метода вывода */}
+{/* ШАГ 1: выбор метода вывода */}
                 {withdrawStep === 1 && (
                   <div className="wallet-methods">
+                    {/* ПРИОРИТЕТНЫЙ СПОСОБ */}
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#9ca3af",
+                        marginBottom: 4,
+                      }}
+                    >
+                      {isEN ? "Priority method" : "Приоритетный способ"}
+                    </div>
+
                     <button
                       className={
                         "wallet-method-card " +
-                        (walletForm.method === "card" ? "active" : "")
+                        (walletForm.method === "card" ? "active" : "") +
+                        // Добавляем пульсацию сюда тоже
+                        (!walletForm.method || walletForm.method === "card" ? " pulse-priority" : "")
                       }
                       onClick={() =>
                         setWalletForm((p) => ({ ...p, method: "card" }))
                       }
                     >
                       <div className="wallet-method-title">
-                        {isEN ? "Bank card" : "Банковская карта"}
+                        {isEN ? "Withdraw to bank card" : "Вывод на банковскую карту"}
+                      </div>
+                      <div className="wallet-method-sub">
+                        VISA / MasterCard / МИР
+                      </div>
+                      <div className="wallet-method-extra">
+                        {isEN ? "Fastest processing" : "Самое быстрое зачисление"}
                       </div>
                     </button>
+
+                    {/* КРИПТОВАЛЮТА И ДРУГОЕ */}
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#9ca3af",
+                        margin: "8px 0 4px",
+                      }}
+                    >
+                      {isEN ? "Crypto & other" : "Криптовалюта и другое"}
+                    </div>
 
                     <button
                       className={
@@ -3271,7 +3303,10 @@ const handleWithdrawSubmit = async () => {
                         setWalletForm((p) => ({ ...p, method: "usdt" }))
                       }
                     >
-                      <div className="wallet-method-title">USDT TRC-20</div>
+                      <div className="wallet-method-title">
+                        {isEN ? "Withdraw via USDT TRC-20" : "Вывод через USDT TRC-20"}
+                      </div>
+                      <div className="wallet-method-sub">TRON Network</div>
                     </button>
 
                     <button
@@ -3283,7 +3318,10 @@ const handleWithdrawSubmit = async () => {
                         setWalletForm((p) => ({ ...p, method: "paypal" }))
                       }
                     >
-                      <div className="wallet-method-title">PayPal</div>
+                      <div className="wallet-method-title">
+                        {isEN ? "Withdraw via PayPal" : "Вывод через PayPal"}
+                      </div>
+                      <div className="wallet-method-sub">Global payments</div>
                     </button>
 
                     <button
@@ -3298,9 +3336,12 @@ const handleWithdrawSubmit = async () => {
                       <div className="wallet-method-title">
                         {isEN ? "Via support" : "Через техподдержку"}
                       </div>
+                      <div className="wallet-method-sub">
+                        {isEN ? "Manager help" : "Менеджер поможет"}
+                      </div>
                     </button>
 
-                    {/* если выбран support — показываем только кнопку в ТП */}
+                    {/* Логика кнопок "Далее" или "Саппорт" */}
                     {walletForm.method === "support" ? (
                       <div style={{ marginTop: 12 }}>
                         <div className="warning-text">
