@@ -1913,6 +1913,39 @@ const handleCancelWithdrawal = async (id, dbId) => {
   }
 };
 
+// ... после handleCancelWithdrawal ...
+
+const handleCancelDeposit = async (id, dbId) => {
+  // Оптимистично удаляем из локального списка, чтобы исчезло мгновенно
+  setWalletHistory(prev => prev.filter(item => item.id !== id));
+
+  try {
+    // Удаляем заявку из базы данных (таблица topups)
+    const { error } = await supabase.from("topups").delete().eq("id", dbId);
+    
+    if (error) throw error;
+
+    setToast({ 
+      type: "success", 
+      text: isEN ? "Deposit request cancelled" : "Заявка на пополнение отменена" 
+    });
+    
+    // Если мы были на экране "ожидания", сбрасываем его
+    if (walletModal === "deposit" && depositStep === 3) {
+        resetDepositFlow();
+        setWalletModal(null);
+    }
+  } catch (e) {
+    console.error("Error cancelling deposit:", e);
+    setToast({ 
+      type: "error", 
+      text: isEN ? "Failed to cancel" : "Не удалось отменить" 
+    });
+    // Если ошибка - перезагружаем данные, чтобы вернуть запись
+    loadWalletDataFromSupabase();
+  }
+};
+
 const resetDepositFlow = () => {
   setDepositStep(1);
   setDepositAmount("");
@@ -2727,15 +2760,11 @@ const handleWithdrawSubmit = async () => {
             );
 
             const isWithdraw = e.type === "withdraw";
-            const isDeposit = e.type === "deposit";
+            // const isDeposit = e.type === "deposit"; // уже не обязательно
 
             const isPending = e.status === "pending";
             const isRejected = e.status === "rejected";
-            const isApproved = e.status === "approved";
-            const isDone = e.status === "done";
-
-            const pendingWithdraw =
-              isWithdraw && (!e.status || e.status === "pending");
+            const isDone = e.status === "done" || e.status === "approved";
 
             const rowClass =
               "history-row " +
@@ -2745,21 +2774,22 @@ const handleWithdrawSubmit = async () => {
             let sign = isWithdraw ? "-" : "+";
             let amountClass = "history-amount ";
 
-            if (pendingWithdraw) {
-              // вывод в обработке — оранжевая сумма без знака
-              sign = "";
-              amountClass += "pending";
+            // Логика цветов суммы
+            if (isPending) {
+               // Желтый цвет и без знака, пока ждем
+               sign = "";
+               amountClass += "pending";
             } else if (isWithdraw) {
-              amountClass += "negative";
+               amountClass += "negative";
             } else {
-              if (isRejected) {
+               // Deposit approved
+               amountClass += "positive";
+            }
+            
+            // Если отклонено
+            if (isRejected) {
                 sign = "×";
-                amountClass += "rejected";
-              } else if (isPending) {
-                amountClass += "pending";
-              } else {
-                amountClass += "positive";
-              }
+                amountClass = "history-amount rejected";
             }
 
             return (
@@ -2767,34 +2797,19 @@ const handleWithdrawSubmit = async () => {
                 <div className="history-main">
                   <div className="history-type">
                     {isWithdraw
-                      ? isEN
-                        ? "Withdrawal"
-                        : "Вывод средств"
-                      : isEN
-                      ? "Deposit"
-                      : "Пополнение"}
+                      ? isEN ? "Withdrawal" : "Вывод средств"
+                      : isEN ? "Deposit" : "Пополнение"}
                     {" · "}
                     {methodLabel(e.method)}
-                    {/* статусы только для вывода, для пополнений убраны */}
-                    {isWithdraw && isDone && (
-                      <span
-                        style={{
-                          color: "#ef4444",
-                          fontSize: 10,
-                          marginLeft: 4,
-                        }}
-                      >
+                    
+                    {/* Статусы текстом */}
+                    {isDone && (
+                      <span style={{ color: isWithdraw ? "#ef4444" : "#22c55e", fontSize: 10, marginLeft: 4 }}>
                         {isEN ? "(completed)" : "(исполнен)"}
                       </span>
                     )}
-                    {isWithdraw && pendingWithdraw && (
-                      <span
-                        style={{
-                          color: "#fbbf24",
-                          fontSize: 10,
-                          marginLeft: 4,
-                        }}
-                      >
+                    {isPending && (
+                      <span style={{ color: "#fbbf24", fontSize: 10, marginLeft: 4 }}>
                         {isEN ? "(processing)" : "(обработка)"}
                       </span>
                     )}
@@ -2812,15 +2827,23 @@ const handleWithdrawSubmit = async () => {
                     {currencyCode}
                   </div>
 
-                  {pendingWithdraw && (
+                  {/* КНОПКА ОТМЕНЫ (ДЛЯ ВСЕХ PENDING) */}
+                  {isPending && (
                     <button
                       className="cancel-btn"
-                      onClick={() => {
+                      onClick={(evt) => {
+                        evt.stopPropagation(); // чтобы клик не проваливался
                         const idStr = String(e.id);
-                        const dbId = idStr.startsWith("wd-")
-                          ? idStr.replace("wd-", "")
-                          : idStr;
-                        handleCancelWithdrawal(e.id, dbId);
+                        
+                        if (isWithdraw) {
+                            // Логика отмены вывода
+                            const dbId = idStr.startsWith("wd-") ? idStr.replace("wd-", "") : idStr;
+                            handleCancelWithdrawal(e.id, dbId);
+                        } else {
+                            // Логика отмены пополнения
+                            const dbId = idStr.startsWith("topup-") ? idStr.replace("topup-", "") : e.topupId;
+                            handleCancelDeposit(e.id, dbId);
+                        }
                       }}
                     >
                       {isEN ? "Cancel" : "Отменить"}
@@ -3664,15 +3687,22 @@ const renderHistory = () => {
   })}{" "}
   {currencyCode}
 </div>
-                  {pendingWithdraw && (
+                  {isPending && (
                     <button
                       className="cancel-btn"
-                      onClick={() => {
+                      onClick={(evt) => {
+                        evt.stopPropagation();
                         const idStr = String(e.id);
-                        const dbId = idStr.startsWith("wd-")
-                          ? idStr.replace("wd-", "")
-                          : idStr;
-                        handleCancelWithdrawal(e.id, dbId);
+                        const isWd = e.type === "withdraw";
+                        
+                        if (isWd) {
+                            const dbId = idStr.startsWith("wd-") ? idStr.replace("wd-", "") : idStr;
+                            handleCancelWithdrawal(e.id, dbId);
+                        } else {
+                            // Тут аккуратно с ID, в renderHistory мы формировали id как topup-ID
+                            const dbId = idStr.startsWith("topup-") ? idStr.replace("topup-", "") : e.topupId;
+                            handleCancelDeposit(e.id, dbId);
+                        }
                       }}
                     >
                       {isEN ? "Cancel" : "Отменить"}
