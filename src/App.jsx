@@ -3209,6 +3209,13 @@ const handleWithdrawSubmit = async () => {
                         )}
                       </div>
                     )}
+					
+					{/* --- НАЧАЛО ВСТАВКИ --- */}
+                    {depositError && (
+                      <div className="wallet-modal-note error" style={{ marginTop: 10, textAlign: 'center' }}>
+                        {depositError}
+                      </div>
+                    )}
 
                     <div className="wallet-modal-actions">
                       <button
