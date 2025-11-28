@@ -91,9 +91,10 @@ function FoxBackground() {
       <div className="fox-bg-noise" />
       <div className="fox-bg-glow fox-bg-glow-top" />
       <div className="fox-bg-glow fox-bg-glow-bottom" />
-      <div className="fox-bg-orbit fox-bg-orbit-1" />
+      <div className="fox-bg-orbit fox-bg-orbit-1">
+        <div className="fox-bg-grid" />
+      </div>
       <div className="fox-bg-orbit fox-bg-orbit-2" />
-      <div className="fox-bg-grid" />
     </div>
   );
 }
