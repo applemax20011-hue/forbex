@@ -320,7 +320,6 @@ function App() {
   const [paymentTimer, setPaymentTimer] = useState(900); // 15 минут
     // Telegram WebApp
   const [telegramId, setTelegramId] = useState(null);
-  const [telegramError, setTelegramError] = useState("");
 
   // файл чека (не только имя)
     // файл чека (не только имя)
@@ -338,6 +337,8 @@ function App() {
   const [selectedSymbol, setSelectedSymbol] = useState("BTC");
   const [chartDirection, setChartDirection] = useState("idle");
   const [chartScenario, setChartScenario] = useState("idle");
+  const [chartTimeframe, setChartTimeframe] = useState("4H"); // 1M | 15M | 1H | 4H | 1D
+
 
 // база = реальная история, chartPoints = база + сценарий
   const [baseChartPoints, setBaseChartPoints] = useState([]);
@@ -796,27 +797,42 @@ useEffect(() => {
     return arr;
   };
 
-// подгружаем историю цены для графика (CoinGecko)
-// подгружаем историю цены для графика (CoinMarketCap)
-// подгружаем историю цены для графика (CoinMarketCap)
-// пока НЕТ активной сделки — график реальный.
-// когда сделка идёт (activeTrade != null) — график не трогаем.
 useEffect(() => {
-  // если есть активная сделка — не перезаписываем график из API
-  if (activeTrade) {
-    return;
-  }
+  // если есть активная сделка — не трогаем график
+  if (activeTrade) return;
 
   async function fetchHistoryCMC() {
-    const symbol = selectedSymbol; // BTC / ETH / ...
+    const symbol = selectedSymbol;
 
     try {
       const now = Math.floor(Date.now() / 1000);
-      const hourAgo = now - 60 * 60;
+
+      // подбираем длину диапазона по выбранному таймфрейму
+      let rangeSeconds;
+      switch (chartTimeframe) {
+        case "1M":
+          rangeSeconds = 60 * 15;        // 15 минут
+          break;
+        case "15M":
+          rangeSeconds = 60 * 60;        // 1 час
+          break;
+        case "1H":
+          rangeSeconds = 60 * 60 * 4;    // 4 часа
+          break;
+        case "1D":
+          rangeSeconds = 60 * 60 * 24;   // сутки
+          break;
+        case "4H":
+        default:
+          rangeSeconds = 60 * 60 * 12;   // 12 часов (по умолчанию)
+          break;
+      }
+
+      const timeStart = now - rangeSeconds;
 
       const res = await fetch(
         `/cmc-api/v1/cryptocurrency/ohlcv/historical?symbol=${symbol}` +
-          `&convert=USD&time_start=${hourAgo}&time_end=${now}&time_period=hourly&interval=5m`,
+          `&convert=USD&time_start=${timeStart}&time_end=${now}&time_period=hourly&interval=5m`,
         {
           headers: {
             "X-CMC_PRO_API_KEY": import.meta.env.VITE_CMC_API_KEY,
@@ -848,7 +864,6 @@ useEffect(() => {
         last = buildFallbackHistory();
       }
 
-      // здесь мы обновляем базовую реальную историю и текущий график
       setBaseChartPoints(last);
       setChartScenario("idle");
       setChartProgress(1);
@@ -864,7 +879,7 @@ useEffect(() => {
   }
 
   fetchHistoryCMC();
-}, [selectedSymbol, activeTrade]);
+}, [selectedSymbol, activeTrade, chartTimeframe]);
 
 useEffect(() => {
     if (!toast) return;
@@ -1887,34 +1902,6 @@ const resetDepositFlow = () => {
   }));
 };
 
-    const handleDepositNext = () => {
-    const minAmount = settings.currency === "RUB" ? 1000 : 10;
-    const raw = depositAmount.toString().replace(",", ".");
-    const amountNum = parseFloat(raw);
-
-    if (Number.isNaN(amountNum) || amountNum <= 0) {
-      setDepositError(
-        settings.currency === "RUB"
-          ? "Введите сумму пополнения в рублях."
-          : "Введите сумму пополнения в USD."
-      );
-      return;
-    }
-
-    if (amountNum < minAmount) {
-      setDepositError(
-        settings.currency === "RUB"
-          ? `Минимальная сумма пополнения — ${minAmount} RUB`
-          : `Minimum deposit is ${minAmount} USD`
-      );
-      return;
-    }
-
-    setDepositError("");
-    setDepositAmount(amountNum);
-    setDepositStep(2);
-  };
-
 const handleDepositSendReceipt = async () => {
   const amountNum = Number(depositAmount);
 
@@ -2175,7 +2162,14 @@ const renderTrade = () => {
   const multipliers = [2, 5, 10];
   const durations = [10, 30, 60];
 
-  // подпись под графиком — можно оставить, но основное теперь линия
+  const timeframes = [
+    { id: "1M", label: "1М" },
+    { id: "15M", label: "15М" },
+    { id: "1H", label: "1Ч" },
+    { id: "4H", label: "4Ч" },
+    { id: "1D", label: "1Д" },
+  ];
+
   const chartLabel =
     scenario === "idle"
       ? isEN
@@ -2221,279 +2215,273 @@ const renderTrade = () => {
           </p>
         </div>
         <div className="trade-layout">
-          {/* Левая часть: наш фейковый график */}
-<div className="trade-chart-card">
-  <div className="trade-chart-header">
-    <div className="trade-pair">
-      {currentCoin.symbol}/USDT
-      <span className="pair-tag">
-        {isEN ? "Chart" : "График"}
-      </span>
-    </div>
-    <div className="trade-price">
-      {currentCoin.price.toLocaleString("ru-RU", {
-        minimumFractionDigits: currentCoin.price < 1 ? 2 : 0,
-      })}{" "}
-      $
-    </div>
-  </div>
-
-  {/* наш рисованный график */}
-  <div className={`fake-chart chart-${scenario}`}>
-    <ScenarioLightweightChart
-      points={chartPoints}
-      scenario={scenario}
-      progress={activeTrade ? chartProgress : 1}
-    />
-    <div className="fake-chart-grid" />
-    <div className="fake-chart-label">{chartLabel}</div>
-  </div>
-
-  <div className="trade-timeframe-row">
-    {["1М", "15М", "1Ч", "4Ч", "1Д"].map((tf, i) => (
-      <button
-        key={tf}
-        className={"tf-pill " + (i === 3 ? "tf-pill-active" : "")}
-        type="button"
-      >
-        {tf}
-      </button>
-    ))}
-  </div>
-</div>
-            {/* Правая часть: форма сделки */}
-            <div className="trade-side">
-              {/* выбор монеты */}
-              <div className="trade-param-row">
-                <div className="trade-input-label">
-                  {isEN ? "Asset" : "Актив для торговли"}
-                </div>
-                <div className="trade-coin-buttons">
-                  {coins.slice(0, 10).map((coin) => (
-                    <button
-                      key={coin.symbol}
-                      type="button"
-                      className={
-                        "trade-coin-btn " +
-                        (selectedSymbol === coin.symbol ? "active" : "")
-                      }
-                      onClick={() => setSelectedSymbol(coin.symbol)}
-                    >
-                      {coin.symbol}
-                    </button>
-                  ))}
-                </div>
+          {/* Левая часть: график */}
+          <div className="trade-chart-card">
+            <div className="trade-chart-header">
+              <div className="trade-pair">
+                {currentCoin.symbol}/USDT
+                <span className="pair-tag">
+                  {isEN ? "Chart" : "График"}
+                </span>
               </div>
-
-              {/* сумма инвестиций */}
-              <div className="trade-param-row">
-                <div className="trade-input-label">
-                  {isEN
-                    ? "Investment amount"
-                    : "Сумма инвестиций"}
-                </div>
-                <div className="trade-input-with-suffix">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={tradeForm.amount}
-                    onChange={(e) =>
-                      handleTradeInput("amount", e.target.value)
-                    }
-                    placeholder={
-                      settings.currency === "RUB"
-                        ? "Например, 1000"
-                        : "For example, 20"
-                    }
-                  />
-                  <span className="trade-input-suffix">
-  {currencyCode}
-</span>
-                </div>
-                <div className="trade-hint">
-                  {isEN
-                    ? `Minimum investment — ${minInvest} ${
-                        settings.currency === "RUB" ? "RUB" : "USD"
-                      }.`
-                    : `Минимальная сумма инвестиций — ${minInvest} ${
-                        settings.currency === "RUB" ? "₽" : "USD"
-                      }.`}
-                </div>
+              <div className="trade-price">
+                {currentCoin.price.toLocaleString("ru-RU", {
+                  minimumFractionDigits: currentCoin.price < 1 ? 2 : 0,
+                })}{" "}
+                $
               </div>
+            </div>
 
-              {/* направление */}
-              <div className="trade-param-row">
-                <div className="trade-input-label">
-                  {isEN
-                    ? "Where will the price go?"
-                    : "Куда пойдёт курс актива?"}
-                </div>
-                <div className="trade-direction-row">
-                  <button
-                    type="button"
-                    className={
-                      "trade-direction-btn " +
-                      (tradeForm.direction === "up" ? "active" : "")
-                    }
-                    onClick={() => handleTradeInput("direction", "up")}
-                  >
-                    ⬆{" "}
-                    {isEN
-                      ? "Up (LONG)"
-                      : "Вверх (покупка)"}
-                  </button>
-                  <button
-                    type="button"
-                    className={
-                      "trade-direction-btn " +
-                      (tradeForm.direction === "flat" ? "active" : "")
-                    }
-                    onClick={() => handleTradeInput("direction", "flat")}
-                  >
-                    ↔{" "}
-                    {isEN
-                      ? "No change"
-                      : "Не изменится"}
-                  </button>
-                  <button
-                    type="button"
-                    className={
-                      "trade-direction-btn " +
-                      (tradeForm.direction === "down" ? "active" : "")
-                    }
-                    onClick={() => handleTradeInput("direction", "down")}
-                  >
-                    ⬇{" "}
-                    {isEN
-                      ? "Down (SHORT)"
-                      : "Вниз (продажа)"}
-                  </button>
-                </div>
-                <div className="trade-hint">
-                  {isEN
-                    ? "If you choose “no change”, you win when the chart stays almost on the same level."
-                    : "Если выберете «Не изменится», вы выигрываете, если график остаётся примерно на одном уровне."}
-                </div>
-              </div>
+            <div className={`fake-chart chart-${scenario}`}>
+              <ScenarioLightweightChart
+                points={chartPoints}
+                scenario={scenario}
+                progress={activeTrade ? chartProgress : 1}
+              />
+              <div className="fake-chart-grid" />
+              <div className="fake-chart-label">{chartLabel}</div>
+            </div>
 
-              {/* коэффициент */}
-              <div className="trade-param-row">
-                <div className="trade-input-label">
-                  {isEN
-                    ? "Multiplier"
-                    : "Коэффициент (x)"}
-                </div>
-                <div className="trade-multiplier-row">
-                  {multipliers.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className={
-                        "trade-mult-btn " +
-                        (tradeForm.multiplier === m ? "active" : "")
-                      }
-                      onClick={() => handleTradeInput("multiplier", m)}
-                    >
-                      x{m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* время ожидания */}
-              <div className="trade-param-row">
-                <div className="trade-input-label">
-                  {isEN
-                    ? "Waiting time"
-                    : "Время ожидания"}
-                </div>
-                <div className="trade-duration-row">
-                  {durations.map((sec) => (
-                    <button
-                      key={sec}
-                      type="button"
-                      className={
-                        "trade-duration-btn " +
-                        (tradeForm.duration === sec ? "active" : "")
-                      }
-                      onClick={() => handleTradeInput("duration", sec)}
-                    >
-                      {sec}{" "}
-                      {isEN ? "sec" : "сек"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* ошибка валидации */}
-              {tradeError && (
-                <div className="trade-error">{tradeError}</div>
-              )}
-
-              {/* активная сделка / кнопка открыть */}
-              {activeTrade ? (
-                <div className="trade-active-panel">
-                  <div className="trade-active-title">
-                    {isEN
-                      ? "Trade in progress"
-                      : "Сделка в процессе"}
-                  </div>
-                  <div className="trade-active-row">
-                    <span>
-                      {currentCoin.symbol}/USDT ·{" "}
-                      {activeTrade.direction === "up"
-                        ? isEN
-                          ? "Up"
-                          : "Вверх"
-                        : activeTrade.direction === "down"
-                        ? isEN
-                          ? "Down"
-                          : "Вниз"
-                        : isEN
-                        ? "No change"
-                        : "Не изменится"}{" "}
-                      · x{activeTrade.multiplier}
-                    </span>
-                    <span className="trade-active-countdown">
-                      {formatTimer(tradeCountdown)}
-                    </span>
-                  </div>
-                  <div className="trade-hint">
-                    {isEN
-                      ? "When the timer ends, the platform will calculate the result automatically."
-                      : "Когда таймер дойдёт до нуля, платформа автоматически посчитает результат сделки."}
-                  </div>
-                </div>
-              ) : (
+            {/* ТАЙМФРЕЙМЫ – теперь активные */}
+            <div className="trade-timeframe-row">
+              {timeframes.map((tf) => (
                 <button
+                  key={tf.id}
                   type="button"
-                  className="trade-start-btn"
-                  onClick={handleStartTrade}
-                >
-                  {isEN ? "Open trade" : "Открыть сделку"}
-                </button>
-              )}
-
-              {/* результат последней сделки */}
-              {lastTradeResult && !activeTrade && (
-                <div
                   className={
-                    "trade-result " +
-                    (lastTradeResult.status === "win"
-                      ? "win"
-                      : "lose")
+                    "tf-pill " +
+                    (chartTimeframe === tf.id ? "tf-pill-active" : "")
                   }
+                  onClick={() => setChartTimeframe(tf.id)}
                 >
-                  {lastTradeResult.message}
-                </div>
-              )}
+                  {tf.label}
+                </button>
+              ))}
             </div>
           </div>
-        </section>
-      </>
-    );
-  };
+
+          {/* Правая часть: форма сделки */}
+          <div className="trade-side">
+            {/* выбор монеты */}
+            <div className="trade-param-row">
+              <div className="trade-input-label">
+                {isEN ? "Asset" : "Актив для торговли"}
+              </div>
+              <div className="trade-coin-buttons">
+                {coins.slice(0, 10).map((coin) => (
+                  <button
+                    key={coin.symbol}
+                    type="button"
+                    className={
+                      "trade-coin-btn " +
+                      (selectedSymbol === coin.symbol ? "active" : "")
+                    }
+                    onClick={() => setSelectedSymbol(coin.symbol)}
+                  >
+                    {coin.symbol}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* сумма инвестиций */}
+            <div className="trade-param-row">
+              <div className="trade-input-label">
+                {isEN
+                  ? "Investment amount"
+                  : "Сумма инвестиций"}
+              </div>
+              <div className="trade-input-with-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={tradeForm.amount}
+                  onChange={(e) =>
+                    handleTradeInput("amount", e.target.value)
+                  }
+                  placeholder={
+                    settings.currency === "RUB"
+                      ? "Например, 1000"
+                      : "For example, 20"
+                  }
+                />
+                <span className="trade-input-suffix">
+                  {currencyCode}
+                </span>
+              </div>
+              <div className="trade-hint">
+                {isEN
+                  ? `Minimum investment — ${minInvest} ${
+                      settings.currency === "RUB" ? "RUB" : "USD"
+                    }.`
+                  : `Минимальная сумма инвестиций — ${minInvest} ${
+                      settings.currency === "RUB" ? "₽" : "USD"
+                    }.`}
+              </div>
+            </div>
+
+            {/* направление */}
+            <div className="trade-param-row">
+              <div className="trade-input-label">
+                {isEN
+                  ? "Where will the price go?"
+                  : "Куда пойдёт курс актива?"}
+              </div>
+              <div className="trade-direction-row">
+                <button
+                  type="button"
+                  className={
+                    "trade-direction-btn " +
+                    (tradeForm.direction === "up" ? "active" : "")
+                  }
+                  onClick={() => handleTradeInput("direction", "up")}
+                >
+                  ⬆{" "}
+                  {isEN
+                    ? "Up (LONG)"
+                    : "Вверх (покупка)"}
+                </button>
+                <button
+                  type="button"
+                  className={
+                    "trade-direction-btn " +
+                    (tradeForm.direction === "flat" ? "active" : "")
+                  }
+                  onClick={() => handleTradeInput("direction", "flat")}
+                >
+                  ↔{" "}
+                  {isEN
+                    ? "No change"
+                    : "Не изменится"}
+                </button>
+                <button
+                  type="button"
+                  className={
+                    "trade-direction-btn " +
+                    (tradeForm.direction === "down" ? "active" : "")
+                  }
+                  onClick={() => handleTradeInput("direction", "down")}
+                >
+                  ⬇{" "}
+                  {isEN
+                    ? "Down (SHORT)"
+                    : "Вниз (продажа)"}
+                </button>
+              </div>
+            </div>
+
+            {/* коэффициент */}
+            <div className="trade-param-row">
+              <div className="trade-input-label">
+                {isEN
+                  ? "Multiplier"
+                  : "Коэффициент (x)"}
+              </div>
+              <div className="trade-multiplier-row">
+                {multipliers.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={
+                      "trade-mult-btn " +
+                      (tradeForm.multiplier === m ? "active" : "")
+                    }
+                    onClick={() => handleTradeInput("multiplier", m)}
+                  >
+                    x{m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* время ожидания */}
+            <div className="trade-param-row">
+              <div className="trade-input-label">
+                {isEN
+                  ? "Waiting time"
+                  : "Время ожидания"}
+              </div>
+              <div className="trade-duration-row">
+                {durations.map((sec) => (
+                  <button
+                    key={sec}
+                    type="button"
+                    className={
+                      "trade-duration-btn " +
+                      (tradeForm.duration === sec ? "active" : "")
+                    }
+                    onClick={() => handleTradeInput("duration", sec)}
+                  >
+                    {sec} {isEN ? "sec" : "сек"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ошибка */}
+            {tradeError && (
+              <div className="trade-error">{tradeError}</div>
+            )}
+
+            {/* активная сделка / кнопка */}
+            {activeTrade ? (
+              <div className="trade-active-panel">
+                <div className="trade-active-title">
+                  {isEN
+                    ? "Trade in progress"
+                    : "Сделка в процессе"}
+                </div>
+                <div className="trade-active-row">
+                  <span>
+                    {currentCoin.symbol}/USDT ·{" "}
+                    {activeTrade.direction === "up"
+                      ? isEN
+                        ? "Up"
+                        : "Вверх"
+                      : activeTrade.direction === "down"
+                      ? isEN
+                        ? "Down"
+                        : "Вниз"
+                      : isEN
+                      ? "No change"
+                      : "Не изменится"}{" "}
+                    · x{activeTrade.multiplier}
+                  </span>
+                  <span className="trade-active-countdown">
+                    {formatTimer(tradeCountdown)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="trade-start-btn"
+                onClick={handleStartTrade}
+              >
+                {isEN ? "Open trade" : "Открыть сделку"}
+              </button>
+            )}
+
+            {/* результат последней сделки */}
+            {lastTradeResult && !activeTrade && (
+              <div
+                className={
+                  "trade-result " +
+                  (lastTradeResult.status === "win"
+                    ? "win"
+                    : "lose")
+                }
+              >
+                {lastTradeResult.message}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+};
 
 const renderWallet = () => {
   const displayBalance = toDisplayCurrency(balance, settings.currency);
@@ -3440,213 +3428,6 @@ const handleWithdrawSubmit = async () => {
   );
 };
 
-{walletModal === "withdraw" && (
-  <>
-    <div className="wallet-modal-title">
-      {isEN ? "Withdraw" : "Вывод средств"}
-    </div>
-
-    {/* ШАГ 1: выбор метода вывода */}
-    {withdrawStep === 1 && (
-      <div className="wallet-methods">
-        <button
-          className={
-            "wallet-method-card " +
-            (walletForm.method === "card" ? "active" : "")
-          }
-          onClick={() =>
-            setWalletForm((p) => ({ ...p, method: "card" }))
-          }
-        >
-          <div className="wallet-method-title">
-            {isEN ? "Bank card" : "Банковская карта"}
-          </div>
-        </button>
-
-        <button
-          className={
-            "wallet-method-card " +
-            (walletForm.method === "usdt" ? "active" : "")
-          }
-          onClick={() =>
-            setWalletForm((p) => ({ ...p, method: "usdt" }))
-          }
-        >
-          <div className="wallet-method-title">USDT TRC-20</div>
-        </button>
-
-        <button
-          className={
-            "wallet-method-card " +
-            (walletForm.method === "paypal" ? "active" : "")
-          }
-          onClick={() =>
-            setWalletForm((p) => ({ ...p, method: "paypal" }))
-          }
-        >
-          <div className="wallet-method-title">PayPal</div>
-        </button>
-
-        <button
-          className={
-            "wallet-method-card " +
-            (walletForm.method === "support" ? "active" : "")
-          }
-          onClick={() =>
-            setWalletForm((p) => ({ ...p, method: "support" }))
-          }
-        >
-          <div className="wallet-method-title">
-            {isEN ? "Via support" : "Через техподдержку"}
-          </div>
-        </button>
-
-        {/* если выбран support — показываем только кнопку в ТП */}
-        {walletForm.method === "support" ? (
-          <div style={{ marginTop: 12 }}>
-            <div className="warning-text">
-              <span>💬</span>
-              <div>
-                {isEN
-                  ? "Withdrawal via technical support. Write to manager and he will help with details."
-                  : "Вывод через техническую поддержку. Напишите менеджеру, он поможет с реквизитами."}
-              </div>
-            </div>
-            <a
-              href="https://t.me/ForbexSupport"
-              target="_blank"
-              className="telegram-support-btn"
-              rel="noreferrer"
-            >
-              👨‍💻{" "}
-              {isEN ? "Support" : "Техподдержка"}
-            </a>
-          </div>
-        ) : (
-          <div className="wallet-modal-actions">
-            <button
-              className="wallet-modal-btn primary"
-              onClick={() => {
-                setDepositError("");
-                setWithdrawStep(2);
-              }}
-              disabled={!walletForm.method}
-            >
-              {isEN ? "Next" : "Далее"}
-            </button>
-          </div>
-        )}
-      </div>
-    )}
-
-    {/* ШАГ 2: сумма вывода */}
-    {withdrawStep === 2 && (
-      <div className="wallet-modal-input-group">
-        <label>
-          {isEN ? "Amount" : "Сумма вывода"} ({currencyCode})
-        </label>
-        <input
-          type="number"
-          value={walletForm.amount}
-          onChange={(e) =>
-            setWalletForm({
-              ...walletForm,
-              amount: e.target.value,
-            })
-          }
-          placeholder={
-            settings.currency === "RUB" ? "Min 1000" : "Min 10"
-          }
-        />
-        {depositError && (
-          <div className="wallet-modal-note error">
-            {depositError}
-          </div>
-        )}
-        <div className="wallet-modal-actions">
-          <button
-            className="wallet-modal-btn secondary"
-            onClick={() => {
-              setDepositError("");
-              setWithdrawStep(1);
-            }}
-          >
-            {isEN ? "Back" : "Назад"}
-          </button>
-          <button
-            className="wallet-modal-btn primary"
-            onClick={() => {
-              setDepositError("");
-              setWithdrawStep(3);
-            }}
-          >
-            {isEN ? "Next" : "Далее"}
-          </button>
-        </div>
-      </div>
-    )}
-
-    {/* ШАГ 3: реквизиты */}
-    {withdrawStep === 3 && (
-      <div className="wallet-modal-input-group">
-        <label>
-          {walletForm.method === "card"
-            ? isEN
-              ? "Card number"
-              : "Номер карты"
-            : walletForm.method === "usdt"
-            ? isEN
-              ? "USDT wallet (TRC-20)"
-              : "Кошелёк USDT (TRC-20)"
-            : walletForm.method === "paypal"
-            ? isEN
-              ? "PayPal email"
-              : "Email PayPal"
-            : isEN
-            ? "Payout details"
-            : "Реквизиты для вывода"}
-        </label>
-        <input
-          type="text"
-          value={withdrawDetails}
-          onChange={(e) => setWithdrawDetails(e.target.value)}
-          placeholder={
-            walletForm.method === "card"
-              ? "5555 0000 0000 0000"
-              : walletForm.method === "usdt"
-              ? "TRxA1bCDeFGhijkLmNoPqRS2tuvWXyZ123"
-              : walletForm.method === "paypal"
-              ? "name@example.com"
-              : ""
-          }
-        />
-        {depositError && (
-          <div className="wallet-modal-note error">
-            {depositError}
-          </div>
-        )}
-        <div className="wallet-modal-actions">
-          <button
-            className="wallet-modal-btn secondary"
-            onClick={() => {
-              setDepositError("");
-              setWithdrawStep(2);
-            }}
-          >
-            {isEN ? "Back" : "Назад"}
-          </button>
-          <button
-            className="wallet-modal-btn primary"
-            onClick={handleWithdrawSubmit}
-          >
-            {isEN ? "Create request" : "Создать заявку"}
-          </button>
-        </div>
-      </div>
-    )}
-  </>
-)}
-
 const renderHistory = () => {
   const methodLabel = (m) => {
     if (m === "card") return isEN ? "Bank card" : "Банковская карта";
@@ -3978,17 +3759,16 @@ const renderProfile = () => {
             <div className="profile-login">{user.login}</div>
             <div className="profile-email">{user.email}</div>
             <div
-              className="profile-created"
-              style={{
-                marginTop: "4px",
-                fontSize: "11px",
-                color: "#fde68a",
-              }}
-            >
-              {isEN
-                ? `On Forbex since ${getRegDateString()}`
-                : `На Forbex с ${getRegDateString()}`}
-            </div>
+  className="profile-created"
+  style={{
+    marginTop: "4px",
+    fontSize: "11px",
+  }}
+>
+  {isEN
+    ? `On Forbex since ${getRegDateString()}`
+    : `На Forbex с ${getRegDateString()}`}
+</div>
           </div>
         </div>
       </section>
