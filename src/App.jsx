@@ -2310,16 +2310,12 @@ const renderWallet = () => {
   
   const currentMethod = walletForm.method || "card";
   const isCard = currentMethod === "card";
-  const isUsdt = currentMethod === "usdt";
-  const isPaypal = currentMethod === "paypal";
   
-  // Функция обработки нажатия "Далее" при пополнении (переход 1 -> 2, 2 -> 3)
+  // Логика перехода по шагам (Метод -> Сумма -> Реквизиты)
   const handleDepositStep = () => {
       if (depositStep === 1) {
-          // Выбран метод, идем к сумме
-          setDepositStep(2);
+          setDepositStep(2); 
       } else if (depositStep === 2) {
-          // Введена сумма, проверяем и идем к реквизитам
           const minAmount = settings.currency === "RUB" ? 1000 : 10;
           const raw = depositAmount.toString().replace(",", ".");
           const amountNum = parseFloat(raw);
@@ -2331,6 +2327,242 @@ const renderWallet = () => {
           setDepositStep(3);
       }
   };
+
+  // Логика вывода
+  const handleWithdrawSubmit = async () => {
+      const raw = walletForm.amount.toString().replace(",", ".");
+      const amountNum = parseFloat(raw);
+      if (!amountNum || amountNum > balance) return;
+
+      const { error } = await supabase.from("wallet_withdrawals").insert({
+          user_tg_id: telegramId,
+          amount: amountNum,
+          method: walletForm.method,
+          status: "pending"
+      });
+
+      if (!error) {
+          setWalletModal(null);
+          setWithdrawStep(1);
+          setWalletForm({ amount: "", method: "card" });
+          loadWalletDataFromSupabase();
+          setToast({
+              type: "success",
+              text: isEN ? "Withdrawal request created" : "Заявка на вывод средств успешно создана"
+          });
+      }
+  };
+
+  return (
+    <>
+      <section className="section-block fade-in delay-1">
+        <div className="section-title">
+          <h2>{isEN ? "Wallet" : "Кошелёк"}</h2>
+        </div>
+        <div className="wallet-balance-card">
+          <div className="wallet-badge">{isEN ? "Main balance" : "Основной баланс"}</div>
+          <div className="wallet-amount">{formatBalance} {currencySymbol}</div>
+          <div className="wallet-actions-row">
+            <button className="wallet-action-btn primary" onClick={() => {
+                setWalletModal("deposit");
+                setDepositStep(1);
+                setDepositAmount("");
+            }}>
+              {isEN ? "Deposit" : "Пополнить"}
+            </button>
+            <button className="wallet-action-btn secondary" onClick={() => {
+                setWalletModal("withdraw");
+                setWithdrawStep(1);
+                setWalletForm({ ...walletForm, amount: "" });
+            }}>
+              {isEN ? "Withdraw" : "Вывести"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="section-block fade-in delay-2">
+        <div className="section-title">
+           <h2>{isEN ? "History" : "Последние операции"}</h2>
+        </div>
+        <div className="wallet-history-short">
+          {walletHistory.slice(0, 7).map((e) => {
+             const isWithdraw = e.type === "withdraw";
+             const isPendingWithdraw = isWithdraw && (!e.status || e.status === 'pending');
+             
+             // Красивое название метода
+             let methodName = e.method;
+             if (e.method === 'card') methodName = isEN ? "Bank card" : "Банковская карта";
+             if (e.method === 'usdt') methodName = "USDT TRC-20";
+             
+             return (
+               <div key={e.id} className="wallet-history-row">
+                 <div className="wallet-history-main">
+                   <div className="wallet-history-type">
+                     {isWithdraw ? (isEN ? "Withdrawal" : "Вывод") : (isEN ? "Deposit" : "Пополнение")}
+                     {" — "} {methodName}
+                     
+                     {/* Статусы */}
+                     {isWithdraw && e.status === 'done' && <span style={{color:'#ef4444', fontSize:10, marginLeft:4}}>({isEN ? "completed" : "исполнен"})</span>}
+                     {isWithdraw && isPendingWithdraw && <span style={{color:'#fbbf24', fontSize:10, marginLeft:4}}>({isEN ? "processing" : "обработка"})</span>}
+                     {!isWithdraw && e.status === 'approved' && <span style={{color:'#22c55e', fontSize:10, marginLeft:4}}>({isEN ? "approved" : "одобрено"})</span>}
+                     {!isWithdraw && e.status === 'rejected' && <span style={{color:'#ef4444', fontSize:10, marginLeft:4}}>({isEN ? "rejected" : "отклонено"})</span>}
+                     {!isWithdraw && e.status === 'pending' && <span style={{color:'#fbbf24', fontSize:10, marginLeft:4}}>({isEN ? "on review" : "на проверке"})</span>}
+                   </div>
+                   <div className="wallet-history-time">{formatDateTime(e.ts)}</div>
+                 </div>
+                 <div className="history-right" style={{textAlign: 'right'}}>
+                    <div className={"wallet-history-amount " + (isWithdraw ? "negative" : "positive")} 
+                         style={{color: isWithdraw ? '#ef4444' : '#22c55e'}}>
+                        {isWithdraw ? "-" : "+"}
+                        {toDisplayCurrency(e.amount, settings.currency).toLocaleString("ru-RU")} {currencySymbol}
+                    </div>
+                    {/* Кнопка отмены */}
+                    {isPendingWithdraw && (
+                        <button className="cancel-btn"
+                             onClick={() => handleCancelWithdrawal(e.id, e.id.replace('wd-', ''))}>
+                             {isEN ? "Cancel" : "Отменить"}
+                        </button>
+                    )}
+                 </div>
+               </div>
+             )
+          })}
+        </div>
+      </section>
+
+      {/* МОДАЛКИ */}
+      {walletModal && (
+        <div className="wallet-modal-backdrop" onClick={() => setWalletModal(null)}>
+          <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
+            
+            {/* === ПОПОЛНЕНИЕ === */}
+            {walletModal === "deposit" && (
+                <>
+                   <div className="wallet-modal-title">{isEN ? "Deposit" : "Пополнение"}</div>
+                   
+                   {/* Шаг 1: Метод */}
+                   {depositStep === 1 && (
+                       <div className="wallet-methods">
+                           <button className={"wallet-method-card " + (walletForm.method === "card" ? "active" : "")}
+                                   onClick={() => setWalletForm(p => ({...p, method: 'card'}))}>
+                               <div className="wallet-method-title">{isEN ? "Bank card" : "Банковская карта"}</div>
+                               <div className="wallet-method-sub">VISA / MasterCard / МИР</div>
+                           </button>
+                           <button className={"wallet-method-card " + (walletForm.method === "usdt" ? "active" : "")}
+                                   onClick={() => setWalletForm(p => ({...p, method: 'usdt'}))}>
+                               <div className="wallet-method-title">USDT TRC-20</div>
+                               <div className="wallet-method-sub">TRON Network</div>
+                           </button>
+                           <button className={"wallet-method-card " + (walletForm.method === "support" ? "active" : "")}
+                                   onClick={() => setWalletForm(p => ({...p, method: 'support'}))}>
+                               <div className="wallet-method-title">{isEN ? "Via support" : "Через поддержку"}</div>
+                               <div className="wallet-method-sub">{isEN ? "Manager help" : "Менеджер поможет"}</div>
+                           </button>
+                           
+                           <div className="wallet-modal-actions">
+                               <button className="wallet-modal-btn primary" onClick={handleDepositStep}>{isEN ? "Next" : "Далее"}</button>
+                           </div>
+                       </div>
+                   )}
+
+                   {/* Шаг 2: Сумма */}
+                   {depositStep === 2 && (
+                       <div className="wallet-modal-input-group">
+                           <label>{isEN ? "Enter amount" : "Введите сумму"} ({currencySymbol})</label>
+                           <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="1000" />
+                           {depositError && <div className="wallet-modal-note error">{depositError}</div>}
+                           <div className="wallet-modal-actions">
+                               <button className="wallet-modal-btn secondary" onClick={() => setDepositStep(1)}>{isEN ? "Back" : "Назад"}</button>
+                               <button className="wallet-modal-btn primary" onClick={handleDepositStep}>{isEN ? "Next" : "Далее"}</button>
+                           </div>
+                       </div>
+                   )}
+
+                   {/* Шаг 3: Реквизиты и Чек */}
+                   {depositStep === 3 && (
+                       <>
+                         <div className="payment-details">
+                            {isCard && (
+                                <>
+                                    <div className="payment-row"><div className="payment-label">{isEN ? "Card" : "Карта"}</div><div className="payment-value">5555 0000 0000 0000</div></div>
+                                    <div className="payment-row"><div className="payment-label">{isEN ? "Bank" : "Банк"}</div><div className="payment-value">Tinkoff</div></div>
+                                </>
+                            )}
+                            
+                            <div className="warning-text">
+                                <span>⚠️</span>
+                                <div>{isEN ? "Balance is credited automatically within 5 minutes." : "Баланс зачисляется автоматически в течение 5 минут. Если средства не пришли — пишите в поддержку."}</div>
+                            </div>
+                            
+                            <a href="https://t.me/ForbexSupport" target="_blank" className="telegram-support-btn">
+                                👨‍💻 {isEN ? "Support" : "Тех. Поддержка"}
+                            </a>
+                         </div>
+                         
+                         {walletForm.method !== 'support' && (
+                             <div className="payment-upload">
+                                <label className="upload-btn">
+                                    <input type="file" onChange={e => { setReceiptFile(e.target.files[0]); setReceiptFileName(e.target.files[0].name); }} />
+                                    <span>{isEN ? "Attach Receipt" : "Прикрепить чек"}</span>
+                                </label>
+                                {receiptFileName && <div className="upload-filename">{receiptFileName}</div>}
+                             </div>
+                         )}
+                         
+                         <div className="wallet-modal-actions">
+                            <button className="wallet-modal-btn secondary" onClick={() => setDepositStep(2)}>{isEN ? "Back" : "Назад"}</button>
+                            <button className="wallet-modal-btn primary" onClick={handleDepositSendReceipt} disabled={!receiptFile && walletForm.method !== 'support'}>
+                                {isSendingReceipt ? (isEN ? "Sending..." : "Отправка...") : (isEN ? "I paid" : "Я оплатил")}
+                            </button>
+                         </div>
+                       </>
+                   )}
+                </>
+            )}
+
+            {/* === ВЫВОД (3 шага) === */}
+            {walletModal === "withdraw" && (
+                <>
+                    <div className="wallet-modal-title">{isEN ? "Withdraw" : "Вывод средств"}</div>
+                    
+                    {/* Шаг 1: Метод */}
+                    {withdrawStep === 1 && (
+                        <div className="wallet-methods">
+                            <button className={"wallet-method-card " + (walletForm.method === "card" ? "active" : "")}
+                                    onClick={() => setWalletForm(p => ({...p, method: 'card'}))}>
+                                <div className="wallet-method-title">{isEN ? "Bank card" : "Банковская карта"}</div>
+                            </button>
+                            <button className={"wallet-method-card " + (walletForm.method === "usdt" ? "active" : "")}
+                                    onClick={() => setWalletForm(p => ({...p, method: 'usdt'}))}>
+                                <div className="wallet-method-title">USDT TRC-20</div>
+                            </button>
+                            <div className="wallet-modal-actions">
+                                <button className="wallet-modal-btn primary" onClick={() => setWithdrawStep(2)}>{isEN ? "Next" : "Далее"}</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Шаг 2: Сумма */}
+                    {withdrawStep === 2 && (
+                       <div className="wallet-modal-input-group">
+                           <label>{isEN ? "Amount" : "Сумма вывода"}</label>
+                           <input type="number" value={walletForm.amount} onChange={e => setWalletForm({...walletForm, amount: e.target.value})} placeholder="Min 1000" />
+                           <div className="wallet-modal-actions">
+                               <button className="wallet-modal-btn secondary" onClick={() => setWithdrawStep(1)}>{isEN ? "Back" : "Назад"}</button>
+                               <button className="wallet-modal-btn primary" onClick={handleWithdrawSubmit}>{isEN ? "Create request" : "Создать заявку"}</button>
+                           </div>
+                       </div>
+                    )}
+                </>
+            )}
+
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
 
   // Функция вывода (создание заявки)
   const handleWithdrawSubmit = async () => {
@@ -2761,25 +2993,73 @@ const renderHistory = () => {
 const renderProfile = () => {
   if (!user) return null;
 
+  // Форматируем дату регистрации: "28.11.2025 в 03:53"
+  const getRegDateString = () => {
+    try {
+      const date = new Date(user.createdAt || Date.now());
+      const dateStr = date.toLocaleDateString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+      const timeStr = date.toLocaleTimeString("ru-RU", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      
+      return isEN 
+        ? `${dateStr} at ${timeStr}` 
+        : `${dateStr} в ${timeStr}`;
+    } catch {
+      return "...";
+    }
+  };
+
   return (
     <>
+      {/* Карточка профиля */}
       <section className="section-block fade-in delay-1">
         <div className="profile-card">
-          {/* Используем аватарку, если есть */}
           <div className="profile-avatar">
             {userAvatarUrl ? (
-                <img src={userAvatarUrl} alt="Avatar" className="profile-avatar-img" />
+              // Если есть фото из Телеграма
+              <img 
+                src={userAvatarUrl} 
+                alt="Avatar" 
+                className="profile-avatar-img" 
+              />
             ) : (
-                "🦊"
+              // Если нет фото — показываем букву на фоне
+              <div style={{
+                width: "100%", 
+                height: "100%", 
+                background: "linear-gradient(135deg, #f97316, #c2410c)", 
+                display: "flex", 
+                alignItems: "center", 
+                justifyContent: "center", 
+                fontWeight: "bold", 
+                color: "#fff",
+                fontSize: "20px",
+                borderRadius: "16px"
+              }}>
+                {(user.login?.[0] || "U").toUpperCase()}
+              </div>
             )}
           </div>
+          
           <div className="profile-main">
             <div className="profile-login">{user.login}</div>
             <div className="profile-email">{user.email}</div>
+            <div className="profile-created" style={{ marginTop: "4px", fontSize: "11px", color: "#fde68a" }}>
+              {isEN 
+                ? `On Forbex since ${getRegDateString()}` 
+                : `На Forbex с ${getRegDateString()}`}
+            </div>
           </div>
         </div>
       </section>
 
+      {/* Кнопка поддержки и смены пароля */}
       <section className="section-block fade-in delay-2">
          <a href="https://t.me/ForbexSupport" target="_blank" className="telegram-support-btn">
              💎 Связь с тех.поддержкой
@@ -2792,17 +3072,55 @@ const renderProfile = () => {
          </div>
       </section>
 
-      {/* Настройки (оставляем как были, они ок) */}
-      {/* ... settings block ... */}
-      
-       <section className="section-block fade-in delay-4">
+      {/* Настройки языка и валюты */}
+      <section className="section-block fade-in delay-3">
+        <div className="section-title">
+          <h2>{isEN ? "Settings" : "Настройки"}</h2>
+        </div>
+        <div className="settings-block">
+             <div className="settings-row">
+                <div className="settings-label">{isEN ? "Language" : "Язык интерфейса"}</div>
+                <div className="settings-chips">
+                  <button className={"settings-chip " + (settings.language === "ru" ? "active" : "")} onClick={() => updateSettings({ language: "ru" })}>🇷🇺 Русский</button>
+                  <button className={"settings-chip " + (settings.language === "en" ? "active" : "")} onClick={() => updateSettings({ language: "en" })}>🇺🇸 English</button>
+                </div>
+             </div>
+             <div className="settings-row">
+                <div className="settings-label">{isEN ? "Currency" : "Валюта"}</div>
+                <div className="settings-chips">
+                  <button className={"settings-chip " + (settings.currency === "RUB" ? "active" : "")} onClick={() => updateSettings({ currency: "RUB" })}>₽ RUB</button>
+                  <button className={"settings-chip " + (settings.currency === "USD" ? "active" : "")} onClick={() => updateSettings({ currency: "USD" })}>$ USD</button>
+                </div>
+             </div>
+        </div>
+      </section>
+
+      {/* Кнопка выхода */}
+      <section className="section-block fade-in delay-4">
         <div className="profile-actions">
           <button className="profile-btn logout" onClick={handleLogout}>
             {isEN ? "Log out" : "Выйти из аккаунта"}
           </button>
         </div>
       </section>
-      {/* ... password modal ... */}
+      
+      {/* Модалка смены пароля (код не менялся, просто рендерим) */}
+      {passwordModalOpen && (
+         <div className="wallet-modal-backdrop" onClick={() => setPasswordModalOpen(false)}>
+             <div className="wallet-modal" onClick={e => e.stopPropagation()}>
+                 <div className="wallet-modal-title">{isEN ? "Change password" : "Смена пароля"}</div>
+                 <div className="wallet-modal-input-group"><label>{isEN ? "Old password" : "Текущий пароль"}</label><input type="password" value={passwordForm.oldPassword} onChange={e=>handlePasswordInput('oldPassword', e.target.value)}/></div>
+                 <div className="wallet-modal-input-group"><label>{isEN ? "New password" : "Новый пароль"}</label><input type="password" value={passwordForm.newPassword} onChange={e=>handlePasswordInput('newPassword', e.target.value)}/></div>
+                 <div className="wallet-modal-input-group"><label>{isEN ? "Confirm" : "Повтор"}</label><input type="password" value={passwordForm.confirmPassword} onChange={e=>handlePasswordInput('confirmPassword', e.target.value)}/></div>
+                 {passwordError && <div className="wallet-modal-note error">{passwordError}</div>}
+                 {passwordSuccess && <div className="wallet-modal-note success">{passwordSuccess}</div>}
+                 <div className="wallet-modal-actions">
+                     <button className="wallet-modal-btn secondary" onClick={() => setPasswordModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
+                     <button className="wallet-modal-btn primary" onClick={handlePasswordChange}>{isEN ? "Save" : "Сохранить"}</button>
+                 </div>
+             </div>
+         </div>
+      )}
     </>
   );
 };
