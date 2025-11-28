@@ -453,7 +453,7 @@ useEffect(() => {
       if (!loginsRes.error) {
         const loginRows = (loginsRes.data || []).map((row) => ({
           id: row.id,
-          row.event_type,
+          type: row.event_type,
           login: row.login,
           email: row.email,
           device: row.device,
