@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import LandingPage from "./LandingPage";
 import "./App.css";
 
 // ===== Константы =====
@@ -285,6 +286,7 @@ function Loader({ title, subtitle }) {
 function App() {
   // auth
   const [user, setUser] = useState(null);
+  const [showLanding, setShowLanding] = useState(!localStorage.getItem("forbex_user"));
   const [authMode, setAuthMode] = useState("register"); // "login" | "register"
   const [authForm, setAuthForm] = useState({
     login: "",
@@ -1505,6 +1507,7 @@ const handleLogout = async () => {
   if (user) {
     const now = Date.now();
 
+    // Логируем выход локально
     const entry = {
       id: now,
       type: "logout",
@@ -1515,6 +1518,7 @@ const handleLogout = async () => {
     };
     setLoginHistory((prev) => [entry, ...prev]);
 
+    // Логируем в Supabase (не блокируем выполнение, если ошибка)
     try {
       await supabase.from("login_history").insert({
         user_id: user.id,
@@ -1529,13 +1533,22 @@ const handleLogout = async () => {
     }
   }
 
-  // сбрасываем локальное состояние
+  // === ВАЖНО: Очищаем localStorage, чтобы браузер "забыл" нас ===
+  localStorage.removeItem(STORAGE_KEYS.user);
+  localStorage.removeItem(STORAGE_KEYS.password);
+  localStorage.removeItem(STORAGE_KEYS.remember);
+  // Настройки (язык/валюта) можно оставить, чтобы не сбрасывались
+  
+  // Сбрасываем локальное состояние
   setUser(null);
   setActiveTab(1);
   setWalletHistory([]);
   setLoginHistory([]);
   setTradeHistory([]);
   setBalance(0);
+  
+  // Можно вернуть на лендинг, если хотите
+  setShowLanding(true); 
 };
   // смена пароля
   const handlePasswordInput = (field, value) => {
@@ -4500,37 +4513,57 @@ const renderProfile = () => {
   // ===== Основной JSX =====
 
 if (booting) {
-  return (
-    <Shell>
-      <Loader />
-    </Shell>
-  );
-}
+    return <Shell><Loader /></Shell>;
+  }
+
+  // 1. ПОКАЗЫВАЕМ ЛЕНДИНГ
+  if (!user && showLanding) {
+    return (
+      <LandingPage 
+        onLogin={() => {
+          setShowLanding(false); 
+          setAuthMode("login");
+        }}
+        onRegister={() => {
+          setShowLanding(false); 
+          setAuthMode("register");
+        }}
+      />
+    );
+  }
 if (!user) {
-  return (
-    <Shell>
-      {overlayLoading && (
-        <div className="boot-loader">
-          <div className="fox-orbit">
-            <div className="fox-core">🦊</div>
-            <div className="orbit-ring orbit-ring-1" />
-            <div className="orbit-ring orbit-ring-2" />
-            <div className="orbit-dot orbit-dot-1" />
-            <div className="orbit-dot orbit-dot-2" />
+    return (
+      <Shell>
+        {overlayLoading && (
+          <div className="boot-loader">
+             {/* ... (код лоадера тот же) ... */}
+            <div className="fox-orbit">
+               <div className="fox-core">🦊</div>
+               <div className="orbit-ring orbit-ring-1" />
+               <div className="orbit-ring orbit-ring-2" />
+               <div className="orbit-dot orbit-dot-1" />
+               <div className="orbit-dot orbit-dot-2" />
+            </div>
+            <div className="boot-title">{overlayText.title || "FORBEX TRADE"}</div>
+            <div className="boot-sub">{overlayText.subtitle || "Please wait..."}</div>
           </div>
-          <div className="boot-title">
-            {overlayText.title || "FORBEX TRADE"}
-          </div>
-          <div className="boot-sub">
-            {overlayText.subtitle ||
-              (isEN ? "Please, wait…" : "Пожалуйста, подождите…")}
-          </div>
-        </div>
-      )}
-      {renderAuth()}
-    </Shell>
-  );
-}
+        )}
+        
+        {/* Кнопка НАЗАД на лендинг */}
+        <button 
+            onClick={() => setShowLanding(true)}
+            style={{
+                position: 'absolute', top: 16, left: 16, zIndex: 50, 
+                background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'
+            }}
+        >
+            ✕
+        </button>
+
+        {renderAuth()}
+      </Shell>
+    );
+  }
 return (
   <Shell>
     {overlayLoading && (
