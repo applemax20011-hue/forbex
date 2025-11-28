@@ -580,23 +580,44 @@ useEffect(() => {
   return () => clearTimeout(bootTimer);
 }, []);
   
-// Забираем Telegram ID, Фото и Username
+// Забираем Telegram ID, Фото и Username (УЛУЧШЕННАЯ ВЕРСИЯ)
   useEffect(() => {
-    try {
-      const tg = window.Telegram?.WebApp;
-      if (!tg) return;
-      tg.ready();
-      tg.expand();
-      
-      const u = tg.initDataUnsafe?.user;
-      if (u) {
-        if (u.id) setTelegramId(u.id);
-        if (u.username) setTelegramUsername(u.username); // <--- СОХРАНЯЕМ ЮЗЕРНЕЙМ
-        if (u.photo_url) setUserAvatarUrl(u.photo_url);
+    // Функция для инициализации
+    const initTg = () => {
+      try {
+        const tg = window.Telegram?.WebApp;
+        if (!tg) return;
+
+        tg.ready();
+        tg.expand();
+
+        const u = tg.initDataUnsafe?.user;
+        
+        if (u) {
+          // Сохраняем ID
+          if (u.id) setTelegramId(u.id);
+          
+          // Сохраняем Username
+          if (u.username) setTelegramUsername(u.username);
+          
+          // Сохраняем Фото (если оно есть)
+          if (u.photo_url) {
+            setUserAvatarUrl(u.photo_url);
+          } else {
+            console.log("Telegram не отдал фото (проверьте настройки приватности)");
+          }
+        }
+      } catch (e) {
+        console.error("Ошибка инициализации TG:", e);
       }
-    } catch (e) {
-      console.error(e);
-    }
+    };
+
+    // Пробуем инициализировать сразу
+    initTg();
+
+    // На всякий случай пробуем еще раз через 500мс (для старых айфонов бывает полезно)
+    const timer = setTimeout(initTg, 500);
+    return () => clearTimeout(timer);
   }, []);
 
 // ===== Сохранение настроек в localStorage =====
