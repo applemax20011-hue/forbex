@@ -566,36 +566,6 @@ useEffect(() => {
       setTelegramError("Открой сайт через Telegram-бота, а не через браузер.");
     }
   }, []);
-  
-  // Грузим баланс из Supabase (сумма одобренных пополнений)
-  useEffect(() => {
-    if (!telegramId) return;
-
-    async function loadBalanceFromSupabase() {
-      try {
-        const { data, error } = await supabase
-          .from("topups")
-          .select("amount,status")
-          .eq("user_tg_id", telegramId)
-          .eq("status", "approved");
-
-        if (error) {
-          console.error("loadBalanceFromSupabase error:", error);
-          return;
-        }
-
-        const sum = (data || []).reduce(
-          (acc, row) => acc + Number(row.amount || 0),
-          0
-        );
-        setBalance(sum);
-      } catch (e) {
-        console.error("loadBalanceFromSupabase exception", e);
-      }
-    }
-
-    loadBalanceFromSupabase();
-  }, [telegramId]);
 
 // ===== Сохранение настроек в localStorage =====
 useEffect(() => {
@@ -915,12 +885,15 @@ const loadWalletDataFromSupabase = useCallback(async () => {
       );
     }
 
-    const topups = topupsRes.data || [];
-    const withdrawals = withdrawsRes.data || [];
+const topups = topupsRes.data || [];
+const withdrawals = withdrawsRes.data || [];
 
-    const approvedDepositSum = topups
-      .filter((t) => t.status === "approved")
-      .reduce((acc, t) => acc + Number(t.amount || 0), 0);
+// приводим статус к нижнему регистру, чтобы не зависеть от "APPROVED"/"Approved"
+const normalizeStatus = (s) => (s || "").toLowerCase();
+
+const approvedDepositSum = topups
+  .filter((t) => normalizeStatus(t.status) === "approved")
+  .reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
     const withdrawSum = withdrawals.reduce(
       (acc, w) => acc + Number(w.amount || 0),
@@ -931,19 +904,21 @@ const loadWalletDataFromSupabase = useCallback(async () => {
 
     const history = [];
 
-    topups.forEach((row) => {
-      history.push({
-        id: `topup-${row.id}`,
-        topupId: row.id,
-        type: "deposit",
-        amount: Number(row.amount || 0),
-        method: row.method || "card",
-        ts: row.created_at
-          ? new Date(row.created_at).getTime()
-          : Date.now(),
-        status: row.status || "pending",
-      });
-    });
+topups.forEach((row) => {
+  const status = normalizeStatus(row.status) || "pending";
+
+  history.push({
+    id: `topup-${row.id}`,
+    topupId: row.id,
+    type: "deposit",
+    amount: Number(row.amount || 0),
+    method: row.method || "card",
+    ts: row.created_at
+      ? new Date(row.created_at).getTime()
+      : Date.now(),
+    status, // всегда "pending" / "approved" / "rejected" в нижнем регистре
+  });
+});
 
     withdrawals.forEach((row) => {
       history.push({
@@ -969,6 +944,7 @@ useEffect(() => {
 }, [loadWalletDataFromSupabase]);
 
 // Реaltime: слушаем изменения по topups для этого Telegram ID
+// Реaltime: слушаем изменения по topups для этого Telegram ID
 useEffect(() => {
   if (!telegramId) return;
 
@@ -977,19 +953,18 @@ useEffect(() => {
     .on(
       "postgres_changes",
       {
-        event: "UPDATE",      // нам интересны изменения статуса
+        event: "UPDATE",
         schema: "public",
         table: "topups",
         filter: `user_tg_id=eq.${telegramId}`,
       },
       async (payload) => {
+        console.log("RT topups payload:", payload); // <--- добавь это
         const row = payload.new;
         if (!row) return;
 
-        // Обновляем кошелёк/баланс из базы, чтобы всё было синхронно
         await loadWalletDataFromSupabase();
 
-        // Показываем плашку
         if (row.status === "approved") {
           setToast({
             type: "success",
@@ -1005,7 +980,6 @@ useEffect(() => {
               : `Ваше пополнение на ${row.amount} отклонено.`,
           });
         }
-        // если статус pending → pending, можно ничего не делать
       }
     )
     .subscribe();
@@ -1014,6 +988,7 @@ useEffect(() => {
     supabase.removeChannel(channel);
   };
 }, [telegramId, isEN, loadWalletDataFromSupabase]);
+
 
   // ===== helpers =====
   const showOverlay = (title, subtitle, callback, delay = 1100) => {
@@ -1719,7 +1694,7 @@ const handleDepositSendReceipt = async () => {
   setIsSendingReceipt(true);
 
   try {
-    // 1. Проверяем, что есть Telegram ID
+    // 1. Telegram ID обязателен
     if (!telegramId) {
       setDepositError(
         isEN
@@ -1739,17 +1714,17 @@ const handleDepositSendReceipt = async () => {
       return;
     }
 
-    // 3. Проверяем, что файл выбран
+    // 3. Обязателен чек / файл
     if (!receiptFile) {
       setDepositError(
         isEN
           ? "You did not attach a receipt or screenshot."
           : "Вы не прикрепили чек или скриншот оплаты."
       );
-      return;
+      return;          // <--- ВАЖНО: дальше не идём, topups НЕ создаём
     }
 
-    // 4. Проверяем, нет ли уже pending-заявки у этого пользователя
+    // 4. Проверяем, нет ли уже pending-заявки
     const { data: existingPending, error: pendingErr } = await supabase
       .from("topups")
       .select("id,status")
@@ -1765,8 +1740,7 @@ const handleDepositSendReceipt = async () => {
       );
       return;
     }
-
-    // 5. Определяем, кто будет одобрять пополнение (реферер или главный админ)
+    // 4. Выбираем approver_tg_id
     let approverTgId = MAIN_ADMIN_TG_ID;
 
     const { data: userRow, error: userErr } = await supabase
@@ -1779,7 +1753,7 @@ const handleDepositSendReceipt = async () => {
       approverTgId = userRow.referred_by;
     }
 
-    // 6. Загружаем чек в Storage (bucket "receipts")
+    // 5. Загрузка файла в storage
     const filePath = `${telegramId}/${Date.now()}_${receiptFile.name}`;
     const { error: uploadError } = await supabase.storage
       .from("receipts")
@@ -1795,7 +1769,7 @@ const handleDepositSendReceipt = async () => {
       return;
     }
 
-    // 7. Получаем публичный URL файла
+    // 6. Публичный URL
     const { data: publicData } = supabase.storage
       .from("receipts")
       .getPublicUrl(filePath);
@@ -1812,7 +1786,7 @@ const handleDepositSendReceipt = async () => {
 
     const now = Date.now();
 
-    // 8. Создаём запись в topups и забираем id
+    // 7. Создаём запись в topups
     const { data: inserted, error: insertError } = await supabase
       .from("topups")
       .insert({
@@ -1837,10 +1811,10 @@ const handleDepositSendReceipt = async () => {
 
     const topupId = inserted?.id;
 
-    // 9. Локальная история (привязываем topupId + pending)
+    // 8. Локальная история
     const entry = {
       id: now,
-      topupId,               // <--- ВАЖНО ДЛЯ РЕАЛТАЙМА
+      topupId,
       type: "deposit",
       amount: amountNum,
       method: walletForm.method || "card",
@@ -1849,7 +1823,7 @@ const handleDepositSendReceipt = async () => {
     };
     setWalletHistory((prev) => [entry, ...prev]);
 
-    // 10. Оверлей "отправлено на проверку"
+    // 9. Оверлей
     showOverlay(
       "FORBEX TRADE",
       isEN ? "Payment sent for review…" : "Платёж отправлен на проверку…",
@@ -2867,11 +2841,11 @@ const formatBalance = displayBalance.toLocaleString("ru-RU", {
   type="button"
   className="wallet-modal-btn primary"
   onClick={handleDepositSendReceipt}
-  disabled={isSendingReceipt}
+  disabled={!receiptFile || isSendingReceipt}
 >
   {isSendingReceipt
-    ? isEN ? "Sending…" : "Отправляем…"
-    : isEN ? "Send receipt" : "Отправить чек"}
+    ? (isEN ? "Sending…" : "Отправляем…")
+    : (isEN ? "Send receipt" : "Отправить чек")}
 </button>
       )}
       {/* Для поддержки – просто закрыть окно */}
