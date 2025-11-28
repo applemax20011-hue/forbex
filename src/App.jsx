@@ -3684,7 +3684,7 @@ const renderProfile = () => {
           </div>
         )}
       </section>
-{/* Кнопка техподдержки в стиле .greenPulse */}
+{/* Кнопка техподдержки в стиле GreenPulse */}
 <section className="section-block fade-in delay-3">
   <a
     href="https://t.me/ForbexSupport"
