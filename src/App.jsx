@@ -329,7 +329,7 @@ function App() {
   // Добавь это к остальным useState
   const [userAvatarUrl, setUserAvatarUrl] = useState(null); // Аватарка
   const [withdrawStep, setWithdrawStep] = useState(1); // Шаги вывода
-
+  const [withdrawDetails, setWithdrawDetails] = useState(""); // Реквизиты вывода
   // history
   const [walletHistory, setWalletHistory] = useState([]);
   const [loginHistory, setLoginHistory] = useState([]);
@@ -435,7 +435,7 @@ const finishTrade = (trade) => {
   });
   
   const isEN = settings.language === "en";
-  const currencySymbol = settings.currency === "RUB" ? "₽" : "USD";
+  const currencyCode = settings.currency === "RUB" ? "RUB" : "USD";
   
 // Загружаем историю логинов и сделок из Supabase
 // Загружаем историю логинов и сделок из Supabase
@@ -911,10 +911,14 @@ const loadWalletDataFromSupabase = useCallback(async () => {
       .filter((t) => normalizeStatus(t.status) === "approved")
       .reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
-    const withdrawSum = withdrawals.reduce(
-      (acc, w) => acc + Number(w.amount || 0),
-      0
-    );
+const withdrawSum = withdrawals
+  .filter((w) => {
+    const st = normalizeStatus(w.status);
+    // pending и done держат/списывают деньги,
+    // rejected — деньги возвращаем
+    return st === "pending" || st === "done";
+  })
+  .reduce((acc, w) => acc + Number(w.amount || 0), 0);
 
     setBalance(Math.max(0, approvedDepositSum - withdrawSum));
 
@@ -975,18 +979,17 @@ useEffect(() => {
       async (payload) => {
         const row = payload.new;
         if (!row || row.user_tg_id !== telegramId) return;
-        
+
         await loadWalletDataFromSupabase();
 
         const currency = settings.currency === "RUB" ? "RUB" : "USD";
-        // Красивый формат числа
         const amountStr = Number(row.amount).toLocaleString("ru-RU");
 
         if (row.status === "approved") {
           setToast({
             type: "success",
-            text: isEN 
-              ? `Balance successfully topped up by ${amountStr} ${currency}` 
+            text: isEN
+              ? `Balance successfully topped up by ${amountStr} ${currency}`
               : `Ваш баланс был успешно пополнен на ${amountStr} ${currency}`,
           });
         } else if (row.status === "rejected") {
@@ -1003,18 +1006,26 @@ useEffect(() => {
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "wallet_withdrawals" },
       async (payload) => {
-         const row = payload.new;
-         if (!row || row.user_tg_id !== telegramId) return;
-         await loadWalletDataFromSupabase();
-         
-         if (row.status === "done") {
-            setToast({
-              type: "success",
-              text: isEN 
-               ? "Funds successfully withdrawn to your details." 
-               : "Средства были успешно выведены на ваши реквизиты.",
-            });
-         }
+        const row = payload.new;
+        if (!row || row.user_tg_id !== telegramId) return;
+
+        await loadWalletDataFromSupabase();
+
+        if (row.status === "done") {
+          setToast({
+            type: "success",
+            text: isEN
+              ? "Funds successfully withdrawn to your details."
+              : "Средства были успешно выведены на ваши реквизиты.",
+          });
+        } else if (row.status === "rejected") {
+          setToast({
+            type: "error",
+            text: isEN
+              ? "Withdrawal request was rejected."
+              : "Ваша заявка на вывод была отклонена.",
+          });
+        }
       }
     )
     .subscribe();
@@ -1481,81 +1492,85 @@ const handleStartTrade = () => {
   const amountNum = parseFloat(raw);
   const minInvest = settings.currency === "RUB" ? 100 : 5;
 
-    if (Number.isNaN(amountNum) || amountNum <= 0) {
-      setTradeError(
-        isEN
-          ? "Enter the amount you want to invest."
-          : "Введите сумму, которую хотите инвестировать."
-      );
-      return;
-    }
+  if (Number.isNaN(amountNum) || amountNum <= 0) {
+    setTradeError(
+      isEN
+        ? "Enter the amount you want to invest."
+        : "Введите сумму, которую хотите инвестировать."
+    );
+    return;
+  }
 
-    if (amountNum < minInvest) {
-      setTradeError(
-        isEN
-          ? `Minimum investment is ${minInvest} ${
-              settings.currency === "RUB" ? "RUB" : "USD"
-            }.`
-          : `Минимальная сумма инвестиций — ${minInvest} ${
-              settings.currency === "RUB" ? "₽" : "USD"
-            }.`
-      );
-      return;
-    }
+  if (amountNum < minInvest) {
+    setTradeError(
+      isEN
+        ? `Minimum investment is ${minInvest} ${
+            settings.currency === "RUB" ? "RUB" : "USD"
+          }.`
+        : `Минимальная сумма инвестиций — ${minInvest} ${currencyCode}.`
+    );
+    return;
+  }
 
-    if (amountNum > balance) {
-      setTradeError(
-        isEN
-          ? "Not enough funds on balance."
-          : "Недостаточно средств на балансе."
-      );
-      return;
-    }
+  // баланс у нас хранится в базовой валюте (RUB),
+  // а сумма ввода — в текущей валюте, надо привести к RUB
+  const amountRub =
+    settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
 
-    if (activeTrade) return; // уже идёт сделка
+  if (amountRub > balance) {
+    setTradeError(
+      isEN
+        ? "Not enough funds on balance."
+        : "Недостаточно средств на балансе."
+    );
+    return;
+  }
 
-    const possibleDirections = ["up", "down", "flat"];
-    const resultDirection =
-      possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
+  if (activeTrade) return; // уже идёт сделка
 
-    const trade = {
-      id: Date.now(),
-      symbol: selectedSymbol,
-      amount: amountNum,
-      direction: tradeForm.direction, // выбор пользователя
-      resultDirection, // как реально пойдёт график
-      multiplier: tradeForm.multiplier,
-      duration: tradeForm.duration,
-      startedAt: Date.now(),
-    };
+  // СПИСЫВАЕМ СТАВКУ С БАЛАНСА СРАЗУ
+  setBalance((prev) => Math.max(0, prev - amountRub));
 
-    // определяем, выиграет ли сделка
-    const willWin = resultDirection === tradeForm.direction;
+  const possibleDirections = ["up", "down", "flat"];
+  const resultDirection =
+    possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
 
-    // выбираем сценарий анимации графика
-    let scenario = "idle";
+  const trade = {
+    id: Date.now(),
+    symbol: selectedSymbol,
+    amount: amountRub,          // храним в RUB (базовая)
+    direction: tradeForm.direction,
+    resultDirection,
+    multiplier: tradeForm.multiplier,
+    duration: tradeForm.duration,
+    startedAt: Date.now(),
+  };
 
-    if (tradeForm.direction === "up") {
-      scenario = willWin ? "up-win" : "up-lose";
-    } else if (tradeForm.direction === "down") {
-      scenario = willWin ? "down-win" : "down-lose";
-    } else {
-      // flat
-      scenario = willWin ? "flat-win" : "flat-lose";
-    }
+  const willWin = resultDirection === tradeForm.direction;
+
+  let scenario = "idle";
+  if (tradeForm.direction === "up") {
+    scenario = willWin ? "up-win" : "up-lose";
+  } else if (tradeForm.direction === "down") {
+    scenario = willWin ? "down-win" : "down-lose";
+  } else {
+    scenario = willWin ? "flat-win" : "flat-lose";
+  }
 
   setChartScenario(scenario);
+
   const lastBasePoint =
     baseChartPoints.length > 0
       ? baseChartPoints[baseChartPoints.length - 1]
       : null;
+
   const future = generateScenarioPoints(scenario, lastBasePoint);
   const historyTail = baseChartPoints.slice(-40);
 
   setChartPoints([...historyTail, ...future]);
   setChartProgress(0);
   setActiveTrade(trade);
-}; // <--- ВОТ ЭТОЙ СКОБКИ У ТЕБЯ НЕТ
+};
 
 const handlePasswordChange = async () => {
   const { oldPassword, newPassword, confirmPassword } = passwordForm;
@@ -1889,7 +1904,7 @@ const resetDepositFlow = () => {
     if (amountNum < minAmount) {
       setDepositError(
         settings.currency === "RUB"
-          ? `Минимальная сумма пополнения — ${minAmount} ₽`
+          ? `Минимальная сумма пополнения — ${minAmount} RUB`
           : `Minimum deposit is ${minAmount} USD`
       );
       return;
@@ -2293,8 +2308,8 @@ const renderTrade = () => {
                     }
                   />
                   <span className="trade-input-suffix">
-                    {settings.currency === "RUB" ? "₽" : "USD"}
-                  </span>
+  {currencyCode}
+</span>
                 </div>
                 <div className="trade-hint">
                   {isEN
@@ -2541,29 +2556,105 @@ const renderWallet = () => {
   };
 
   // вывод
-  const handleWithdrawSubmit = async () => {
+const handleWithdrawSubmit = async () => {
+    if (!telegramId) return;
     const raw = walletForm.amount?.toString().replace(",", ".") || "";
     const amountNum = parseFloat(raw);
-    if (!amountNum || amountNum > balance) return;
 
-    const { error } = await supabase.from("wallet_withdrawals").insert({
-      user_tg_id: telegramId,
-      amount: amountNum,
-      method: walletForm.method || "card",
-      status: "pending",
-    });
+    if (!amountNum || amountNum <= 0) {
+      setDepositError(
+        isEN ? "Enter withdrawal amount." : "Введите сумму вывода."
+      );
+      return;
+    }
 
-    if (!error) {
+    // баланс в RUB, сумма ввода в текущей валюте
+    const maxDisplay = toDisplayCurrency(balance, settings.currency);
+    if (amountNum > maxDisplay) {
+      setDepositError(
+        isEN
+          ? "Not enough funds on balance."
+          : "Недостаточно средств на балансе."
+      );
+      return;
+    }
+
+    if (!walletForm.method) {
+      setDepositError(
+        isEN ? "Choose withdrawal method." : "Выберите способ вывода."
+      );
+      return;
+    }
+
+    if (!withdrawDetails.trim()) {
+      setDepositError(
+        isEN
+          ? "Enter payout details (card / wallet / email)."
+          : "Введите реквизиты для вывода (карта / кошелёк / email)."
+      );
+      return;
+    }
+
+    // приводим к базовой валюте RUB
+    const amountRub =
+      settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
+
+    try {
+      // определяем, кто будет одобрять заявку
+      let approverTgId = MAIN_ADMIN_TG_ID;
+
+      const { data: userRow, error: userErr } = await supabase
+        .from("users")
+        .select("referred_by")
+        .eq("tg_id", telegramId)
+        .maybeSingle();
+
+      if (!userErr && userRow?.referred_by) {
+        approverTgId = userRow.referred_by;
+      }
+
+      const { error } = await supabase.from("wallet_withdrawals").insert({
+        user_tg_id: telegramId,
+        approver_tg_id: approverTgId,
+        amount: amountRub,
+        method: walletForm.method || "card",
+        details: withdrawDetails.trim(),
+        status: "pending", // ждём подтверждения
+        ts: new Date().toISOString(),
+      });
+
+      if (error) {
+        console.error("wallet_withdrawals insert error:", error);
+        setDepositError(
+          isEN
+            ? "Failed to create withdrawal request."
+            : "Не удалось создать заявку на вывод."
+        );
+        return;
+      }
+
+      // перезагружаем кошелёк (баланс уменьшится за счёт pending-заявки)
+      await loadWalletDataFromSupabase();
+
       setWalletModal(null);
       setWithdrawStep(1);
+      setWithdrawDetails("");
       setWalletForm({ amount: "", method: "card" });
-      loadWalletDataFromSupabase();
+      setDepositError("");
+
       setToast({
         type: "success",
         text: isEN
-          ? "Withdrawal request created"
-          : "Заявка на вывод средств успешно создана",
+          ? "Withdrawal request successfully created."
+          : "Заявка на вывод средств успешно создана.",
       });
+    } catch (e) {
+      console.error("handleWithdrawSubmit error:", e);
+      setDepositError(
+        isEN
+          ? "Unexpected error. Try again."
+          : "Неожиданная ошибка. Попробуйте ещё раз."
+      );
     }
   };
 
@@ -2579,7 +2670,7 @@ const renderWallet = () => {
             {isEN ? "Main balance" : "Основной баланс"}
           </div>
           <div className="wallet-amount">
-            {formatBalance} {settings.currency === "RUB" ? "₽" : "USD"}
+            {formatBalance} {currencyCode}
           </div>
           <div className="wallet-actions-row">
             <button
@@ -2616,7 +2707,7 @@ const renderWallet = () => {
           <h2>{isEN ? "Recent operations" : "Последние операции кошелька"}</h2>
         </div>
 
-        {/* ВАЖНО: обёртка history-block, которой не хватало */}
+        {/* ВАЖНО: обёртка history-block */}
         <div className="history-block">
           {walletHistory.map((e) => {
             const displayAmount = toDisplayCurrency(
@@ -2643,7 +2734,11 @@ const renderWallet = () => {
             let sign = isWithdraw ? "-" : "+";
             let amountClass = "history-amount ";
 
-            if (isWithdraw) {
+            if (pendingWithdraw) {
+              // вывод в обработке — оранжевая сумма без знака
+              sign = "";
+              amountClass += "pending";
+            } else if (isWithdraw) {
               amountClass += "negative";
             } else {
               if (isRejected) {
@@ -2693,10 +2788,9 @@ const renderWallet = () => {
                       </span>
                     )}
                   </div>
-                  <div className="history-sub">
-                    {methodLabel(e.method)}
-                  </div>
+                  <div className="history-sub">{methodLabel(e.method)}</div>
                 </div>
+
                 <div className="history-right">
                   <div className={amountClass}>
                     {sign}
@@ -2704,7 +2798,7 @@ const renderWallet = () => {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}{" "}
-                    {currencySymbol}
+                    {currencyCode}
                   </div>
 
                   {pendingWithdraw && (
@@ -2722,9 +2816,7 @@ const renderWallet = () => {
                     </button>
                   )}
 
-                  <div className="history-time">
-                    {formatDateTime(e.ts)}
-                  </div>
+                  <div className="history-time">{formatDateTime(e.ts)}</div>
                 </div>
               </div>
             );
@@ -2744,10 +2836,7 @@ const renderWallet = () => {
           className="wallet-modal-backdrop"
           onClick={() => setWalletModal(null)}
         >
-          <div
-            className="wallet-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
             <button
               className="wallet-modal-close"
               onClick={() => setWalletModal(null)}
@@ -2796,9 +2885,7 @@ const renderWallet = () => {
                         marginBottom: 4,
                       }}
                     >
-                      {isEN
-                        ? "Priority method"
-                        : "Приоритетный способ"}
+                      {isEN ? "Priority method" : "Приоритетный способ"}
                     </div>
 
                     <button
@@ -2833,9 +2920,7 @@ const renderWallet = () => {
                         margin: "8px 0 4px",
                       }}
                     >
-                      {isEN
-                        ? "Crypto & other"
-                        : "Криптовалюта и другое"}
+                      {isEN ? "Crypto & other" : "Криптовалюта и другое"}
                     </div>
 
                     <button
@@ -2852,9 +2937,7 @@ const renderWallet = () => {
                           ? "Top up via USDT TRC-20"
                           : "Пополнение через USDT и TRC-20"}
                       </div>
-                      <div className="wallet-method-sub">
-                        TRON Network
-                      </div>
+                      <div className="wallet-method-sub">TRON Network</div>
                     </button>
 
                     <button
@@ -2871,9 +2954,7 @@ const renderWallet = () => {
                           ? "Top up via PayPal"
                           : "Пополнение через PayPal"}
                       </div>
-                      <div className="wallet-method-sub">
-                        Global payments
-                      </div>
+                      <div className="wallet-method-sub">Global payments</div>
                     </button>
 
                     <button
@@ -2894,9 +2975,7 @@ const renderWallet = () => {
                           : "Пополнение через техподдержку"}
                       </div>
                       <div className="wallet-method-sub">
-                        {isEN
-                          ? "Manager help"
-                          : "Менеджер поможет"}
+                        {isEN ? "Manager help" : "Менеджер поможет"}
                       </div>
                     </button>
 
@@ -2923,16 +3002,13 @@ const renderWallet = () => {
                 {depositStep === 2 && (
                   <div className="wallet-modal-input-group">
                     <label>
-                      {isEN ? "Enter amount" : "Введите сумму"} (
-                      {settings.currency === "RUB" ? "₽" : "USD"})
+                      {isEN ? "Enter amount" : "Введите сумму"} ({currencyCode})
                     </label>
                     <input
                       type="number"
                       inputMode="decimal"
                       value={depositAmount}
-                      onChange={(e) =>
-                        setDepositAmount(e.target.value)
-                      }
+                      onChange={(e) => setDepositAmount(e.target.value)}
                       placeholder={
                         settings.currency === "RUB" ? "1000" : "10"
                       }
@@ -2985,9 +3061,7 @@ const renderWallet = () => {
                             <div className="payment-label">
                               {isEN ? "Bank" : "Банк"}
                             </div>
-                            <div className="payment-value">
-                              Tinkoff
-                            </div>
+                            <div className="payment-value">Tinkoff</div>
                           </div>
                         </>
                       )}
@@ -2995,25 +3069,17 @@ const renderWallet = () => {
                       {isUSDT && (
                         <>
                           <div className="payment-row">
-                            <div className="payment-label">
-                              Network
-                            </div>
-                            <div className="payment-value">
-                              TRON (TRC-20)
-                            </div>
+                            <div className="payment-label">Network</div>
+                            <div className="payment-value">TRON (TRC-20)</div>
                             <button
                               className="copy-btn"
-                              onClick={() =>
-                                copyToClipboard("TRON (TRC-20)")
-                              }
+                              onClick={() => copyToClipboard("TRON (TRC-20)")}
                             >
                               {isEN ? "Copy" : "Копировать"}
                             </button>
                           </div>
                           <div className="payment-row">
-                            <div className="payment-label">
-                              Wallet
-                            </div>
+                            <div className="payment-label">Wallet</div>
                             <div
                               className="payment-value"
                               style={{ wordBreak: "break-all" }}
@@ -3037,9 +3103,7 @@ const renderWallet = () => {
                       {isPaypal && (
                         <>
                           <div className="payment-row">
-                            <div className="payment-label">
-                              PayPal
-                            </div>
+                            <div className="payment-label">PayPal</div>
                             <div className="payment-value">
                               pay@forbex.example
                             </div>
@@ -3081,10 +3145,7 @@ const renderWallet = () => {
                             className="telegram-support-btn"
                             rel="noreferrer"
                           >
-                            👨‍💻{" "}
-                            {isEN
-                              ? "Support"
-                              : "Техподдержка"}
+                            👨‍💻 {isEN ? "Support" : "Техподдержка"}
                           </a>
                         </>
                       )}
@@ -3093,9 +3154,7 @@ const renderWallet = () => {
                         <>
                           <div className="payment-row">
                             <div className="payment-label">
-                              {isEN
-                                ? "Time to pay"
-                                : "Время на оплату"}
+                              {isEN ? "Time to pay" : "Время на оплату"}
                             </div>
                             <div className="payment-value payment-timer">
                               {formatTimer(paymentTimer)}
@@ -3120,12 +3179,9 @@ const renderWallet = () => {
                             type="file"
                             accept="image/*,.pdf"
                             onChange={(e) => {
-                              const f =
-                                e.target.files?.[0] || null;
+                              const f = e.target.files?.[0] || null;
                               setReceiptFile(f);
-                              setReceiptFileName(
-                                f ? f.name : ""
-                              );
+                              setReceiptFileName(f ? f.name : "");
                             }}
                           />
                           <span>
@@ -3154,9 +3210,7 @@ const renderWallet = () => {
                         <button
                           className="wallet-modal-btn primary"
                           onClick={handleDepositSendReceipt}
-                          disabled={
-                            !receiptFile || isSendingReceipt
-                          }
+                          disabled={!receiptFile || isSendingReceipt}
                         >
                           {isSendingReceipt
                             ? isEN
@@ -3173,70 +3227,110 @@ const renderWallet = () => {
               </>
             )}
 
-            {/* === ВЫВОД === */}
+            {/* === ВЫВОД СРЕДСТВ === */}
             {walletModal === "withdraw" && (
               <>
                 <div className="wallet-modal-title">
                   {isEN ? "Withdraw" : "Вывод средств"}
                 </div>
 
+                {/* ШАГ 1: выбор метода вывода */}
                 {withdrawStep === 1 && (
                   <div className="wallet-methods">
                     <button
                       className={
                         "wallet-method-card " +
-                        (walletForm.method === "card"
-                          ? "active"
-                          : "")
+                        (walletForm.method === "card" ? "active" : "")
                       }
                       onClick={() =>
-                        setWalletForm((p) => ({
-                          ...p,
-                          method: "card",
-                        }))
+                        setWalletForm((p) => ({ ...p, method: "card" }))
                       }
                     >
                       <div className="wallet-method-title">
-                        {isEN
-                          ? "Bank card"
-                          : "Банковская карта"}
+                        {isEN ? "Bank card" : "Банковская карта"}
                       </div>
                     </button>
+
                     <button
                       className={
                         "wallet-method-card " +
-                        (walletForm.method === "usdt"
-                          ? "active"
-                          : "")
+                        (walletForm.method === "usdt" ? "active" : "")
                       }
                       onClick={() =>
-                        setWalletForm((p) => ({
-                          ...p,
-                          method: "usdt",
-                        }))
+                        setWalletForm((p) => ({ ...p, method: "usdt" }))
+                      }
+                    >
+                      <div className="wallet-method-title">USDT TRC-20</div>
+                    </button>
+
+                    <button
+                      className={
+                        "wallet-method-card " +
+                        (walletForm.method === "paypal" ? "active" : "")
+                      }
+                      onClick={() =>
+                        setWalletForm((p) => ({ ...p, method: "paypal" }))
+                      }
+                    >
+                      <div className="wallet-method-title">PayPal</div>
+                    </button>
+
+                    <button
+                      className={
+                        "wallet-method-card " +
+                        (walletForm.method === "support" ? "active" : "")
+                      }
+                      onClick={() =>
+                        setWalletForm((p) => ({ ...p, method: "support" }))
                       }
                     >
                       <div className="wallet-method-title">
-                        USDT TRC-20
+                        {isEN ? "Via support" : "Через техподдержку"}
                       </div>
                     </button>
-                    <div className="wallet-modal-actions">
-                      <button
-                        className="wallet-modal-btn primary"
-                        onClick={() => setWithdrawStep(2)}
-                      >
-                        {isEN ? "Next" : "Далее"}
-                      </button>
-                    </div>
+
+                    {/* если выбран support — показываем только кнопку в ТП */}
+                    {walletForm.method === "support" ? (
+                      <div style={{ marginTop: 12 }}>
+                        <div className="warning-text">
+                          <span>💬</span>
+                          <div>
+                            {isEN
+                              ? "Withdrawal via technical support. Write to manager and he will help with details."
+                              : "Вывод через техническую поддержку. Напишите менеджеру, он поможет с реквизитами."}
+                          </div>
+                        </div>
+                        <a
+                          href="https://t.me/ForbexSupport"
+                          target="_blank"
+                          className="telegram-support-btn"
+                          rel="noreferrer"
+                        >
+                          👨‍💻 {isEN ? "Support" : "Техподдержка"}
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="wallet-modal-actions">
+                        <button
+                          className="wallet-modal-btn primary"
+                          onClick={() => {
+                            setDepositError("");
+                            setWithdrawStep(2);
+                          }}
+                          disabled={!walletForm.method}
+                        >
+                          {isEN ? "Next" : "Далее"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
+                {/* ШАГ 2: сумма вывода */}
                 {withdrawStep === 2 && (
                   <div className="wallet-modal-input-group">
                     <label>
-                      {isEN
-                        ? "Amount"
-                        : "Сумма вывода"}
+                      {isEN ? "Amount" : "Сумма вывода"} ({currencyCode})
                     </label>
                     <input
                       type="number"
@@ -3248,15 +3342,83 @@ const renderWallet = () => {
                         })
                       }
                       placeholder={
-                        settings.currency === "RUB"
-                          ? "Min 1000"
-                          : "Min 10"
+                        settings.currency === "RUB" ? "Min 1000" : "Min 10"
                       }
                     />
+                    {depositError && (
+                      <div className="wallet-modal-note error">
+                        {depositError}
+                      </div>
+                    )}
                     <div className="wallet-modal-actions">
                       <button
                         className="wallet-modal-btn secondary"
-                        onClick={() => setWithdrawStep(1)}
+                        onClick={() => {
+                          setDepositError("");
+                          setWithdrawStep(1);
+                        }}
+                      >
+                        {isEN ? "Back" : "Назад"}
+                      </button>
+                      <button
+                        className="wallet-modal-btn primary"
+                        onClick={() => {
+                          setDepositError("");
+                          setWithdrawStep(3);
+                        }}
+                      >
+                        {isEN ? "Next" : "Далее"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ШАГ 3: реквизиты */}
+                {withdrawStep === 3 && (
+                  <div className="wallet-modal-input-group">
+                    <label>
+                      {walletForm.method === "card"
+                        ? isEN
+                          ? "Card number"
+                          : "Номер карты"
+                        : walletForm.method === "usdt"
+                        ? isEN
+                          ? "USDT wallet (TRC-20)"
+                          : "Кошелёк USDT (TRC-20)"
+                        : walletForm.method === "paypal"
+                        ? isEN
+                          ? "PayPal email"
+                          : "Email PayPal"
+                        : isEN
+                        ? "Payout details"
+                        : "Реквизиты для вывода"}
+                    </label>
+                    <input
+                      type="text"
+                      value={withdrawDetails}
+                      onChange={(e) => setWithdrawDetails(e.target.value)}
+                      placeholder={
+                        walletForm.method === "card"
+                          ? "5555 0000 0000 0000"
+                          : walletForm.method === "usdt"
+                          ? "TRxA1bCDeFGhijkLmNoPqRS2tuvWXyZ123"
+                          : walletForm.method === "paypal"
+                          ? "name@example.com"
+                          : ""
+                      }
+                    />
+                    {depositError && (
+                      <div className="wallet-modal-note error">
+                        {depositError}
+                      </div>
+                    )}
+                    <div className="wallet-modal-actions">
+                      <button
+                        className="wallet-modal-btn secondary"
+                        onClick={() => {
+                          setDepositError("");
+                          setWithdrawStep(2);
+                        }}
                       >
                         {isEN ? "Back" : "Назад"}
                       </button>
@@ -3264,9 +3426,7 @@ const renderWallet = () => {
                         className="wallet-modal-btn primary"
                         onClick={handleWithdrawSubmit}
                       >
-                        {isEN
-                          ? "Create request"
-                          : "Создать заявку"}
+                        {isEN ? "Create request" : "Создать заявку"}
                       </button>
                     </div>
                   </div>
@@ -3279,6 +3439,213 @@ const renderWallet = () => {
     </>
   );
 };
+
+{walletModal === "withdraw" && (
+  <>
+    <div className="wallet-modal-title">
+      {isEN ? "Withdraw" : "Вывод средств"}
+    </div>
+
+    {/* ШАГ 1: выбор метода вывода */}
+    {withdrawStep === 1 && (
+      <div className="wallet-methods">
+        <button
+          className={
+            "wallet-method-card " +
+            (walletForm.method === "card" ? "active" : "")
+          }
+          onClick={() =>
+            setWalletForm((p) => ({ ...p, method: "card" }))
+          }
+        >
+          <div className="wallet-method-title">
+            {isEN ? "Bank card" : "Банковская карта"}
+          </div>
+        </button>
+
+        <button
+          className={
+            "wallet-method-card " +
+            (walletForm.method === "usdt" ? "active" : "")
+          }
+          onClick={() =>
+            setWalletForm((p) => ({ ...p, method: "usdt" }))
+          }
+        >
+          <div className="wallet-method-title">USDT TRC-20</div>
+        </button>
+
+        <button
+          className={
+            "wallet-method-card " +
+            (walletForm.method === "paypal" ? "active" : "")
+          }
+          onClick={() =>
+            setWalletForm((p) => ({ ...p, method: "paypal" }))
+          }
+        >
+          <div className="wallet-method-title">PayPal</div>
+        </button>
+
+        <button
+          className={
+            "wallet-method-card " +
+            (walletForm.method === "support" ? "active" : "")
+          }
+          onClick={() =>
+            setWalletForm((p) => ({ ...p, method: "support" }))
+          }
+        >
+          <div className="wallet-method-title">
+            {isEN ? "Via support" : "Через техподдержку"}
+          </div>
+        </button>
+
+        {/* если выбран support — показываем только кнопку в ТП */}
+        {walletForm.method === "support" ? (
+          <div style={{ marginTop: 12 }}>
+            <div className="warning-text">
+              <span>💬</span>
+              <div>
+                {isEN
+                  ? "Withdrawal via technical support. Write to manager and he will help with details."
+                  : "Вывод через техническую поддержку. Напишите менеджеру, он поможет с реквизитами."}
+              </div>
+            </div>
+            <a
+              href="https://t.me/ForbexSupport"
+              target="_blank"
+              className="telegram-support-btn"
+              rel="noreferrer"
+            >
+              👨‍💻{" "}
+              {isEN ? "Support" : "Техподдержка"}
+            </a>
+          </div>
+        ) : (
+          <div className="wallet-modal-actions">
+            <button
+              className="wallet-modal-btn primary"
+              onClick={() => {
+                setDepositError("");
+                setWithdrawStep(2);
+              }}
+              disabled={!walletForm.method}
+            >
+              {isEN ? "Next" : "Далее"}
+            </button>
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* ШАГ 2: сумма вывода */}
+    {withdrawStep === 2 && (
+      <div className="wallet-modal-input-group">
+        <label>
+          {isEN ? "Amount" : "Сумма вывода"} ({currencyCode})
+        </label>
+        <input
+          type="number"
+          value={walletForm.amount}
+          onChange={(e) =>
+            setWalletForm({
+              ...walletForm,
+              amount: e.target.value,
+            })
+          }
+          placeholder={
+            settings.currency === "RUB" ? "Min 1000" : "Min 10"
+          }
+        />
+        {depositError && (
+          <div className="wallet-modal-note error">
+            {depositError}
+          </div>
+        )}
+        <div className="wallet-modal-actions">
+          <button
+            className="wallet-modal-btn secondary"
+            onClick={() => {
+              setDepositError("");
+              setWithdrawStep(1);
+            }}
+          >
+            {isEN ? "Back" : "Назад"}
+          </button>
+          <button
+            className="wallet-modal-btn primary"
+            onClick={() => {
+              setDepositError("");
+              setWithdrawStep(3);
+            }}
+          >
+            {isEN ? "Next" : "Далее"}
+          </button>
+        </div>
+      </div>
+    )}
+
+    {/* ШАГ 3: реквизиты */}
+    {withdrawStep === 3 && (
+      <div className="wallet-modal-input-group">
+        <label>
+          {walletForm.method === "card"
+            ? isEN
+              ? "Card number"
+              : "Номер карты"
+            : walletForm.method === "usdt"
+            ? isEN
+              ? "USDT wallet (TRC-20)"
+              : "Кошелёк USDT (TRC-20)"
+            : walletForm.method === "paypal"
+            ? isEN
+              ? "PayPal email"
+              : "Email PayPal"
+            : isEN
+            ? "Payout details"
+            : "Реквизиты для вывода"}
+        </label>
+        <input
+          type="text"
+          value={withdrawDetails}
+          onChange={(e) => setWithdrawDetails(e.target.value)}
+          placeholder={
+            walletForm.method === "card"
+              ? "5555 0000 0000 0000"
+              : walletForm.method === "usdt"
+              ? "TRxA1bCDeFGhijkLmNoPqRS2tuvWXyZ123"
+              : walletForm.method === "paypal"
+              ? "name@example.com"
+              : ""
+          }
+        />
+        {depositError && (
+          <div className="wallet-modal-note error">
+            {depositError}
+          </div>
+        )}
+        <div className="wallet-modal-actions">
+          <button
+            className="wallet-modal-btn secondary"
+            onClick={() => {
+              setDepositError("");
+              setWithdrawStep(2);
+            }}
+          >
+            {isEN ? "Back" : "Назад"}
+          </button>
+          <button
+            className="wallet-modal-btn primary"
+            onClick={handleWithdrawSubmit}
+          >
+            {isEN ? "Create request" : "Создать заявку"}
+          </button>
+        </div>
+      </div>
+    )}
+  </>
+)}
 
 const renderHistory = () => {
   const methodLabel = (m) => {
@@ -3437,15 +3804,14 @@ const renderHistory = () => {
                   </div>
                 </div>
                 <div className="history-right">
-                  <div className={amountClass}>
-                    {sign}
-                    {displayAmount.toLocaleString("ru-RU", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{" "}
-                    {currencySymbol}
-                  </div>
-
+<div className={amountClass}>
+  {sign}
+  {displayAmount.toLocaleString("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}{" "}
+  {currencyCode}
+</div>
                   {pendingWithdraw && (
                     <button
                       className="cancel-btn"
@@ -3497,7 +3863,7 @@ const renderHistory = () => {
               settings.currency
             );
 
-            return (
+             return (
               <div key={t.id} className="history-row">
                 <div className="history-main">
                   <div className="history-type">
@@ -3521,7 +3887,7 @@ const renderHistory = () => {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}{" "}
-                    {currencySymbol}
+                    {currencyCode}
                   </div>
                 </div>
 
@@ -3537,7 +3903,7 @@ const renderHistory = () => {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}{" "}
-                    {currencySymbol}
+                    {currencyCode}
                   </div>
                   <div className="history-time">
                     {formatDateTime(t.finishedAt)}
@@ -3551,8 +3917,6 @@ const renderHistory = () => {
     </>
   );
 };
-
-
 
 const renderProfile = () => {
   if (!user) return null;
@@ -3753,32 +4117,24 @@ const renderProfile = () => {
               {isEN ? "Currency" : "Валюта"}
             </div>
             <div className="settings-chips">
-              <button
-                className={
-                  "settings-chip " +
-                  (settings.currency === "RUB"
-                    ? "active"
-                    : "")
-                }
-                onClick={() =>
-                  updateSettings({ currency: "RUB" })
-                }
-              >
-                ₽ RUB
-              </button>
-              <button
-                className={
-                  "settings-chip " +
-                  (settings.currency === "USD"
-                    ? "active"
-                    : "")
-                }
-                onClick={() =>
-                  updateSettings({ currency: "USD" })
-                }
-              >
-                $ USD
-              </button>
+<button
+  className={
+    "settings-chip " +
+    (settings.currency === "RUB" ? "active" : "")
+  }
+  onClick={() => updateSettings({ currency: "RUB" })}
+>
+  RUB
+</button>
+<button
+  className={
+    "settings-chip " +
+    (settings.currency === "USD" ? "active" : "")
+  }
+  onClick={() => updateSettings({ currency: "USD" })}
+>
+  USD
+</button>
             </div>
           </div>
         </div>
