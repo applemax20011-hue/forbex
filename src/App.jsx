@@ -85,6 +85,28 @@ function toDisplayCurrency(amountRub, currency) {
   return amountRub;
 }
 
+function FoxBackground() {
+  return (
+    <div className="fox-bg-root">
+      <div className="fox-bg-noise" />
+      <div className="fox-bg-glow fox-bg-glow-top" />
+      <div className="fox-bg-glow fox-bg-glow-bottom" />
+      <div className="fox-bg-orbit fox-bg-orbit-1" />
+      <div className="fox-bg-orbit fox-bg-orbit-2" />
+      <div className="fox-bg-grid" />
+    </div>
+  );
+}
+
+function Shell({ children }) {
+  return (
+    <div className="page-root">
+      <FoxBackground />
+      <div className="app-container">{children}</div>
+    </div>
+  );
+}
+
 function ScenarioLightweightChart({ points, scenario, progress }) {
   const svgRef = useRef(null);
 
@@ -4213,7 +4235,7 @@ const renderProfile = () => {
                       }))
                     }
                   >
-                    ₽ RUB
+                    RUB
                   </button>
                   <button
                     className={
@@ -4227,7 +4249,7 @@ const renderProfile = () => {
                       }))
                     }
                   >
-                    $ USD
+                     USD
                   </button>
                 </div>
               </div>
@@ -4373,128 +4395,118 @@ const renderProfile = () => {
 
   // ===== Основной JSX =====
 
-  if (booting) {
-    return (
-      <div className="page-root">
-        <div className="app-container">
-          <Loader />
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="page-root">
-        <div className="app-container">
-          {overlayLoading && (
-            <div className="boot-loader">
-              <div className="fox-orbit">
-                <div className="fox-core">🦊</div>
-                <div className="orbit-ring orbit-ring-1" />
-                <div className="orbit-ring orbit-ring-2" />
-                <div className="orbit-dot orbit-dot-1" />
-                <div className="orbit-dot orbit-dot-2" />
-              </div>
-              <div className="boot-title">
-                {overlayText.title || "FORBEX TRADE"}
-              </div>
-              <div className="boot-sub">
-                {overlayText.subtitle ||
-                  (isEN
-                    ? "Please, wait…"
-                    : "Пожалуйста, подождите…")}
-              </div>
-            </div>
-          )}
-
-          {renderAuth()}
-        </div>
-      </div>
-    );
-  }
-
+if (booting) {
   return (
-    <div className="page-root">
-      <div className="app-container">
-        {overlayLoading && (
-          <div className="boot-loader">
-            <div className="fox-orbit">
-              <div className="fox-core">🦊</div>
-              <div className="orbit-ring orbit-ring-1" />
-              <div className="orbit-ring orbit-ring-2" />
-              <div className="orbit-dot orbit-dot-1" />
-              <div className="orbit-dot orbit-dot-2" />
-            </div>
-            <div className="boot-title">
-              {overlayText.title || "FORBEX TRADE"}
-            </div>
-            <div className="boot-sub">
-              {overlayText.subtitle ||
-                (isEN
-                  ? "Please, wait…"
-                  : "Пожалуйста, подождите…")}
-            </div>
-          </div>
-        )}
-
-        {/* Шапка */}
-        <header className="header">
-          <div className="brand">
-            <div className="brand-logo">🦊</div>
-            <div className="brand-text">
-              <span className="brand-title">Forbex Trade</span>
-              <span className="brand-sub">
-                {isEN
-                  ? "crypto platform in fox style"
-                  : "криптоплатформа в лисьем стиле"}
-              </span>
-            </div>
-          </div>
-        </header>
-
-        {/* Контент */}
-        <main className="content">
-          {activeTab === 1 && renderHome()}
-          {activeTab === 2 && renderTrade()}
-          {activeTab === 3 && renderWallet()}
-          {activeTab === 4 && renderHistory()}
-          {activeTab === 5 && renderProfile()}
-        </main>
-
-        {/* Нижняя навигация */}
-        <nav className="bottom-nav">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              className={
-                "nav-tab " +
-                (activeTab === tab.id ? "nav-tab-active" : "")
-              }
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <span className="nav-tab-icon">{tab.icon}</span>
-              <span className="nav-tab-label">
-                {isEN ? tab.labelEn : tab.labelRu}
-              </span>
-            </button>
-          ))}
-        </nav>
-
-        {/* Тост справа снизу */}
-        {toast && (
-          <div className={`toast-root toast-${toast.type}`}>
-            <div className="toast-title">
-              {toast.type === "success"
-                ? (isEN ? "Balance updated" : "Баланс пополнен")
-                : (isEN ? "Operation status" : "Статус операции")}
-            </div>
-            <div className="toast-text">{toast.text}</div>
-          </div>
-        )}
-      </div>
-    </div>
+    <Shell>
+      <Loader />
+    </Shell>
   );
+}
+if (!user) {
+  return (
+    <Shell>
+      {overlayLoading && (
+        <div className="boot-loader">
+          <div className="fox-orbit">
+            <div className="fox-core">🦊</div>
+            <div className="orbit-ring orbit-ring-1" />
+            <div className="orbit-ring orbit-ring-2" />
+            <div className="orbit-dot orbit-dot-1" />
+            <div className="orbit-dot orbit-dot-2" />
+          </div>
+          <div className="boot-title">
+            {overlayText.title || "FORBEX TRADE"}
+          </div>
+          <div className="boot-sub">
+            {overlayText.subtitle ||
+              (isEN ? "Please, wait…" : "Пожалуйста, подождите…")}
+          </div>
+        </div>
+      )}
+      {renderAuth()}
+    </Shell>
+  );
+}
+return (
+  <Shell>
+    {overlayLoading && (
+      <div className="boot-loader">
+        <div className="fox-orbit">
+          <div className="fox-core">🦊</div>
+          <div className="orbit-ring orbit-ring-1" />
+          <div className="orbit-ring orbit-ring-2" />
+          <div className="orbit-dot orbit-dot-1" />
+          <div className="orbit-dot orbit-dot-2" />
+        </div>
+        <div className="boot-title">
+          {overlayText.title || "FORBEX TRADE"}
+        </div>
+        <div className="boot-sub">
+          {overlayText.subtitle ||
+            (isEN ? "Please, wait…" : "Пожалуйста, подождите…")}
+        </div>
+      </div>
+    )}
+
+    {/* Шапка */}
+    <header className="header">
+      <div className="brand">
+        <div className="brand-logo">🦊</div>
+        <div className="brand-text">
+          <span className="brand-title">Forbex Trade</span>
+          <span className="brand-sub">
+            {isEN
+              ? "crypto platform in fox style"
+              : "криптоплатформа в лисьем стиле"}
+          </span>
+        </div>
+      </div>
+    </header>
+
+    {/* Контент */}
+    <main className="content">
+      {activeTab === 1 && renderHome()}
+      {activeTab === 2 && renderTrade()}
+      {activeTab === 3 && renderWallet()}
+      {activeTab === 4 && renderHistory()}
+      {activeTab === 5 && renderProfile()}
+    </main>
+
+    {/* Нижняя навигация */}
+    <nav className="bottom-nav">
+      {TABS.map((tab) => (
+        <button
+          key={tab.id}
+          className={
+            "nav-tab " + (activeTab === tab.id ? "nav-tab-active" : "")
+          }
+          onClick={() => setActiveTab(tab.id)}
+        >
+          <span className="nav-tab-icon">{tab.icon}</span>
+          <span className="nav-tab-label">
+            {isEN ? tab.labelEn : tab.labelRu}
+          </span>
+        </button>
+      ))}
+    </nav>
+
+    {/* Тост */}
+    {toast && (
+      <div className={`toast-root toast-${toast.type}`}>
+        <div className="toast-title">
+          {toast.type === "success"
+            ? isEN
+              ? "Balance updated"
+              : "Баланс пополнен"
+            : isEN
+            ? "Operation status"
+            : "Статус операции"}
+        </div>
+        <div className="toast-text">{toast.text}</div>
+      </div>
+    )}
+  </Shell>
+);
 }
 
 export default App;
