@@ -3684,33 +3684,20 @@ const renderProfile = () => {
           </div>
         )}
       </section>
-
-      {/* карточка связи с техподдержкой по центру */}
-      <section className="section-block fade-in delay-3">
-        <div className="support-card">
-          <div className="support-icon">👨‍💻</div>
-          <div className="support-text">
-            <div className="support-title">
-              {isEN
-                ? "Contact technical support"
-                : "Связь с техподдержкой"}
-            </div>
-            <div className="support-sub">GreenPulse</div>
-          </div>
-          <a
-            href="https://t.me/ForbexSupport"
-            target="_blank"
-            rel="noreferrer"
-            className="telegram-support-btn"
-          >
-            💎{" "}
-            {isEN
-              ? "Write to support"
-              : "Написать в поддержку"}
-          </a>
-        </div>
-      </section>
-
+{/* Кнопка техподдержки в стиле .greenPulse */}
+<section className="section-block fade-in delay-3">
+  <a
+    href="https://t.me/ForbexSupport"
+    target="_blank"
+    rel="noreferrer"
+    className="greenPulse support-cta"
+  >
+    <span className="support-cta-icon">👨‍💻</span>
+    <span className="support-cta-text">
+      {isEN ? "Write to support" : "Связаться с Тех.Поддержкой"}
+    </span>
+  </a>
+</section>
       {/* настройки языка и валюты */}
       <section className="section-block fade-in delay-4">
         <div className="section-title">
