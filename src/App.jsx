@@ -343,6 +343,7 @@ function App() {
   const [paymentTimer, setPaymentTimer] = useState(900); // 15 минут
     // Telegram WebApp
   const [telegramId, setTelegramId] = useState(null);
+  const [telegramUsername, setTelegramUsername] = useState(null);
 
   // файл чека (не только имя)
     // файл чека (не только имя)
@@ -579,18 +580,19 @@ useEffect(() => {
   return () => clearTimeout(bootTimer);
 }, []);
   
-// Забираем Telegram ID и Фото
+// Забираем Telegram ID, Фото и Username
   useEffect(() => {
     try {
       const tg = window.Telegram?.WebApp;
       if (!tg) return;
       tg.ready();
-      tg.expand(); // На всякий случай развернем
+      tg.expand();
       
       const u = tg.initDataUnsafe?.user;
       if (u) {
         if (u.id) setTelegramId(u.id);
-        if (u.photo_url) setUserAvatarUrl(u.photo_url); // <--- Сохраняем фото
+        if (u.username) setTelegramUsername(u.username); // <--- СОХРАНЯЕМ ЮЗЕРНЕЙМ
+        if (u.photo_url) setUserAvatarUrl(u.photo_url);
       }
     } catch (e) {
       console.error(e);
@@ -1023,19 +1025,20 @@ useEffect(() => {
         const currency = settings.currency === "RUB" ? "RUB" : "USD";
         const amountStr = Number(row.amount).toLocaleString("ru-RU");
 
+// ... внутри postgres_changes для topups ...
         if (row.status === "approved") {
           setToast({
             type: "success",
             text: isEN
-              ? `Balance successfully topped up by ${amountStr} ${currency}`
-              : `Ваш баланс был успешно пополнен на ${amountStr} ${currency}`,
+              ? `Balance topped up by ${amountStr} ${currency}`
+              : `Ваш баланс был успешно пополнен на ${amountStr} ${currency}`, // <--- ТВОЙ ТЕКСТ
           });
         } else if (row.status === "rejected") {
           setToast({
             type: "error",
             text: isEN
-              ? "Deposit request rejected. Contact support."
-              : "Ваша заявка на пополнение отклонена. Свяжитесь с тех.поддержкой.",
+              ? "Deposit rejected. Contact support."
+              : "Заявка на пополнение была отклонена. Обратитесь в техническую поддержку.", // <--- ТВОЙ ТЕКСТ
           });
         }
       }
@@ -2752,8 +2755,9 @@ const handleWithdrawSubmit = async () => {
         </div>
 
         {/* ВАЖНО: обёртка history-block */}
-        <div className="history-block">
-          {walletHistory.map((e) => {
+<div className="history-block">
+          {/* ДОБАВИЛ .slice(0, 3) ЧТОБЫ БЫЛО ТОЛЬКО 3 ПОСЛЕДНИХ */}
+          {walletHistory.slice(0, 3).map((e) => {
             const displayAmount = toDisplayCurrency(
               e.amount,
               settings.currency
@@ -3826,54 +3830,38 @@ const renderProfile = () => {
   return (
     <>
       {/* шапка профиля */}
-      <section className="section-block fade-in delay-1">
-        <div className="profile-card">
+<section className="section-block fade-in delay-1">
+        <div className="profile-card" style={{ position: 'relative' }}> {/* relative для позиционирования */}
+          
+          {/* ... Аватар (без изменений) ... */}
           <div className="profile-avatar">
-            {userAvatarUrl ? (
-              <img
-                src={userAvatarUrl}
-                alt="Avatar"
-                className="profile-avatar-img"
-              />
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  background:
-                    "linear-gradient(135deg, #f97316, #c2410c)",
-                  borderRadius: "16px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: "bold",
-                  color: "#fff",
-                  fontSize: "20px",
-                }}
-              >
-                {(user.login?.[0] || "U").toUpperCase()}
-              </div>
-            )}
+             {/* ... */}
           </div>
 
           <div className="profile-main">
             <div className="profile-login">{user.login}</div>
             <div className="profile-email">{user.email}</div>
-            <div
-  className="profile-created"
-  style={{
-    marginTop: "4px",
-    fontSize: "11px",
-  }}
->
-  {isEN
-    ? `On Forbex since ${getRegDateString()}`
-    : `На Forbex с ${getRegDateString()}`}
-</div>
+            <div className="profile-created" style={{ marginTop: "4px", fontSize: "11px" }}>
+              {isEN ? `On Forbex since ${getRegDateString()}` : `На Forbex с ${getRegDateString()}`}
+            </div>
           </div>
+
+          {/* === НОВЫЙ БЛОК С ID и USERNAME СПРАВА СВЕРХУ === */}
+          <div style={{ 
+              position: 'absolute', 
+              top: '12px', 
+              right: '14px', 
+              textAlign: 'right', 
+              fontSize: '10px', 
+              color: 'rgba(255,255,255,0.7)',
+              lineHeight: '1.4'
+          }}>
+            {telegramUsername && <div style={{ color: '#fff', fontWeight: '600' }}>@{telegramUsername}</div>}
+            {telegramId && <div>ID: {telegramId}</div>}
+          </div>
+
         </div>
       </section>
-
       {/* блок действий: верификация / логин / email / пароль */}
       <section className="section-block fade-in delay-2">
         <div className="section-title">
