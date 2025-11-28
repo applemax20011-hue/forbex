@@ -436,14 +436,14 @@ useEffect(() => {
       const [loginsRes, tradesRes] = await Promise.all([
         supabase
           .from("login_history")
-          .select("id, type, login, email, device, created_at")
+          .select("id, event_type, login, email, device, created_at")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(100),
         supabase
           .from("trade_history")
           .select(
-            "id, symbol, amount, direction, result_direction, multiplier, duration, status, profit, started_at, finished_at"
+            "id, symbol, amount, direction, multiplier, duration, status, profit, started_at, finished_at"
           )
           .eq("user_id", user.id)
           .order("finished_at", { ascending: false })
@@ -865,7 +865,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
     const [topupsRes, withdrawsRes] = await Promise.all([
       supabase
         .from("topups")
-        .select("id, amount, status, method, created_at")
+        .select("id, amount, status, created_at")
         .eq("user_tg_id", telegramId)
         .order("created_at", { ascending: false }),
       supabase
@@ -1416,12 +1416,16 @@ const handleLogout = async () => {
         email: user.email,
         device: navigator.userAgent || "",
       });
-    } catch (e) {
-      console.error("supabase login_history logout error:", e);
-    }
+} catch (e) { console.error(e); }
   }
+  
+  // !!! ДОБАВЬ ВОТ ЭТИ СТРОКИ НИЖЕ !!!
   setUser(null);
   setActiveTab(1);
+  setWalletHistory([]);  // Очищаем кошелек
+  setLoginHistory([]);   // Очищаем входы
+  setTradeHistory([]);   // Очищаем сделки
+  setBalance(0);         // Обнуляем баланс
 };
 
   // смена пароля
