@@ -586,45 +586,54 @@ useEffect(() => {
 }, [settings]);
   
   // симуляция активности: активные юзеры и сделки за 24ч
+  // симуляция активности: активные юзеры и сделки за 24ч
   useEffect(() => {
     const MIN_USERS = 2000;
     const MAX_USERS = 50000;
     const MIN_TRADES = 300000;
     const MAX_TRADES = 1000000;
-    const DAY_MS = 24 * 60 * 60 * 1000;
 
     const tick = () => {
+      const now = Date.now();
+
+      // начало сегодняшнего дня (00:00:00)
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const startTs = startOfToday.getTime();
+
       setStats((prev) => {
-        const now = Date.now();
-        const needReset =
-          !prev.lastReset || now - prev.lastReset >= DAY_MS;
+        const needReset = !prev.lastReset || prev.lastReset < startTs;
 
         const baseUsers = needReset
           ? MIN_USERS + Math.floor(Math.random() * 3000)
           : prev.activeUsers;
+
         const baseTrades = needReset
           ? MIN_TRADES + Math.floor(Math.random() * 50000)
           : prev.trades24h;
 
-        const lastReset = needReset ? now : prev.lastReset || now;
+        const lastReset = needReset
+          ? startTs
+          : prev.lastReset || startTs;
 
+        // небольшой прирост каждые 30 секунд
         const nextUsers = Math.min(
           MAX_USERS,
-          baseUsers + Math.floor(Math.random() * 250 + 30)
+          baseUsers + Math.floor(Math.random() * 120 + 20)
         );
         const nextTrades = Math.min(
           MAX_TRADES,
-          baseTrades + Math.floor(Math.random() * 8000 + 500)
+          baseTrades + Math.floor(Math.random() * 4000 + 500)
         );
 
-        // если упёрлись в потолок, начинаем новый цикл
+        // если упёрлись в верхний лимит — начинаем новый цикл от минимума
         if (nextUsers >= MAX_USERS || nextTrades >= MAX_TRADES) {
           return {
             activeUsers:
               MIN_USERS + Math.floor(Math.random() * 3000),
             trades24h:
               MIN_TRADES + Math.floor(Math.random() * 50000),
-            lastReset: now,
+            lastReset: startTs,
           };
         }
 
@@ -636,9 +645,9 @@ useEffect(() => {
       });
     };
 
-    // сразу дергаем, чтобы цифры ожили
+    // первый запуск
     tick();
-    const id = setInterval(tick, 60_000); // каждую минуту
+    const id = setInterval(tick, 30_000); // каждые 30 секунд
     return () => clearInterval(id);
   }, []);
 

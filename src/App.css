@@ -3,13 +3,22 @@
   box-sizing: border-box;
 }
 
+:root {
+  --font-ui: "Inter", "SF Pro Display", system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "SF Pro Display", "Inter", system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
+    Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
   background: #020617;
   color: #f9fafb;
 }
+
 
 /* Корневой фон */
 .page-root {
@@ -217,7 +226,9 @@ body {
 }
 
 .section-title { margin-bottom: 6px; }
-.section-title h2 { margin: 0 0 2px 0; font-size: 15px; font-weight: 600; }
+.section-title h2 {
+  font-size: 16px; /* было 15px */
+}
 .section-title p { margin: 0; font-size: 11px; color: #9ca3af; }
 
 /* Главная */
@@ -248,10 +259,16 @@ body {
 .home-stat-card {
   flex: 1;
   min-width: 130px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(15, 23, 42, 0.8);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;   /* центр по горизонтали */
+  text-align: center;    /* текст по центру */
 }
 .home-stat-label { font-size: 11px; color: #9ca3af; }
 .home-stat-value { font-size: 14px; font-weight: 600; }
@@ -481,19 +498,41 @@ body {
 
 .history-block { border-radius: 16px; border: 1px solid #111827; background: radial-gradient(circle at top left, #020617, #020617 60%); padding: 8px 8px 6px; display: flex; flex-direction: column; gap: 4px; }
 .history-empty { font-size: 11px; color: #6b7280; }
-.history-row { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 12px; background: radial-gradient(circle at left, rgba(15, 23, 42, 0.95), #020617 70%); border: 1px solid #111827; }
-.history-row::before { content: ""; position: absolute; left: 6px; top: 50%; width: 4px; height: 4px; border-radius: 999px; background: #f97316; transform: translateY(-50%); }
+.history-row {
+  position: relative;
+}
+
+.history-row::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #f97316; /* базовый цвет */
+  transform: translateY(-50%);
+}
 .history-row:hover { border-color: #f97316; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.9); }
 .history-row:last-child { border-bottom: none; }
 .history-main { font-size: 11px; }
-.history-type { font-size: 12px; font-weight: 500; }
-.history-sub { font-size: 11px; color: #9ca3af; }
+.history-type {
+  font-size: 13px;  /* было 12px */
+}
+.history-sub {
+  font-size: 12px;  /* было 11px */
+}
 .history-right { text-align: right; }
 .history-amount { font-size: 12px; font-weight: 600; }
 .history-amount.positive { color: #22c55e; }
 .history-amount.negative { color: #f97316; }
 .history-amount.pending { color: #f97316; }
-.history-time { font-size: 10px; color: #6b7280; }
+.history-time {
+  font-size: 11px;  /* было 10px */
+}
+.history-row.is-pending::before { background: #f59e0b; }
+.history-row.is-rejected::before { background: #ef4444; }
+.history-row.is-approved::before { background: #22c55e; }
 
 .profile-card { width: 100%; max-width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 18px; background: radial-gradient(circle at top left, #f97316, #020617 60%); border: 1px solid #fb923c; display: flex; align-items: center; gap: 12px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.9); }
 .profile-avatar { flex-shrink: 0; width: 42px; height: 42px; border-radius: 16px; background: rgba(15, 23, 42, 0.9); display: flex; align-items: center; justify-content: center; font-size: 24px; }
@@ -503,8 +542,27 @@ body {
 .profile-btn:hover { border-color: #3b82f6; box-shadow: 0 0 18px rgba(59, 130, 246, 0.7); background: radial-gradient(circle at top, #0f172a, #020617 70%); transform: translateY(-1px); }
 .profile-btn.logout { background: #020617; border-color: #ef4444; color: #fecaca; animation: redPulse 2.4s ease-in-out infinite; }
 .profile-btn.logout:hover { border-color: #dc2626; background: radial-gradient(circle at top, #7f1d1d, #020617 70%); box-shadow: 0 0 20px rgba(248, 113, 22, 0.9); }
-.settings-block { width: 100%; box-sizing: border-box; border-radius: 16px; border: 1px solid #f97316; background: radial-gradient(circle at top left, #f973161a, #020617 70%); padding: 10px 12px; font-size: 12px; box-shadow: 0 0 22px rgba(248, 113, 22, 0.35); }
-.settings-chip { border-radius: 999px; border: 1px solid #1f2937; background: #020617; color: #e5e7eb; font-size: 12px; padding: 5px 10px; cursor: pointer; transition: box-shadow 0.15s ease, transform 0.1s ease, border-color 0.15s ease, background 0.15s ease; }
+.settings-block {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 16px;
+  border: 1px solid #f97316;
+  background: radial-gradient(circle at top left, #f973161a, #020617 70%);
+  padding: 12px 14px;        /* было 10px 12px */
+  font-size: 13px;           /* было 12px */
+  box-shadow: 0 0 22px rgba(248, 113, 22, 0.35);
+}
+.settings-chip {
+  border-radius: 999px;
+  border: 1px solid #1f2937;
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 12px;
+  padding: 6px 12px; /* чуть больше */
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.1s ease,
+    border-color 0.15s ease, background 0.15s ease;
+}
 .settings-chip.active { background: linear-gradient(135deg, #f97316, #fde68a); color: #020617; border-color: #f97316; box-shadow: 0 0 18px rgba(248, 113, 22, 0.9); transform: translateY(-1px); }
 .settings-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .settings-row:last-child { margin-bottom: 0; }
@@ -678,21 +736,21 @@ html, body { max-width: 100%; overflow-x: hidden; display: block !important; pla
   cursor: pointer;
 }
 
-/* Зелёная пульсирующая кнопка GreenPulse (как "Открыть сделку") */
+/* Зелёная пульсирующая кнопка поддержки ─ стала чуть меньше */
 .greenPulse {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: 10px 0;
-  border-radius: 999px;
+  padding: 8px 0; /* было 10px */
+  border-radius: 16px; /* чуть менее "огромная" */
   border: none;
   background: linear-gradient(135deg, #22c55e, #bbf7d0);
   color: #020617;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;      /* было 14px */
+  font-weight: 700;     /* жирный шрифт */
   text-decoration: none;
-  box-shadow: 0 12px 26px rgba(34, 197, 94, 0.7);
+  box-shadow: 0 10px 22px rgba(34, 197, 94, 0.7);
   animation: greenPulse 2.4s ease-in-out infinite;
 }
 
@@ -720,4 +778,28 @@ html, body { max-width: 100%; overflow-x: hidden; display: block !important; pla
   flex-direction: column;
   gap: 6px;        /* расстояние между Верификация / Сменить логин / ... */
   width: 100%;
+}
+
+/* Более выразительные шрифты */
+.brand-title,
+.home-title,
+.section-title h2,
+.profile-login {
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+}
+
+.home-title {
+  text-transform: uppercase;
+}
+
+.home-stat-value,
+.wallet-amount,
+.trade-price,
+.coin-price,
+.history-amount,
+.trade-active-countdown,
+.home-stat-card .home-stat-value {
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
 }
