@@ -3400,7 +3400,6 @@ const renderHistory = () => {
                       : "Пополнение"}
                     {" · "}
                     {methodLabel(e.method)}
-                    {/* статусы только для вывода, для пополнений убраны */}
                     {isWithdraw && isDone && (
                       <span
                         style={{
@@ -3460,6 +3459,9 @@ const renderHistory = () => {
               </div>
             );
           })}
+        </div>
+      </section>
+
       {/* История сделок */}
       <section className="section-block fade-in delay-3">
         <div className="section-title">
@@ -3540,6 +3542,7 @@ const renderHistory = () => {
     </>
   );
 };
+
 
 
 const renderProfile = () => {
