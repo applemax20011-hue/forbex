@@ -30,15 +30,17 @@ body {
   color: #e5e7eb;
 }
 
+/* Было: max-width: 500px - это ограничивало ширину на ПК */
 .app-container {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 500px; /* Ограничиваем ширину для ПК и Планшетов */
-  margin: 0 auto;   /* Центрируем на больших экранах */
+  max-width: 1200px; /* <--- ИЗМЕНИЛИ: Теперь на ПК будет широко */
+  margin: 0 auto;
   min-height: 100vh;
-  background-color: #020617; /* Чтобы фон был цельным */
-  box-shadow: 0 0 40px rgba(0,0,0,0.5); /* Тень по бокам на ПК для красоты */
+  background-color: #020617; 
+  /* box-shadow убираем или делаем мягче, так как на весь экран он не нужен */
+  /* box-shadow: 0 0 40px rgba(0,0,0,0.5); */
 }
 
 /* ===== Шапка ===== */
@@ -941,8 +943,12 @@ body {
 }
 
 .wallet-method-title {
-  font-size: 13px;
+  /* Делаем текст ярко-голубым (под цвет бренда) */
+  color: #38bdf8; 
   font-weight: 700;
+  font-size: 13px;
+  /* Можно добавить легкое свечение тексту, если хочешь (раскомментируй строку ниже) */
+  /* text-shadow: 0 0 10px rgba(56, 189, 248, 0.4); */
 }
 .wallet-method-sub {
   color: #9ca3af;
@@ -1684,12 +1690,25 @@ body {
 .app-container {
   position: relative;
   z-index: 1;
+
+  /* ШИРИНА: */
   width: 100%;
-  max-width: 500px; /* Ограничиваем ширину для ПК и Планшетов */
-  margin: 0 auto;   /* Центрируем на больших экранах */
+  /* На ПК ограничиваем ширину, чтобы по бокам было видно красивый фон */
+  max-width: 600px; 
+  /* Центрируем блок на экране */
+  margin: 0 auto;
+
+  /* ВЫСОТА: */
   min-height: 100vh;
-  background-color: #020617; /* Чтобы фон был цельным */
-  box-shadow: 0 0 40px rgba(0,0,0,0.5); /* Тень по бокам на ПК для красоты */
+
+  /* ФОН: Делаем прозрачным, чтобы FoxBackground (который сзади) был виден */
+  background-color: transparent; 
+  
+  /* Убираем тень, чтобы границы были мягкими */
+  box-shadow: none;
+
+  /* Отступ снизу, чтобы контент не прилипал к нижнему меню */
+  padding-bottom: 90px; 
 }
 
 /* Лисий фон за всем контентом */
@@ -2107,30 +2126,41 @@ body {
   border-bottom: 1px solid rgba(31, 41, 55, 0.8);
 }
 
+/* ===== Парящая навигация (Floating Island) ===== */
 .bottom-nav {
   position: fixed !important;
   left: 50%;
-  bottom: 20px; /* Отступ снизу, чтобы выглядело как "островок" */
-  transform: translateX(-50%); /* Центрируем ровно посередине */
-  
-  width: 94%; /* На мобилках почти во всю ширину */
-  max-width: 480px; /* На ПК не шире контента */
+  transform: translateX(-50%); /* Строго по центру экрана */
   z-index: 100;
 
+  /* ОТСТУП СНИЗУ: 
+     20px от края + учитываем полоску iPhone (safe-area).
+     Благодаря этому он "парит" и не прилипает к низу. */
+  bottom: calc(16px + env(safe-area-inset-bottom));
+
+  /* ШИРИНА:
+     Занимаем всю ширину минус 32px (по 16px отступа слева и справа).
+     Но не шире 500px (чтобы на ПК было красиво). */
+  width: calc(100% - 32px); 
+  max-width: 500px;
+
+  /* ВНУТРЕННОСТИ */
   display: flex;
   align-items: center;
-  justify-content: space-around; /* Равномерное расстояние между кнопками */
-  padding: 10px 12px;
+  justify-content: space-around;
+  padding: 10px 16px; /* Внутренние отступы, чтобы иконкам было просторно */
 
-  /* Красивый стиль "стекла" */
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-  
-  pointer-events: auto; /* <--- САМОЕ ВАЖНОЕ: ВКЛЮЧАЕМ КЛИКИ */
+  /* ДИЗАЙН СТЕКЛА */
+  background: rgba(15, 23, 42, 0.85); /* Полупрозрачный темный фон */
+  backdrop-filter: blur(24px);        /* Размытие фона под меню */
+  -webkit-backdrop-filter: blur(24px);
+
+  /* ГРАНИЦЫ И ТЕНИ */
+  border: 1px solid rgba(255, 255, 255, 0.08); /* Тонкая светлая обводка */
+  border-radius: 24px; /* Сильное закругление краев (овальная форма) */
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6); /* Красивая тень снизу */
+
+  pointer-events: auto; /* Включаем клики */
 }
 
 /* кнопки внутри — как были */
@@ -2142,7 +2172,7 @@ body {
   color: #9ca3af;
   font-size: 10px;
   padding: 4px;
-  border-radius: 12px;
+  border-radius: 1200px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2152,12 +2182,12 @@ body {
 }
 
 .nav-tab-icon {
-  font-size: 20px;
+  font-size: 18px;
   margin-bottom: 2px;
 }
 
 .nav-tab-label {
-  font-size: 10px;
+  font-size:10px;
   letter-spacing: 0.02em;
 }
 
