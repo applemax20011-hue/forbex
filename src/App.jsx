@@ -638,7 +638,7 @@ useEffect(() => {
 
   // таймер 15 минут на оплату
   useEffect(() => {
-    if (walletModal === "deposit" && depositStep === 2) {
+    if (walletModal === "deposit" && depositStep === 3) {
       setPaymentTimer(900);
       const interval = setInterval(() => {
         setPaymentTimer((prev) => {
@@ -2308,37 +2308,62 @@ const renderWallet = () => {
     maximumFractionDigits: 2,
   });
 
-  const currentMethod = walletForm.method || "card";
+  const currentMethod = walletForm.method || null;
   const isCard = currentMethod === "card";
-  
-  // --- Логика шагов ---
+  const isUSDT = currentMethod === "usdt";
+  const isPaypal = currentMethod === "paypal";
+  const isSupport = currentMethod === "support";
+
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast({
+        type: "success",
+        text: isEN ? "Copied to clipboard" : "Скопировано в буфер",
+      });
+    } catch {
+      setToast({
+        type: "error",
+        text: isEN ? "Copy failed" : "Не удалось скопировать",
+      });
+    }
+  };
+
+  // --- Логика шагов депозита (1->2->3) ---
   const handleDepositStep = () => {
     if (depositStep === 1) {
-      setDepositStep(2); 
-    } else if (depositStep === 2) {
+      // запрет “Далее”, если метод не выбран
+      if (!walletForm.method) return;
+      setDepositStep(2);
+      return;
+    }
+    if (depositStep === 2) {
       const minAmount = settings.currency === "RUB" ? 1000 : 10;
       const raw = depositAmount.toString().replace(",", ".");
       const amountNum = parseFloat(raw);
       if (!amountNum || amountNum < minAmount) {
-        setDepositError(isEN ? `Min amount ${minAmount}` : `Минимум ${minAmount}`);
+        setDepositError(
+          isEN ? `Min amount ${minAmount}` : `Минимум ${minAmount}`
+        );
         return;
       }
       setDepositError("");
-      setDepositStep(3);
+      setDepositStep(3); // реквизиты + таймер
+      return;
     }
   };
 
   // --- Логика вывода ---
   const handleWithdrawSubmit = async () => {
-    const raw = walletForm.amount.toString().replace(",", ".");
+    const raw = walletForm.amount?.toString().replace(",", ".") || "";
     const amountNum = parseFloat(raw);
     if (!amountNum || amountNum > balance) return;
 
     const { error } = await supabase.from("wallet_withdrawals").insert({
       user_tg_id: telegramId,
       amount: amountNum,
-      method: walletForm.method,
-      status: "pending"
+      method: walletForm.method || "card",
+      status: "pending",
     });
 
     if (!error) {
@@ -2348,7 +2373,9 @@ const renderWallet = () => {
       loadWalletDataFromSupabase();
       setToast({
         type: "success",
-        text: isEN ? "Withdrawal request created" : "Заявка на вывод средств успешно создана"
+        text: isEN
+          ? "Withdrawal request created"
+          : "Заявка на вывод средств успешно создана",
       });
     }
   };
@@ -2362,6 +2389,8 @@ const renderWallet = () => {
     return m;
   };
 
+  const canGoNextFromStep1 = !!walletForm.method;
+
   return (
     <>
       {/* Баланс */}
@@ -2370,425 +2399,629 @@ const renderWallet = () => {
           <h2>{isEN ? "Wallet" : "Кошелёк"}</h2>
         </div>
         <div className="wallet-balance-card">
-          <div className="wallet-badge">{isEN ? "Main balance" : "Основной баланс"}</div>
-          <div className="wallet-amount">{formatBalance} {currencySymbol}</div>
+          <div className="wallet-badge">
+            {isEN ? "Main balance" : "Основной баланс"}
+          </div>
+          <div className="wallet-amount">
+            {formatBalance} {currencySymbol}
+          </div>
           <div className="wallet-actions-row">
-            <button className="wallet-action-btn primary" onClick={() => {
+            <button
+              className="wallet-action-btn primary"
+              onClick={() => {
                 setWalletModal("deposit");
                 setDepositStep(1);
                 setDepositAmount("");
-            }}>
+                setDepositError("");
+                setReceiptFile(null);
+                setReceiptFileName("");
+                // требуем явного выбора метода
+                setWalletForm((p) => ({ ...p, method: null }));
+              }}
+            >
               {isEN ? "Deposit" : "Пополнить"}
             </button>
-            <button className="wallet-action-btn secondary" onClick={() => {
+            <button
+              className="wallet-action-btn secondary"
+              onClick={() => {
                 setWalletModal("withdraw");
                 setWithdrawStep(1);
                 setWalletForm({ ...walletForm, amount: "" });
-            }}>
+              }}
+            >
               {isEN ? "Withdraw" : "Вывести"}
             </button>
           </div>
         </div>
       </section>
 
-      {/* История операций (Последние) */}
+      {/* История операций (короткий список) */}
       <section className="section-block fade-in delay-2">
         <div className="section-title">
-           <h2>{isEN ? "Recent operations" : "Последние операции кошелька"}</h2>
+          <h2>
+            {isEN ? "Recent operations" : "Последние операции кошелька"}
+          </h2>
         </div>
         <div className="wallet-history-short">
           {walletHistory.slice(0, 7).map((e) => {
-             const isWithdraw = e.type === "withdraw";
-             const isPendingWithdraw = isWithdraw && (!e.status || e.status === 'pending');
-             
-             return (
-               <div key={e.id} className="wallet-history-row">
-                 <div className="wallet-history-main">
-                   <div className="wallet-history-type">
-                     {isWithdraw ? (isEN ? "Withdrawal" : "Вывод средств") : (isEN ? "Deposit" : "Пополнение")}
-                     {" — "} {getMethodName(e.method)}
-                     
-                     {/* Статусы */}
-                     {isWithdraw && e.status === 'done' && <span style={{color:'#ef4444', fontSize:10, marginLeft:4}}>({isEN ? "completed" : "исполнен"})</span>}
-                     {isWithdraw && isPendingWithdraw && <span style={{color:'#fbbf24', fontSize:10, marginLeft:4}}>({isEN ? "processing" : "обработка"})</span>}
-                     
-                     {!isWithdraw && e.status === 'approved' && <span style={{color:'#22c55e', fontSize:10, marginLeft:4}}>({isEN ? "approved" : "одобрено"})</span>}
-                     {!isWithdraw && e.status === 'rejected' && <span style={{color:'#ef4444', fontSize:10, marginLeft:4}}>({isEN ? "rejected" : "отклонено"})</span>}
-                     {!isWithdraw && e.status === 'pending' && <span style={{color:'#fbbf24', fontSize:10, marginLeft:4}}>({isEN ? "on review" : "на проверке"})</span>}
-                   </div>
-                   <div className="wallet-history-time">{formatDateTime(e.ts)}</div>
-                 </div>
-                 <div className="history-right" style={{textAlign: 'right'}}>
-                    <div className={"wallet-history-amount " + (isWithdraw ? "negative" : "positive")} 
-                         style={{color: isWithdraw ? '#ef4444' : '#22c55e'}}>
-                        {isWithdraw ? "-" : "+"}
-                        {toDisplayCurrency(e.amount, settings.currency).toLocaleString("ru-RU")} {currencySymbol}
-                    </div>
-                    {/* Кнопка отмены */}
-                    {isPendingWithdraw && (
-                        <button className="cancel-btn"
-                             onClick={() => handleCancelWithdrawal(e.id, e.id.replace('wd-', ''))}>
-                             {isEN ? "Cancel" : "Отменить"}
-                        </button>
+            const isWithdraw = e.type === "withdraw";
+            const isPendingWithdraw =
+              isWithdraw && (!e.status || e.status === "pending");
+
+            return (
+              <div key={e.id} className="wallet-history-row">
+                <div className="wallet-history-main">
+                  <div className="wallet-history-type">
+                    {isWithdraw
+                      ? isEN
+                        ? "Withdrawal"
+                        : "Вывод средств"
+                      : isEN
+                      ? "Deposit"
+                      : "Пополнение"}
+                    {" — "} {getMethodName(e.method)}
+                    {/* Статусы */}
+                    {isWithdraw && e.status === "done" && (
+                      <span
+                        style={{
+                          color: "#ef4444",
+                          fontSize: 10,
+                          marginLeft: 4,
+                        }}
+                      >
+                        ({isEN ? "completed" : "исполнен"})
+                      </span>
                     )}
-                 </div>
-               </div>
-             )
+                    {isWithdraw && isPendingWithdraw && (
+                      <span
+                        style={{
+                          color: "#fbbf24",
+                          fontSize: 10,
+                          marginLeft: 4,
+                        }}
+                      >
+                        ({isEN ? "processing" : "обработка"})
+                      </span>
+                    )}
+
+                    {!isWithdraw && e.status === "approved" && (
+                      <span
+                        style={{
+                          color: "#22c55e",
+                          fontSize: 10,
+                          marginLeft: 4,
+                        }}
+                      >
+                        ({isEN ? "approved" : "одобрено"})
+                      </span>
+                    )}
+                    {!isWithdraw && e.status === "rejected" && (
+                      <span
+                        style={{
+                          color: "#ef4444",
+                          fontSize: 10,
+                          marginLeft: 4,
+                        }}
+                      >
+                        ({isEN ? "rejected" : "отклонено"})
+                      </span>
+                    )}
+                    {!isWithdraw && e.status === "pending" && (
+                      <span
+                        style={{
+                          color: "#fbbf24",
+                          fontSize: 10,
+                          marginLeft: 4,
+                        }}
+                      >
+                        ({isEN ? "on review" : "на проверке"})
+                      </span>
+                    )}
+                  </div>
+                  <div className="wallet-history-time">
+                    {formatDateTime(e.ts)}
+                  </div>
+                </div>
+                <div className="history-right" style={{ textAlign: "right" }}>
+                  <div
+                    className={
+                      "wallet-history-amount " +
+                      (isWithdraw ? "negative" : "positive")
+                    }
+                    style={{ color: isWithdraw ? "#ef4444" : "#22c55e" }}
+                  >
+                    {isWithdraw ? "-" : "+"}
+                    {toDisplayCurrency(e.amount, settings.currency).toLocaleString(
+                      "ru-RU"
+                    )}{" "}
+                    {currencySymbol}
+                  </div>
+                  {isPendingWithdraw && (
+                    <button
+                      className="cancel-btn"
+                      onClick={() =>
+                        handleCancelWithdrawal(e.id, e.id.replace("wd-", ""))
+                      }
+                    >
+                      {isEN ? "Cancel" : "Отменить"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
           })}
-          {walletHistory.length === 0 && <div className="wallet-empty" style={{padding: 8}}>{isEN ? "No operations" : "Нет операций"}</div>}
+          {walletHistory.length === 0 && (
+            <div className="wallet-empty" style={{ padding: 8 }}>
+              {isEN ? "No operations" : "Нет операций"}
+            </div>
+          )}
         </div>
       </section>
 
       {/* МОДАЛКИ */}
       {walletModal && (
-        <div className="wallet-modal-backdrop" onClick={() => setWalletModal(null)}>
+        <div
+          className="wallet-modal-backdrop"
+          onClick={() => setWalletModal(null)}
+        >
           <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
-            
+            {/* Кнопка закрытия */}
+            <button
+              className="wallet-modal-close"
+              onClick={() => setWalletModal(null)}
+              aria-label={isEN ? "Close" : "Закрыть"}
+            >
+              ✕
+            </button>
+
             {/* === ПОПОЛНЕНИЕ === */}
             {walletModal === "deposit" && (
-                <>
-                   <div className="wallet-modal-title">{isEN ? "Deposit" : "Пополнение"}</div>
-                   
-                   {/* Шаг 1: Метод */}
-                   {depositStep === 1 && (
-                       <div className="wallet-methods">
-                           <button className={"wallet-method-card " + (walletForm.method === "card" ? "active" : "")}
-                                   onClick={() => setWalletForm(p => ({...p, method: 'card'}))}>
-                               <div className="wallet-method-title">{isEN ? "Bank card" : "Банковская карта"}</div>
-                               <div className="wallet-method-sub">VISA / MasterCard / МИР</div>
-                           </button>
-                           <button className={"wallet-method-card " + (walletForm.method === "usdt" ? "active" : "")}
-                                   onClick={() => setWalletForm(p => ({...p, method: 'usdt'}))}>
-                               <div className="wallet-method-title">USDT TRC-20</div>
-                               <div className="wallet-method-sub">TRON Network</div>
-                           </button>
-                           <button className={"wallet-method-card " + (walletForm.method === "support" ? "active" : "")}
-                                   onClick={() => setWalletForm(p => ({...p, method: 'support'}))}>
-                               <div className="wallet-method-title">{isEN ? "Via support" : "Через поддержку"}</div>
-                               <div className="wallet-method-sub">{isEN ? "Manager help" : "Менеджер поможет"}</div>
-                           </button>
-                           
-                           <div className="wallet-modal-actions">
-                               <button className="wallet-modal-btn primary" onClick={handleDepositStep}>{isEN ? "Next" : "Далее"}</button>
-                           </div>
-                       </div>
-                   )}
+              <>
+                <div className="wallet-modal-title">
+                  {isEN ? "Deposit" : "Пополнение"}
+                </div>
 
-                   {/* Шаг 2: Сумма */}
-                   {depositStep === 2 && (
-                       <div className="wallet-modal-input-group">
-                           <label>{isEN ? "Enter amount" : "Введите сумму"} ({currencySymbol})</label>
-                           <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="1000" />
-                           {depositError && <div className="wallet-modal-note error">{depositError}</div>}
-                           <div className="wallet-modal-actions">
-                               <button className="wallet-modal-btn secondary" onClick={() => setDepositStep(1)}>{isEN ? "Back" : "Назад"}</button>
-                               <button className="wallet-modal-btn primary" onClick={handleDepositStep}>{isEN ? "Next" : "Далее"}</button>
-                           </div>
-                       </div>
-                   )}
+                {/* Шаг 1: Метод */}
+                {depositStep === 1 && (
+                  <div className="wallet-methods">
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#9ca3af",
+                        marginBottom: 4,
+                      }}
+                    >
+                      {isEN ? "Priority method" : "Приоритетный способ"}
+                    </div>
 
-                   {/* Шаг 3: Реквизиты */}
-                   {depositStep === 3 && (
-                       <>
-                         <div className="payment-details">
-                            {isCard && (
-                                <>
-                                    <div className="payment-row"><div className="payment-label">{isEN ? "Card" : "Карта"}</div><div className="payment-value">5555 0000 0000 0000</div></div>
-                                    <div className="payment-row"><div className="payment-label">{isEN ? "Bank" : "Банк"}</div><div className="payment-value">Tinkoff</div></div>
-                                </>
-                            )}
-                            
-                            <div className="warning-text">
-                                <span>⚠️</span>
-                                <div>{isEN ? "Balance credited in 5 mins." : "Баланс зачисляется автоматически в течение 5 минут. Если средства не пришли — пишите в поддержку."}</div>
+                    {/* CARD */}
+                    <button
+                      className={
+                        "wallet-method-card " +
+                        (walletForm.method === "card" ? "active" : "") +
+                        (!walletForm.method ? " pulse-white" : "")
+                      }
+                      onClick={() =>
+                        setWalletForm((p) => ({ ...p, method: "card" }))
+                      }
+                    >
+                      <div className="wallet-method-title">
+                        {isEN ? "Bank card" : "Банковская карта"}
+                      </div>
+                      <div className="wallet-method-sub">
+                        VISA / MasterCard / МИР
+                      </div>
+                      <div className="wallet-method-extra">
+                        {isEN
+                          ? "Fastest crediting"
+                          : "Самое быстрое зачисление"}
+                      </div>
+                    </button>
+
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#9ca3af",
+                        marginBottom: 4,
+                        marginTop: 8,
+                      }}
+                    >
+                      {isEN ? "Crypto & other" : "Криптовалюта и другое"}
+                    </div>
+
+                    {/* USDT */}
+                    <button
+                      className={
+                        "wallet-method-card " +
+                        (walletForm.method === "usdt" ? "active" : "")
+                      }
+                      onClick={() =>
+                        setWalletForm((p) => ({ ...p, method: "usdt" }))
+                      }
+                    >
+                      <div className="wallet-method-title">USDT TRC-20</div>
+                      <div className="wallet-method-sub">TRON Network</div>
+                    </button>
+
+                    {/* PAYPAL */}
+                    <button
+                      className={
+                        "wallet-method-card " +
+                        (walletForm.method === "paypal" ? "active" : "")
+                      }
+                      onClick={() =>
+                        setWalletForm((p) => ({ ...p, method: "paypal" }))
+                      }
+                    >
+                      <div className="wallet-method-title">PayPal</div>
+                      <div className="wallet-method-sub">Global payments</div>
+                    </button>
+
+                    {/* SUPPORT */}
+                    <button
+                      className={
+                        "wallet-method-card " +
+                        (walletForm.method === "support" ? "active" : "")
+                      }
+                      onClick={() =>
+                        setWalletForm((p) => ({ ...p, method: "support" }))
+                      }
+                    >
+                      <div className="wallet-method-title">
+                        {isEN ? "Via support" : "Через поддержку"}
+                      </div>
+                      <div className="wallet-method-sub">
+                        {isEN ? "Manager help" : "Менеджер поможет"}
+                      </div>
+                    </button>
+
+                    <div className="wallet-modal-actions">
+                      <button
+                        className="wallet-modal-btn primary"
+                        onClick={handleDepositStep}
+                        disabled={!canGoNextFromStep1}
+                        title={
+                          canGoNextFromStep1
+                            ? ""
+                            : isEN
+                            ? "Choose a method first"
+                            : "Сначала выберите способ"
+                        }
+                      >
+                        {isEN ? "Next" : "Далее"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Шаг 2: Сумма */}
+                {depositStep === 2 && (
+                  <div className="wallet-modal-input-group">
+                    <label>
+                      {isEN ? "Enter amount" : "Введите сумму"} (
+                      {currencySymbol})
+                    </label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value)}
+                      placeholder={
+                        settings.currency === "RUB" ? "1000" : "10"
+                      }
+                    />
+                    {depositError && (
+                      <div className="wallet-modal-note error">
+                        {depositError}
+                      </div>
+                    )}
+                    <div className="wallet-modal-actions">
+                      <button
+                        className="wallet-modal-btn secondary"
+                        onClick={() => setDepositStep(1)}
+                      >
+                        {isEN ? "Back" : "Назад"}
+                      </button>
+                      <button
+                        className="wallet-modal-btn primary"
+                        onClick={handleDepositStep}
+                      >
+                        {isEN ? "Next" : "Далее"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Шаг 3: Реквизиты + чек */}
+                {depositStep === 3 && (
+                  <>
+                    <div className="payment-details">
+                      {/* Реквизиты под метод */}
+                      {isCard && (
+                        <>
+                          <div className="payment-row">
+                            <div className="payment-label">
+                              {isEN ? "Card" : "Номер карты"}
                             </div>
-                            
-                            <a href="https://t.me/ForbexSupport" target="_blank" className="telegram-support-btn">
-                                👨‍💻 {isEN ? "Support" : "Тех. Поддержка"}
-                            </a>
-                         </div>
-                         
-                         {walletForm.method !== 'support' && (
-                             <div className="payment-upload">
-                                <label className="upload-btn">
-                                    <input type="file" onChange={e => { setReceiptFile(e.target.files[0]); setReceiptFileName(e.target.files[0].name); }} />
-                                    <span>{isEN ? "Attach Receipt" : "Прикрепить чек"}</span>
-                                </label>
-                                {receiptFileName && <div className="upload-filename">{receiptFileName}</div>}
-                             </div>
-                         )}
-                         
-                         <div className="wallet-modal-actions">
-                            <button className="wallet-modal-btn secondary" onClick={() => setDepositStep(2)}>{isEN ? "Back" : "Назад"}</button>
-                            <button className="wallet-modal-btn primary" onClick={handleDepositSendReceipt} disabled={!receiptFile && walletForm.method !== 'support'}>
-                                {isSendingReceipt ? (isEN ? "Sending..." : "Отправка...") : (isEN ? "I paid" : "Я оплатил")}
+                            <div className="payment-value">
+                              5555 0000 0000 0000
+                            </div>
+                            <button
+                              className="copy-btn"
+                              onClick={() =>
+                                copyToClipboard("5555 0000 0000 0000")
+                              }
+                            >
+                              {isEN ? "Copy" : "Копировать"}
                             </button>
-                         </div>
-                       </>
-                   )}
-                </>
+                          </div>
+                          <div className="payment-row">
+                            <div className="payment-label">
+                              {isEN ? "Bank" : "Банк"}
+                            </div>
+                            <div className="payment-value">Tinkoff</div>
+                            <button
+                              className="copy-btn"
+                              onClick={() => copyToClipboard("Tinkoff")}
+                            >
+                              {isEN ? "Copy" : "Копировать"}
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      {isUSDT && (
+                        <>
+                          <div className="payment-row">
+                            <div className="payment-label">Network</div>
+                            <div className="payment-value">TRON (TRC-20)</div>
+                            <button
+                              className="copy-btn"
+                              onClick={() => copyToClipboard("TRON (TRC-20)")}
+                            >
+                              {isEN ? "Copy" : "Копировать"}
+                            </button>
+                          </div>
+                          <div className="payment-row">
+                            <div className="payment-label">Wallet</div>
+                            <div
+                              className="payment-value"
+                              style={{ wordBreak: "break-all" }}
+                            >
+                              TRxA1bCDeFGhijkLmNoPqRS2tuvWXyZ123
+                            </div>
+                            <button
+                              className="copy-btn"
+                              onClick={() =>
+                                copyToClipboard(
+                                  "TRxA1bCDeFGhijkLmNoPqRS2tuvWXyZ123"
+                                )
+                              }
+                            >
+                              {isEN ? "Copy" : "Копировать"}
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      {isPaypal && (
+                        <>
+                          <div className="payment-row">
+                            <div className="payment-label">PayPal</div>
+                            <div className="payment-value">
+                              pay@forbex.example
+                            </div>
+                            <button
+                              className="copy-btn"
+                              onClick={() =>
+                                copyToClipboard("pay@forbex.example")
+                              }
+                            >
+                              {isEN ? "Copy" : "Копировать"}
+                            </button>
+                          </div>
+                          <div className="payment-row">
+                            <div className="payment-label">
+                              {isEN ? "Note" : "Примечание"}
+                            </div>
+                            <div className="payment-value">
+                              {isEN
+                                ? "Use Friends & Family if available"
+                                : "Если доступно, используйте Friends & Family"}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {isSupport && (
+                        <>
+                          <div className="warning-text">
+                            <span>💬</span>
+                            <div>
+                              {isEN
+                                ? "Deposit via manager. Tap the button below to contact support."
+                                : "Пополнение через менеджера. Нажмите кнопку ниже, чтобы связаться с поддержкой."}
+                            </div>
+                          </div>
+                          <a
+                            href="https://t.me/ForbexSupport"
+                            target="_blank"
+                            className="telegram-support-btn"
+                            rel="noreferrer"
+                          >
+                            👨‍💻 {isEN ? "Support" : "Тех. Поддержка"}
+                          </a>
+                        </>
+                      )}
+
+                      {/* Таймер и предупреждение — не для support */}
+                      {!isSupport && (
+                        <>
+                          <div className="payment-row">
+                            <div className="payment-label">
+                              {isEN ? "Time to pay" : "Время на оплату"}
+                            </div>
+                            <div className="payment-value payment-timer">
+                              {formatTimer(paymentTimer)}
+                            </div>
+                          </div>
+                          <div className="warning-text">
+                            <span>⚠️</span>
+                            <div>
+                              {isEN
+                                ? "Balance is credited automatically within 5 minutes after sending the receipt. If funds don’t arrive — contact support."
+                                : "Баланс зачисляется автоматически в течение 5 минут после отправки чека. Если средства не пришли — напишите в поддержку."}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Загрузка чека (не для support) */}
+                    {!isSupport && (
+                      <div className="payment-upload">
+                        <label className="upload-btn">
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0] || null;
+                              setReceiptFile(f);
+                              setReceiptFileName(f ? f.name : "");
+                            }}
+                          />
+                          <span>
+                            {isEN
+                              ? "Attach receipt (photo or PDF)"
+                              : "Прикрепить чек (фото или PDF)"}
+                          </span>
+                        </label>
+                        {receiptFileName && (
+                          <div className="upload-filename">
+                            {receiptFileName}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="wallet-modal-actions">
+                      <button
+                        className="wallet-modal-btn secondary"
+                        onClick={() => setDepositStep(2)}
+                      >
+                        {isEN ? "Back" : "Назад"}
+                      </button>
+
+                      {!isSupport ? (
+                        <button
+                          className="wallet-modal-btn primary"
+                          onClick={handleDepositSendReceipt}
+                          disabled={!receiptFile || isSendingReceipt}
+                        >
+                          {isSendingReceipt
+                            ? isEN
+                              ? "Sending..."
+                              : "Отправка..."
+                            : isEN
+                            ? "I paid"
+                            : "Я оплатил"}
+                        </button>
+                      ) : (
+                        <a
+                          className="wallet-modal-btn primary"
+                          href="https://t.me/ForbexSupport"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {isEN ? "Contact support" : "Перейти в поддержку"}
+                        </a>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
             )}
 
             {/* === ВЫВОД === */}
             {walletModal === "withdraw" && (
-                <>
-                    <div className="wallet-modal-title">{isEN ? "Withdraw" : "Вывод средств"}</div>
-                    
-                    {/* Шаг 1: Метод */}
-                    {withdrawStep === 1 && (
-                        <div className="wallet-methods">
-                            <button className={"wallet-method-card " + (walletForm.method === "card" ? "active" : "")}
-                                    onClick={() => setWalletForm(p => ({...p, method: 'card'}))}>
-                                <div className="wallet-method-title">{isEN ? "Bank card" : "Банковская карта"}</div>
-                            </button>
-                            <button className={"wallet-method-card " + (walletForm.method === "usdt" ? "active" : "")}
-                                    onClick={() => setWalletForm(p => ({...p, method: 'usdt'}))}>
-                                <div className="wallet-method-title">USDT TRC-20</div>
-                            </button>
-                            <div className="wallet-modal-actions">
-                                <button className="wallet-modal-btn primary" onClick={() => setWithdrawStep(2)}>{isEN ? "Next" : "Далее"}</button>
-                            </div>
-                        </div>
-                    )}
+              <>
+                <div className="wallet-modal-title">
+                  {isEN ? "Withdraw" : "Вывод средств"}
+                </div>
 
-                    {/* Шаг 2: Сумма */}
-                    {withdrawStep === 2 && (
-                       <div className="wallet-modal-input-group">
-                           <label>{isEN ? "Amount" : "Сумма вывода"}</label>
-                           <input type="number" value={walletForm.amount} onChange={e => setWalletForm({...walletForm, amount: e.target.value})} placeholder="Min 1000" />
-                           <div className="wallet-modal-actions">
-                               <button className="wallet-modal-btn secondary" onClick={() => setWithdrawStep(1)}>{isEN ? "Back" : "Назад"}</button>
-                               <button className="wallet-modal-btn primary" onClick={handleWithdrawSubmit}>{isEN ? "Create request" : "Создать заявку"}</button>
-                           </div>
-                       </div>
-                    )}
-                </>
-            )}
-
-          </div>
-        </div>
-      )}
-    </>
-  );
-};
-
-  // Функция вывода (создание заявки)
-  const handleWithdrawSubmit = async () => {
-      const raw = walletForm.amount.toString().replace(",", ".");
-      const amountNum = parseFloat(raw);
-      if (!amountNum || amountNum > balance) return;
-
-      // 1. Создаем запись в базе (pending)
-      const { error } = await supabase.from("wallet_withdrawals").insert({
-          user_tg_id: telegramId,
-          amount: amountNum,
-          method: walletForm.method,
-          status: "pending"
-      });
-
-      if (!error) {
-          setWalletModal(null);
-          setWithdrawStep(1);
-          setWalletForm({ amount: "", method: "card" });
-          loadWalletDataFromSupabase(); // Обновит историю и баланс
-          setToast({
-              type: "success",
-              text: isEN ? "Withdrawal request created" : "Заявка на вывод средств успешно создана"
-          });
-      }
-  };
-
-  return (
-    <>
-      <section className="section-block fade-in delay-1">
-        <div className="section-title">
-          <h2>{isEN ? "Wallet" : "Кошелёк"}</h2>
-        </div>
-        <div className="wallet-balance-card">
-          <div className="wallet-badge">{isEN ? "Main balance" : "Основной баланс"}</div>
-          <div className="wallet-amount">{formatBalance} {currencySymbol}</div>
-          <div className="wallet-actions-row">
-            <button className="wallet-action-btn primary" onClick={() => {
-                setWalletModal("deposit");
-                setDepositStep(1); // Сброс на выбор метода
-                setDepositAmount("");
-            }}>
-              {isEN ? "Deposit" : "Пополнить"}
-            </button>
-            <button className="wallet-action-btn secondary" onClick={() => {
-                setWalletModal("withdraw");
-                setWithdrawStep(1); // Сброс на выбор метода
-                setWalletForm({ ...walletForm, amount: "" });
-            }}>
-              {isEN ? "Withdraw" : "Вывести"}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="section-block fade-in delay-2">
-        <div className="section-title">
-           <h2>{isEN ? "History" : "Последние операции"}</h2>
-        </div>
-        <div className="wallet-history-short">
-          {walletHistory.slice(0, 7).map((e) => {
-             const isWithdraw = e.type === "withdraw";
-             // Если вывод pending - кнопку отмены, если done - красный цвет
-             const isPendingWithdraw = isWithdraw && (!e.status || e.status === 'pending');
-             
-             return (
-               <div key={e.id} className="wallet-history-row">
-                 <div className="wallet-history-main">
-                   <div className="wallet-history-type">
-                     {isWithdraw ? (isEN ? "Withdrawal" : "Вывод") : (isEN ? "Deposit" : "Пополнение")}
-                     {" — "} {e.method === 'card' ? (isEN ? "Card" : "Карта") : e.method}
-                     {/* Статус текстом */}
-                     {isWithdraw && e.status === 'done' && <span style={{color:'#ef4444', fontSize:10, marginLeft:4}}>(исполнен)</span>}
-                     {isWithdraw && isPendingWithdraw && <span style={{color:'#fbbf24', fontSize:10, marginLeft:4}}>(обработка)</span>}
-                     {!isWithdraw && e.status === 'approved' && <span style={{color:'#22c55e', fontSize:10, marginLeft:4}}>(одобрено)</span>}
-                     {!isWithdraw && e.status === 'rejected' && <span style={{color:'#ef4444', fontSize:10, marginLeft:4}}>(отклонено)</span>}
-                     {!isWithdraw && e.status === 'pending' && <span style={{color:'#fbbf24', fontSize:10, marginLeft:4}}>(на проверке)</span>}
-                   </div>
-                   <div className="wallet-history-time">{formatDateTime(e.ts)}</div>
-                 </div>
-                 <div className="history-right" style={{textAlign: 'right'}}>
-                    <div className={"wallet-history-amount " + (isWithdraw ? "negative" : "positive")} 
-                         style={{color: isWithdraw ? '#ef4444' : '#22c55e'}}>
-                        {isWithdraw ? "-" : "+"}
-                        {toDisplayCurrency(e.amount, settings.currency).toLocaleString("ru-RU")} {currencySymbol}
+                {/* Шаг 1: Метод */}
+                {withdrawStep === 1 && (
+                  <div className="wallet-methods">
+                    <button
+                      className={
+                        "wallet-method-card " +
+                        (walletForm.method === "card" ? "active" : "")
+                      }
+                      onClick={() =>
+                        setWalletForm((p) => ({ ...p, method: "card" }))
+                      }
+                    >
+                      <div className="wallet-method-title">
+                        {isEN ? "Bank card" : "Банковская карта"}
+                      </div>
+                    </button>
+                    <button
+                      className={
+                        "wallet-method-card " +
+                        (walletForm.method === "usdt" ? "active" : "")
+                      }
+                      onClick={() =>
+                        setWalletForm((p) => ({ ...p, method: "usdt" }))
+                      }
+                    >
+                      <div className="wallet-method-title">USDT TRC-20</div>
+                    </button>
+                    <div className="wallet-modal-actions">
+                      <button
+                        className="wallet-modal-btn primary"
+                        onClick={() => setWithdrawStep(2)}
+                      >
+                        {isEN ? "Next" : "Далее"}
+                      </button>
                     </div>
-                    {/* Кнопка отмены для вывода */}
-                    {isPendingWithdraw && (
-                        <div style={{fontSize:10, color:'#9ca3af', textDecoration:'underline', cursor:'pointer', marginTop:2}}
-                             onClick={() => handleCancelWithdrawal(e.id, e.id.replace('wd-', ''))}>
-                             {isEN ? "Cancel" : "Отменить"}
-                        </div>
-                    )}
-                 </div>
-               </div>
-             )
-          })}
-        </div>
-      </section>
+                  </div>
+                )}
 
-      {/* МОДАЛКИ */}
-      {walletModal && (
-        <div className="wallet-modal-backdrop" onClick={() => setWalletModal(null)}>
-          <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
-            
-            {/* === ПОПОЛНЕНИЕ === */}
-            {walletModal === "deposit" && (
-                <>
-                   <div className="wallet-modal-title">{isEN ? "Deposit" : "Пополнение"}</div>
-                   
-                   {/* Шаг 1: Метод */}
-                   {depositStep === 1 && (
-                       <div className="wallet-methods">
-                           {/* ... (Тут твои кнопки методов, оставь как были, просто добавь onClick setDepositStep(2) не тут, а кнопку "Далее" внизу) */}
-                           {/* Для краткости я скопирую одну кнопку, остальные оставь свои */}
-                           <button className={"wallet-method-card " + (walletForm.method === "card" ? "active" : "")}
-                                   onClick={() => setWalletForm(p => ({...p, method: 'card'}))}>
-                               <div className="wallet-method-title">Банковская карта</div>
-                           </button>
-                           <button className={"wallet-method-card " + (walletForm.method === "usdt" ? "active" : "")}
-                                   onClick={() => setWalletForm(p => ({...p, method: 'usdt'}))}>
-                               <div className="wallet-method-title">USDT TRC-20</div>
-                           </button>
-                           {/* Добавь остальные методы (PayPal, Support) сюда же */}
-                           
-                           <div className="wallet-modal-actions">
-                               <button className="wallet-modal-btn primary" onClick={handleDepositStep}>Далее</button>
-                           </div>
-                       </div>
-                   )}
-
-                   {/* Шаг 2: Сумма */}
-                   {depositStep === 2 && (
-                       <div className="wallet-modal-input-group">
-                           <label>Введите сумму</label>
-                           <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="1000" />
-                           {depositError && <div className="wallet-modal-note error">{depositError}</div>}
-                           <div className="wallet-modal-actions">
-                               <button className="wallet-modal-btn secondary" onClick={() => setDepositStep(1)}>Назад</button>
-                               <button className="wallet-modal-btn primary" onClick={handleDepositStep}>Далее</button>
-                           </div>
-                       </div>
-                   )}
-
-                   {/* Шаг 3: Реквизиты и Чек */}
-                   {depositStep === 3 && (
-                       <>
-                         <div className="payment-details">
-                            {/* Тут твои реквизиты в зависимости от метода */}
-                            {isCard && <div className="payment-row"><div className="payment-label">Карта</div><div className="payment-value">5555 0000 0000 0000</div></div>}
-                            {/* ... остальные реквизиты ... */}
-                            
-                            {/* Смайлик предупреждение вместо кнопки */}
-                            <div className="warning-text">
-                                <span>⚠️</span>
-                                <div>Баланс зачисляется автоматически в течение 5 минут. Если средства не пришли — пишите в поддержку.</div>
-                            </div>
-                            
-                            <a href="https://t.me/ForbexSupport" target="_blank" className="telegram-support-btn">
-                                👨‍💻 Тех. Поддержка
-                            </a>
-                         </div>
-                         
-                         {/* Загрузка чека */}
-                         {!isSupport && (
-                             <div className="payment-upload">
-                                <label className="upload-btn">
-                                    <input type="file" onChange={e => { setReceiptFile(e.target.files[0]); setReceiptFileName(e.target.files[0].name); }} />
-                                    <span>{isEN ? "Attach Receipt" : "Прикрепить чек"}</span>
-                                </label>
-                                {receiptFileName && <div className="upload-filename">{receiptFileName}</div>}
-                             </div>
-                         )}
-                         
-                         <div className="wallet-modal-actions">
-                            <button className="wallet-modal-btn secondary" onClick={() => setDepositStep(2)}>Назад</button>
-                            <button className="wallet-modal-btn primary" onClick={handleDepositSendReceipt} disabled={!receiptFile}>
-                                {isSendingReceipt ? "Отправка..." : "Я оплатил"}
-                            </button>
-                         </div>
-                       </>
-                   )}
-                </>
+                {/* Шаг 2: Сумма */}
+                {withdrawStep === 2 && (
+                  <div className="wallet-modal-input-group">
+                    <label>{isEN ? "Amount" : "Сумма вывода"}</label>
+                    <input
+                      type="number"
+                      value={walletForm.amount}
+                      onChange={(e) =>
+                        setWalletForm({
+                          ...walletForm,
+                          amount: e.target.value,
+                        })
+                      }
+                      placeholder={
+                        settings.currency === "RUB" ? "Min 1000" : "Min 10"
+                      }
+                    />
+                    <div className="wallet-modal-actions">
+                      <button
+                        className="wallet-modal-btn secondary"
+                        onClick={() => setWithdrawStep(1)}
+                      >
+                        {isEN ? "Back" : "Назад"}
+                      </button>
+                      <button
+                        className="wallet-modal-btn primary"
+                        onClick={handleWithdrawSubmit}
+                      >
+                        {isEN ? "Create request" : "Создать заявку"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
-
-            {/* === ВЫВОД (Та же логика шагов) === */}
-            {walletModal === "withdraw" && (
-                <>
-                    <div className="wallet-modal-title">{isEN ? "Withdraw" : "Вывод средств"}</div>
-                    
-                    {/* Шаг 1: Метод */}
-                    {withdrawStep === 1 && (
-                        <div className="wallet-methods">
-                            <button className={"wallet-method-card " + (walletForm.method === "card" ? "active" : "")}
-                                    onClick={() => setWalletForm(p => ({...p, method: 'card'}))}>
-                                <div className="wallet-method-title">Банковская карта</div>
-                            </button>
-                            {/* ... остальные методы ... */}
-                            <div className="wallet-modal-actions">
-                                <button className="wallet-modal-btn primary" onClick={() => setWithdrawStep(2)}>Далее</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Шаг 2: Сумма */}
-                    {withdrawStep === 2 && (
-                       <div className="wallet-modal-input-group">
-                           <label>Сумма вывода</label>
-                           <input type="number" value={walletForm.amount} onChange={e => setWalletForm({...walletForm, amount: e.target.value})} placeholder="Min 1000" />
-                           <div className="wallet-modal-actions">
-                               <button className="wallet-modal-btn secondary" onClick={() => setWithdrawStep(1)}>Назад</button>
-                               <button className="wallet-modal-btn primary" onClick={handleWithdrawSubmit}>Создать заявку</button>
-                           </div>
-                       </div>
-                    )}
-                </>
-            )}
-
           </div>
         </div>
       )}
