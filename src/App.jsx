@@ -2307,54 +2307,64 @@ const renderWallet = () => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  
+
   const currentMethod = walletForm.method || "card";
   const isCard = currentMethod === "card";
   
-  // Логика перехода по шагам (Метод -> Сумма -> Реквизиты)
+  // --- Логика шагов ---
   const handleDepositStep = () => {
-      if (depositStep === 1) {
-          setDepositStep(2); 
-      } else if (depositStep === 2) {
-          const minAmount = settings.currency === "RUB" ? 1000 : 10;
-          const raw = depositAmount.toString().replace(",", ".");
-          const amountNum = parseFloat(raw);
-          if (!amountNum || amountNum < minAmount) {
-              setDepositError(isEN ? `Min amount ${minAmount}` : `Минимум ${minAmount}`);
-              return;
-          }
-          setDepositError("");
-          setDepositStep(3);
+    if (depositStep === 1) {
+      setDepositStep(2); 
+    } else if (depositStep === 2) {
+      const minAmount = settings.currency === "RUB" ? 1000 : 10;
+      const raw = depositAmount.toString().replace(",", ".");
+      const amountNum = parseFloat(raw);
+      if (!amountNum || amountNum < minAmount) {
+        setDepositError(isEN ? `Min amount ${minAmount}` : `Минимум ${minAmount}`);
+        return;
       }
+      setDepositError("");
+      setDepositStep(3);
+    }
   };
 
-  // Логика вывода
+  // --- Логика вывода ---
   const handleWithdrawSubmit = async () => {
-      const raw = walletForm.amount.toString().replace(",", ".");
-      const amountNum = parseFloat(raw);
-      if (!amountNum || amountNum > balance) return;
+    const raw = walletForm.amount.toString().replace(",", ".");
+    const amountNum = parseFloat(raw);
+    if (!amountNum || amountNum > balance) return;
 
-      const { error } = await supabase.from("wallet_withdrawals").insert({
-          user_tg_id: telegramId,
-          amount: amountNum,
-          method: walletForm.method,
-          status: "pending"
+    const { error } = await supabase.from("wallet_withdrawals").insert({
+      user_tg_id: telegramId,
+      amount: amountNum,
+      method: walletForm.method,
+      status: "pending"
+    });
+
+    if (!error) {
+      setWalletModal(null);
+      setWithdrawStep(1);
+      setWalletForm({ amount: "", method: "card" });
+      loadWalletDataFromSupabase();
+      setToast({
+        type: "success",
+        text: isEN ? "Withdrawal request created" : "Заявка на вывод средств успешно создана"
       });
+    }
+  };
 
-      if (!error) {
-          setWalletModal(null);
-          setWithdrawStep(1);
-          setWalletForm({ amount: "", method: "card" });
-          loadWalletDataFromSupabase();
-          setToast({
-              type: "success",
-              text: isEN ? "Withdrawal request created" : "Заявка на вывод средств успешно создана"
-          });
-      }
+  // Хелпер для названий методов
+  const getMethodName = (m) => {
+    if (m === "card") return isEN ? "Bank card" : "Банковская карта";
+    if (m === "usdt") return "USDT TRC-20";
+    if (m === "paypal") return "PayPal";
+    if (m === "support") return isEN ? "Via support" : "Через поддержку";
+    return m;
   };
 
   return (
     <>
+      {/* Баланс */}
       <section className="section-block fade-in delay-1">
         <div className="section-title">
           <h2>{isEN ? "Wallet" : "Кошелёк"}</h2>
@@ -2381,30 +2391,27 @@ const renderWallet = () => {
         </div>
       </section>
 
+      {/* История операций (Последние) */}
       <section className="section-block fade-in delay-2">
         <div className="section-title">
-           <h2>{isEN ? "History" : "Последние операции"}</h2>
+           <h2>{isEN ? "Recent operations" : "Последние операции кошелька"}</h2>
         </div>
         <div className="wallet-history-short">
           {walletHistory.slice(0, 7).map((e) => {
              const isWithdraw = e.type === "withdraw";
              const isPendingWithdraw = isWithdraw && (!e.status || e.status === 'pending');
              
-             // Красивое название метода
-             let methodName = e.method;
-             if (e.method === 'card') methodName = isEN ? "Bank card" : "Банковская карта";
-             if (e.method === 'usdt') methodName = "USDT TRC-20";
-             
              return (
                <div key={e.id} className="wallet-history-row">
                  <div className="wallet-history-main">
                    <div className="wallet-history-type">
-                     {isWithdraw ? (isEN ? "Withdrawal" : "Вывод") : (isEN ? "Deposit" : "Пополнение")}
-                     {" — "} {methodName}
+                     {isWithdraw ? (isEN ? "Withdrawal" : "Вывод средств") : (isEN ? "Deposit" : "Пополнение")}
+                     {" — "} {getMethodName(e.method)}
                      
                      {/* Статусы */}
                      {isWithdraw && e.status === 'done' && <span style={{color:'#ef4444', fontSize:10, marginLeft:4}}>({isEN ? "completed" : "исполнен"})</span>}
                      {isWithdraw && isPendingWithdraw && <span style={{color:'#fbbf24', fontSize:10, marginLeft:4}}>({isEN ? "processing" : "обработка"})</span>}
+                     
                      {!isWithdraw && e.status === 'approved' && <span style={{color:'#22c55e', fontSize:10, marginLeft:4}}>({isEN ? "approved" : "одобрено"})</span>}
                      {!isWithdraw && e.status === 'rejected' && <span style={{color:'#ef4444', fontSize:10, marginLeft:4}}>({isEN ? "rejected" : "отклонено"})</span>}
                      {!isWithdraw && e.status === 'pending' && <span style={{color:'#fbbf24', fontSize:10, marginLeft:4}}>({isEN ? "on review" : "на проверке"})</span>}
@@ -2428,6 +2435,7 @@ const renderWallet = () => {
                </div>
              )
           })}
+          {walletHistory.length === 0 && <div className="wallet-empty" style={{padding: 8}}>{isEN ? "No operations" : "Нет операций"}</div>}
         </div>
       </section>
 
@@ -2479,7 +2487,7 @@ const renderWallet = () => {
                        </div>
                    )}
 
-                   {/* Шаг 3: Реквизиты и Чек */}
+                   {/* Шаг 3: Реквизиты */}
                    {depositStep === 3 && (
                        <>
                          <div className="payment-details">
@@ -2492,7 +2500,7 @@ const renderWallet = () => {
                             
                             <div className="warning-text">
                                 <span>⚠️</span>
-                                <div>{isEN ? "Balance is credited automatically within 5 minutes." : "Баланс зачисляется автоматически в течение 5 минут. Если средства не пришли — пишите в поддержку."}</div>
+                                <div>{isEN ? "Balance credited in 5 mins." : "Баланс зачисляется автоматически в течение 5 минут. Если средства не пришли — пишите в поддержку."}</div>
                             </div>
                             
                             <a href="https://t.me/ForbexSupport" target="_blank" className="telegram-support-btn">
@@ -2521,7 +2529,7 @@ const renderWallet = () => {
                 </>
             )}
 
-            {/* === ВЫВОД (3 шага) === */}
+            {/* === ВЫВОД === */}
             {walletModal === "withdraw" && (
                 <>
                     <div className="wallet-modal-title">{isEN ? "Withdraw" : "Вывод средств"}</div>
@@ -2993,76 +3001,42 @@ const renderHistory = () => {
 const renderProfile = () => {
   if (!user) return null;
 
-  // Форматируем дату регистрации: "28.11.2025 в 03:53"
+  // Форматируем дату: "На Forbex с 28.11.2025 в 03:53"
   const getRegDateString = () => {
     try {
       const date = new Date(user.createdAt || Date.now());
-      const dateStr = date.toLocaleDateString("ru-RU", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
-      const timeStr = date.toLocaleTimeString("ru-RU", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      
-      return isEN 
-        ? `${dateStr} at ${timeStr}` 
-        : `${dateStr} в ${timeStr}`;
-    } catch {
-      return "...";
-    }
+      const dateStr = date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+      const timeStr = date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+      return isEN ? `${dateStr} at ${timeStr}` : `${dateStr} в ${timeStr}`;
+    } catch { return "..."; }
   };
 
   return (
     <>
-      {/* Карточка профиля */}
       <section className="section-block fade-in delay-1">
         <div className="profile-card">
           <div className="profile-avatar">
             {userAvatarUrl ? (
-              // Если есть фото из Телеграма
-              <img 
-                src={userAvatarUrl} 
-                alt="Avatar" 
-                className="profile-avatar-img" 
-              />
+                <img src={userAvatarUrl} alt="Avatar" className="profile-avatar-img" />
             ) : (
-              // Если нет фото — показываем букву на фоне
-              <div style={{
-                width: "100%", 
-                height: "100%", 
-                background: "linear-gradient(135deg, #f97316, #c2410c)", 
-                display: "flex", 
-                alignItems: "center", 
-                justifyContent: "center", 
-                fontWeight: "bold", 
-                color: "#fff",
-                fontSize: "20px",
-                borderRadius: "16px"
-              }}>
-                {(user.login?.[0] || "U").toUpperCase()}
-              </div>
+                <div style={{width:"100%",height:"100%",background:"linear-gradient(135deg, #f97316, #c2410c)",borderRadius:"16px",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:"bold",color:"#fff",fontSize:"20px"}}>
+                  {(user.login?.[0] || "U").toUpperCase()}
+                </div>
             )}
           </div>
-          
           <div className="profile-main">
             <div className="profile-login">{user.login}</div>
             <div className="profile-email">{user.email}</div>
-            <div className="profile-created" style={{ marginTop: "4px", fontSize: "11px", color: "#fde68a" }}>
-              {isEN 
-                ? `On Forbex since ${getRegDateString()}` 
-                : `На Forbex с ${getRegDateString()}`}
+            <div className="profile-created" style={{marginTop:"4px",fontSize:"11px",color:"#fde68a"}}>
+               {isEN ? `On Forbex since ${getRegDateString()}` : `На Forbex с ${getRegDateString()}`}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Кнопка поддержки и смены пароля */}
       <section className="section-block fade-in delay-2">
          <a href="https://t.me/ForbexSupport" target="_blank" className="telegram-support-btn">
-             💎 Связь с тех.поддержкой
+             💎 {isEN ? "Contact Support" : "Связь с тех.поддержкой"}
          </a>
          
          <div className="profile-actions" style={{marginTop: 12}}>
@@ -3072,7 +3046,7 @@ const renderProfile = () => {
          </div>
       </section>
 
-      {/* Настройки языка и валюты */}
+      {/* Настройки ВЕРНУЛИСЬ */}
       <section className="section-block fade-in delay-3">
         <div className="section-title">
           <h2>{isEN ? "Settings" : "Настройки"}</h2>
@@ -3095,8 +3069,7 @@ const renderProfile = () => {
         </div>
       </section>
 
-      {/* Кнопка выхода */}
-      <section className="section-block fade-in delay-4">
+       <section className="section-block fade-in delay-4">
         <div className="profile-actions">
           <button className="profile-btn logout" onClick={handleLogout}>
             {isEN ? "Log out" : "Выйти из аккаунта"}
@@ -3104,7 +3077,6 @@ const renderProfile = () => {
         </div>
       </section>
       
-      {/* Модалка смены пароля (код не менялся, просто рендерим) */}
       {passwordModalOpen && (
          <div className="wallet-modal-backdrop" onClick={() => setPasswordModalOpen(false)}>
              <div className="wallet-modal" onClick={e => e.stopPropagation()}>
