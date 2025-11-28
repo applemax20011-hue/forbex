@@ -1243,13 +1243,13 @@ body {
   font-size: 24px;
 }
 
-/* Аватар-картинка (если пришла из TG) */
 .profile-avatar-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   border-radius: 16px;
 }
+
 
 /* Текстовая часть профиля */
 .profile-main {

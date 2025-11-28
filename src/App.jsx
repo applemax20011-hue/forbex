@@ -3850,37 +3850,53 @@ const renderProfile = () => {
 
   return (
     <>
-      {/* шапка профиля */}
-<section className="section-block fade-in delay-1">
-        <div className="profile-card" style={{ position: 'relative' }}> {/* relative для позиционирования */}
-          
-          {/* ... Аватар (без изменений) ... */}
+      <section className="section-block fade-in delay-1">
+        <div className="profile-card" style={{ position: "relative" }}>
+          {/* АВАТАР */}
           <div className="profile-avatar">
-             {/* ... */}
+            {userAvatarUrl ? (
+              <img
+                src={userAvatarUrl}
+                alt="Telegram avatar"
+                className="profile-avatar-img"
+              />
+            ) : (
+              <span>🦊</span> // запасной вариант, если photo_url нет
+            )}
           </div>
 
           <div className="profile-main">
             <div className="profile-login">{user.login}</div>
             <div className="profile-email">{user.email}</div>
-            <div className="profile-created" style={{ marginTop: "4px", fontSize: "11px" }}>
-              {isEN ? `On Forbex since ${getRegDateString()}` : `На Forbex с ${getRegDateString()}`}
+            <div
+              className="profile-created"
+              style={{ marginTop: "4px", fontSize: "11px" }}
+            >
+              {isEN
+                ? `On Forbex since ${getRegDateString()}`
+                : `На Forbex с ${getRegDateString()}`}
             </div>
           </div>
 
-          {/* === НОВЫЙ БЛОК С ID и USERNAME СПРАВА СВЕРХУ === */}
-          <div style={{ 
-              position: 'absolute', 
-              top: '12px', 
-              right: '14px', 
-              textAlign: 'right', 
-              fontSize: '10px', 
-              color: 'rgba(255,255,255,0.7)',
-              lineHeight: '1.4'
-          }}>
-            {telegramUsername && <div style={{ color: '#fff', fontWeight: '600' }}>@{telegramUsername}</div>}
+          {/* блок с @username и ID — оставляешь как есть */}
+          <div
+            style={{
+              position: "absolute",
+              top: "12px",
+              right: "14px",
+              textAlign: "right",
+              fontSize: "10px",
+              color: "rgba(255,255,255,0.7)",
+              lineHeight: "1.4",
+            }}
+          >
+            {telegramUsername && (
+              <div style={{ color: "#fff", fontWeight: "600" }}>
+                @{telegramUsername}
+              </div>
+            )}
             {telegramId && <div>ID: {telegramId}</div>}
           </div>
-
         </div>
       </section>
       {/* блок действий: верификация / логин / email / пароль */}
