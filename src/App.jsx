@@ -945,24 +945,29 @@ useEffect(() => {
 
 // Реaltime: слушаем изменения по topups для этого Telegram ID
 // Реaltime: слушаем изменения по topups для этого Telegram ID
+// Realtime: слушаем изменения по topups
 useEffect(() => {
   if (!telegramId) return;
 
   const channel = supabase
-    .channel(`topups-realtime-${telegramId}`)
+    .channel("topups-all-changes") // Упростили название канала
     .on(
       "postgres_changes",
       {
         event: "UPDATE",
         schema: "public",
         table: "topups",
-        filter: `user_tg_id=eq.${telegramId}`,
+        // УБРАЛИ filter: `user_tg_id=eq.${telegramId}` — он часто ломает сокет
       },
       async (payload) => {
-        console.log("RT topups payload:", payload); // <--- добавь это
         const row = payload.new;
-        if (!row) return;
+        
+        // Фильтруем здесь вручную: если обновление не для нас, игнорируем
+        if (!row || row.user_tg_id !== telegramId) return;
 
+        console.log("RT update received:", row); 
+
+        // Обновляем данные на экране
         await loadWalletDataFromSupabase();
 
         if (row.status === "approved") {
@@ -982,13 +987,15 @@ useEffect(() => {
         }
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      // Для отладки: выводим статус подключения в консоль
+      console.log("Realtime subscription status:", status);
+    });
 
   return () => {
     supabase.removeChannel(channel);
   };
 }, [telegramId, isEN, loadWalletDataFromSupabase]);
-
 
   // ===== helpers =====
   const showOverlay = (title, subtitle, callback, delay = 1100) => {
