@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react"; 
 
 // Данные для тикера (бегущая строка)
 const COINS = [
@@ -225,10 +225,19 @@ const Modal = ({ open, onClose, title, children }) => {
 export default function LandingPage({ onLogin, onRegister }) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Пересоздаём иконки lucide, когда открываются модалки/меню
   useEffect(() => {
     if (window.lucide) window.lucide.createIcons();
-  }, []);
+  }, [showPrivacy, showTerms, mobileMenuOpen]);
+
+  const scrollToSection = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    setMobileMenuOpen(false);
+  };
 
   return (
     <div className="relative min-h-screen text-white font-sans selection:bg-brand-accent selection:text-black pb-20">
@@ -239,7 +248,7 @@ export default function LandingPage({ onLogin, onRegister }) {
 
       {/* Навигация */}
       <nav className="w-full z-50 bg-brand-bg/80 backdrop-blur border-b border-white/5 py-4 sticky top-0">
-        <div className="container mx-auto px-6 flex justify-between items-center">
+        <div className="container mx-auto px-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gradient-to-br from-brand-accent to-brand-blue rounded-lg flex items-center justify-center border border-brand-accent">
               <span className="text-xl">🦊</span>
@@ -248,21 +257,116 @@ export default function LandingPage({ onLogin, onRegister }) {
               FORBEX <span className="text-brand-accent">TRADE</span>
             </span>
           </div>
-          <div className="flex items-center space-x-4">
+
+          {/* Линки по секциям (десктоп) */}
+          <div className="hidden md:flex items-center gap-6 text-xs font-medium text-gray-400">
+            <button
+              onClick={() => scrollToSection("how-it-works")}
+              className="hover:text-white transition-colors"
+            >
+              Как начать
+            </button>
+            <button
+              onClick={() => scrollToSection("features")}
+              className="hover:text-white transition-colors"
+            >
+              Возможности
+            </button>
+            <button
+              onClick={() => scrollToSection("faq")}
+              className="hover:text-white transition-colors"
+            >
+              FAQ
+            </button>
+          </div>
+
+          {/* Правый блок: кнопки + бургер */}
+          <div className="flex items-center gap-3">
             <button
               onClick={onLogin}
-              className="text-sm font-medium hover:text-brand-accent transition-colors"
+              className="hidden sm:inline-block text-sm font-medium hover:text-brand-accent transition-colors"
             >
               Вход
             </button>
             <button
               onClick={onRegister}
-              className="bg-white text-black px-5 py-2 rounded-full font-bold text-sm hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all"
+              className="hidden sm:inline-block bg-white text-black px-5 py-2 rounded-full font-bold text-sm hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all"
             >
               Регистрация
             </button>
+
+            {/* Бургер (мобилка) */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+            >
+              <i
+                data-lucide={mobileMenuOpen ? "x" : "menu"}
+                className="w-5 h-5"
+              />
+            </button>
           </div>
         </div>
+
+        {/* Мобильное меню */}
+        {mobileMenuOpen && (
+          <div className="md:hidden mt-3 border-t border-white/10 pt-3">
+            <div className="container mx-auto px-6 flex flex-col gap-3 text-sm text-gray-200">
+              <button
+                onClick={() => scrollToSection("how-it-works")}
+                className="flex justify-between items-center py-2"
+              >
+                <span>Как начать</span>
+                <i
+                  data-lucide="chevron-right"
+                  className="w-4 h-4 text-gray-500"
+                />
+              </button>
+              <button
+                onClick={() => scrollToSection("features")}
+                className="flex justify-between items-center py-2"
+              >
+                <span>Возможности</span>
+                <i
+                  data-lucide="chevron-right"
+                  className="w-4 h-4 text-gray-500"
+                />
+              </button>
+              <button
+                onClick={() => scrollToSection("faq")}
+                className="flex justify-between items-center py-2"
+              >
+                <span>FAQ</span>
+                <i
+                  data-lucide="chevron-right"
+                  className="w-4 h-4 text-gray-500"
+                />
+              </button>
+
+              <div className="h-px bg-white/5 my-1" />
+
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onLogin && onLogin();
+                }}
+                className="w-full py-2 text-left text-gray-300"
+              >
+                Вход
+              </button>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onRegister && onRegister();
+                }}
+                className="w-full py-2 text-left text-brand-accent font-semibold"
+              >
+                Регистрация
+              </button>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* HERO Секция */}
@@ -291,7 +395,7 @@ export default function LandingPage({ onLogin, onRegister }) {
             <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
               <button
                 onClick={onRegister}
-                className="px-8 py-4 bg-brand-accent text-black font-bold rounded-lg hover:bg-white hover:scale-105 transition-all duration-300 shadow-[0_0_20px_rgba(249,115,22,0.4)] flex items-center justify-center gap-2 group"
+                className="px-8 py-4 bg-brand-accent text-black font-bold rounded-lg hover:bg-white hover:scale-105 transition-all duration-300 shadow-[0_0_20px_rgба(249,115,22,0.4)] flex items-center justify-center gap-2 group"
               >
                 Открыть счет
                 <i
@@ -316,10 +420,7 @@ export default function LandingPage({ onLogin, onRegister }) {
                 <span>No KYC до $15k</span>
               </div>
               <div className="flex items-center gap-2">
-                <i
-                  data-lucide="zap"
-                  className="text-brand-blue w-4 h-4"
-                />
+                <i data-lucide="zap" className="text-brand-blue w-4 h-4" />
                 <span>Моментальный вывод</span>
               </div>
             </div>
@@ -406,7 +507,10 @@ export default function LandingPage({ onLogin, onRegister }) {
       </section>
 
       {/* Карточки преимуществ */}
-      <section className="py-16 relative z-10 container mx-auto px-6">
+      <section
+        id="features"
+        className="py-16 relative z-10 container mx-auto px-6"
+      >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             {
@@ -504,7 +608,7 @@ export default function LandingPage({ onLogin, onRegister }) {
             onClick={() => setShowTerms(true)}
             className="hover:text-brand-accent transition-colors"
           >
-            Пользовательское соглашение
+            Правила пользователя
           </button>
           <span className="text-gray-600 hidden sm:inline">•</span>
           <button
@@ -522,35 +626,94 @@ export default function LandingPage({ onLogin, onRegister }) {
 
       <LiveNotification />
 
-      {/* Модалки документов */}
+      {/* Модалка "Правила пользователя" */}
       <Modal
         open={showTerms}
         onClose={() => setShowTerms(false)}
-        title="Пользовательское соглашение"
+        title="Правила пользователя"
       >
         <p>
-          Здесь должен быть текст пользовательского соглашения, подготовленный
-          юристом. Пользователь обязан внимательно ознакомиться с условиями до
-          начала использования сервиса.
+          Платформа Forbex Trade предоставляет пользователям интерфейс для
+          операций с цифровыми активами в формате WebApp. Мы работаем на рынке
+          с 2014 года, постоянно улучшая инфраструктуру, скорость исполнения
+          ордеров и качество службы поддержки.
         </p>
+        <p>Основные принципы использования платформы:</p>
+        <ul className="list-disc pl-4 space-y-1">
+          <li>
+            Платформа предназначена для совершеннолетних пользователей,
+            принимающих на себя все риски, связанные с операциями с цифровыми
+            активами.
+          </li>
+          <li>
+            Пользователь обязуется указывать достоверные данные при регистрации
+            и не передавать доступ к аккаунту третьим лицам.
+          </li>
+          <li>
+            Оборот и результаты торговли зависят от рыночной ситуации и не
+            гарантируются платформой.
+          </li>
+          <li>
+            Администрация вправе временно ограничивать доступ к отдельным
+            функциям при проведении технических работ и мер безопасности.
+          </li>
+          <li>
+            Все действия в личном кабинете фиксируются в истории операций и
+            могут быть использованы для проверок безопасности и разрешения
+            спорных ситуаций.
+          </li>
+        </ul>
         <p>
-          Используя платформу Forbex Trade, вы подтверждаете, что осознаёте
-          связанные с торговлей риски и соглашаетесь соблюдать правила сервиса.
+          Используя Forbex Trade, вы подтверждаете, что понимаете характер
+          рисков, связанных с цифровыми активами, и действуете от своего имени и
+          в своих интересах.
         </p>
       </Modal>
 
+      {/* Модалка "Политика конфиденциальности" */}
       <Modal
         open={showPrivacy}
         onClose={() => setShowPrivacy(false)}
         title="Политика конфиденциальности"
       >
         <p>
-          Здесь размещается Политика конфиденциальности, описывающая порядок
-          обработки персональных данных пользователей платформы.
+          Forbex Trade уважает конфиденциальность своих пользователей и
+          обрабатывает персональные данные строго в объёме, необходимом для
+          работы платформы и исполнения обязательств перед пользователем.
+        </p>
+        <p>Мы можем обрабатывать и хранить следующие данные:</p>
+        <ul className="list-disc pl-4 space-y-1">
+          <li>
+            регистрационные данные (логин, email, технические идентификаторы
+            Telegram WebApp);
+          </li>
+          <li>
+            техническую информацию о сессии (IP-адрес, тип устройства, браузер,
+            время входа);
+          </li>
+          <li>
+            историю действий внутри личного кабинета (пополнения, выводы,
+            сделки, изменения настроек).
+          </li>
+        </ul>
+        <p>
+          Данные используются для обеспечения работы платформы, повышения
+          безопасности, анализа нагрузки и улучшения качества сервиса. Мы не
+          передаём персональные данные третьим лицам, за исключением случаев,
+          прямо предусмотренных действующим законодательством или необходимых
+          для исполнения юридически значимых запросов.
         </p>
         <p>
-          Укажите, какие данные вы собираете, с какой целью, как храните и как
-          пользователь может запросить удаление или изменение своих данных.
+          Часть вспомогательной информации (например, настройки интерфейса)
+          может сохраняться локально в вашем браузере в виде cookies и
+          локального хранилища. Это помогает сохранять выбранный язык, валюту и
+          упорядочивать отображение интерфейса.
+        </p>
+        <p>
+          Используя платформу Forbex Trade, вы даёте согласие на обработку
+          ваших персональных данных в соответствии с настоящей Политикой
+          конфиденциальности и применимыми нормами действующего
+          законодательства.
         </p>
       </Modal>
     </div>
