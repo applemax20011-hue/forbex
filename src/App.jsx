@@ -308,7 +308,7 @@ const scrollToTop = () => {
   });
 };
 
-  const [showLanding, setShowLanding] = useState(!localStorage.getItem("forbex_user"));
+  const [showLanding, setShowLanding] = useState(true);
   const [authMode, setAuthMode] = useState("register"); // "login" | "register"
   const [authForm, setAuthForm] = useState({
   login: "",
@@ -663,39 +663,6 @@ useEffect(() => {
 
 useEffect(() => {
   const bootTimer = setTimeout(() => setBooting(false), 1300);
-
-  try {
-    const savedUser = localStorage.getItem(STORAGE_KEYS.user);
-    const savedRemember = localStorage.getItem(STORAGE_KEYS.remember);
-    const savedSettings = localStorage.getItem(STORAGE_KEYS.settings);
-
-    const rememberFlag = savedRemember === "true";
-
-    if (savedUser && rememberFlag) {
-      const parsedUser = JSON.parse(savedUser);
-      setUser(parsedUser);
-      setShowLanding(false);
-    }
-
-    if (rememberFlag) {
-      setAuthForm((prev) => ({ ...prev, remember: true }));
-    }
-
-    if (savedSettings) {
-      try {
-        const parsedSettings = JSON.parse(savedSettings);
-        setSettings((prev) => ({
-          ...prev,
-          ...parsedSettings,
-        }));
-      } catch (e) {
-        console.warn("parse settings error:", e);
-      }
-    }
-  } catch (e) {
-    console.warn("init error:", e);
-  }
-
   return () => clearTimeout(bootTimer);
 }, []);
   
@@ -1222,12 +1189,6 @@ const updateSettings = (patch) => {
   setSettings((prev) => {
     const next = { ...prev, ...patch };
 
-    try {
-      localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next));
-    } catch (e) {
-      console.warn("localStorage settings update error:", e);
-    }
-
     if (user && user.id) {
       (async () => {
         try {
@@ -1387,18 +1348,6 @@ const handleRegister = async () => {
       language: "ru",
       currency: "RUB",
     });
-
-    // сохраним пароль/remember и timestamp, чтобы completeRegistration мог это доиспользовать
-    try {
-localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-localStorage.setItem(
-  STORAGE_KEYS.registrationTs,
-  String(createdAtTs)
-);
-
-    } catch (e) {
-      console.warn("localStorage error (register):", e);
-    }
   } catch (e) {
     console.error("handleRegister error:", e);
     setAuthError("Неожиданная ошибка. Попробуйте ещё раз.");
@@ -1643,12 +1592,6 @@ const handleLogout = async () => {
       console.error(e);
     }
   }
-
-  // === ВАЖНО: Очищаем localStorage, чтобы браузер "забыл" нас ===
-  localStorage.removeItem(STORAGE_KEYS.user);
-  localStorage.removeItem(STORAGE_KEYS.password);
-  localStorage.removeItem(STORAGE_KEYS.remember);
-  // Настройки (язык/валюта) можно оставить, чтобы не сбрасывались
   
   // Сбрасываем локальное состояние
   setUser(null);
@@ -1659,6 +1602,7 @@ const handleLogout = async () => {
   setBalance(0);
   
 setShowLanding(true);
+resetAuthForm();
 
 const resetAuthForm = () => {
   setAuthForm({
@@ -1673,7 +1617,6 @@ const resetAuthForm = () => {
   setShowConfirmPassword(false);
   setAuthError("");
 };
-
 
 // важный момент: сначала пусть смонтируется лендос, потом крутим вверх
 setTimeout(() => {
@@ -1932,12 +1875,6 @@ const handlePasswordChange = async () => {
       const updatedUser = { ...user, login: newLogin };
       setUser(updatedUser);
 
-      try {
-        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updatedUser));
-      } catch (e) {
-        console.warn("localStorage update login error:", e);
-      }
-
       setSettingsMsg(
         isEN
           ? "Login successfully changed."
@@ -2010,13 +1947,6 @@ const handlePasswordChange = async () => {
 
       const updatedUser = { ...user, email: newEmail };
       setUser(updatedUser);
-
-      try {
-        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updatedUser));
-      } catch (e) {
-        console.warn("localStorage update email error:", e);
-      }
-
       setSettingsMsg(
         isEN
           ? "Email successfully changed."
