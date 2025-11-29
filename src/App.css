@@ -2475,3 +2475,161 @@ body {
 .animate-fade-up {
   animation: fadeUp 0.8s ease-out forwards;
 }
+/* ====== TRADE CREATION ANIMATION ====== */
+
+/* карточка графика — чтобы оверлей мог позиционироваться поверх */
+.trade-chart-card {
+  position: relative;
+  overflow: hidden;
+}
+
+/* полупрозрачный слой поверх графика */
+.trade-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: radial-gradient(
+      circle at top,
+      rgba(15, 23, 42, 0.97),
+      rgba(15, 23, 42, 0.99)
+    );
+  backdrop-filter: blur(10px);
+  border-radius: 18px;
+  z-index: 5;
+  animation: tradeOverlayIn 0.25s ease-out forwards;
+}
+
+.trade-overlay-orbit {
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  border: 2px dashed rgba(248, 250, 252, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: tradeOrbit 1.2s linear infinite;
+}
+
+.trade-overlay-core {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f97316, #fde68a);
+  box-shadow: 0 0 25px rgba(249, 115, 22, 0.7);
+  animation: tradePulse 1.2s ease-in-out infinite;
+}
+
+.trade-overlay-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.trade-overlay-subtitle {
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+/* маленький тост про открытую сделку */
+.trade-toast {
+  position: fixed;
+  left: 16px;
+  bottom: 80px; /* чуть выше нижней навигации */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.8);
+  z-index: 60;
+  animation: tradeToastIn 0.3s ease-out forwards;
+}
+
+.trade-toast-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 18px rgba(34, 197, 94, 0.9);
+}
+
+.trade-toast-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trade-toast-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.trade-toast-subtitle {
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+/* история сделок — анимация первой строки */
+.trade-history-row-enter {
+  animation: tradeHistoryRowEnter 0.35s ease-out;
+}
+
+/* ====== keyframes ====== */
+
+@keyframes tradeOverlayIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tradeOrbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes tradePulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(249, 115, 22, 0.7);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 35px rgba(249, 115, 22, 1);
+  }
+}
+
+@keyframes tradeToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tradeHistoryRowEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+    background: rgba(34, 197, 94, 0.12);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    background: transparent;
+  }
+}

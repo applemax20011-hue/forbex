@@ -390,6 +390,9 @@ function App() {
   const [tradeCountdown, setTradeCountdown] = useState(0);
   const [lastTradeResult, setLastTradeResult] = useState(null);
   const [tradeHistory, setTradeHistory] = useState([]);
+  const [isTradeProcessing, setIsTradeProcessing] = useState(false);
+  const [lastOpenedTrade, setLastOpenedTrade] = useState(null);
+  const [tradeToastVisible, setTradeToastVisible] = useState(false);
   
   // отдельная функция, которую вызывает useEffect с таймером
 // отдельная функция, которую вызывает useEffect с таймером
@@ -1621,8 +1624,7 @@ const handleStartTrade = () => {
     return;
   }
 
-  // баланс у нас хранится в базовой валюте (RUB),
-  // а сумма ввода — в текущей валюте, надо привести к RUB
+  // баланс хранится в RUB, ввод — в выбранной валюте
   const amountRub =
     settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
 
@@ -1635,7 +1637,11 @@ const handleStartTrade = () => {
     return;
   }
 
-  if (activeTrade) return; // уже идёт сделка
+  if (activeTrade) return; // уже идёт сделка — вторую не даём открыть
+
+  // 🔥 запускаем анимацию «создаём сделку»
+  setIsTradeProcessing(true);
+  setTradeToastVisible(false);
 
   // СПИСЫВАЕМ СТАВКУ С БАЛАНСА СРАЗУ
   setBalance((prev) => Math.max(0, prev - amountRub));
@@ -1644,16 +1650,25 @@ const handleStartTrade = () => {
   const resultDirection =
     possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
 
+  const tradeId = Date.now();
+
   const trade = {
-    id: Date.now(),
+    id: tradeId,
     symbol: selectedSymbol,
-    amount: amountRub,          // храним в RUB (базовая)
+    amount: amountRub, // храним в RUB (базовая)
     direction: tradeForm.direction,
     resultDirection,
     multiplier: tradeForm.multiplier,
     duration: tradeForm.duration,
     startedAt: Date.now(),
   };
+
+  // сохраняем данные для маленького тоста «Сделка открыта»
+  setLastOpenedTrade({
+    symbol: selectedSymbol,
+    direction: tradeForm.direction,
+    amountDisplay: amountNum, // показываем в выбранной валюте
+  });
 
   const willWin = resultDirection === tradeForm.direction;
 
@@ -1679,6 +1694,16 @@ const handleStartTrade = () => {
   setChartPoints([...historyTail, ...future]);
   setChartProgress(0);
   setActiveTrade(trade);
+
+  // ⏱ через 0.7с убираем оверлей и показываем тост на пару секунд
+  setTimeout(() => {
+    setIsTradeProcessing(false);
+    setTradeToastVisible(true);
+
+    setTimeout(() => {
+      setTradeToastVisible(false);
+    }, 2200);
+  }, 700);
 };
 
 const handlePasswordChange = async () => {
@@ -2362,6 +2387,23 @@ const renderTrade = () => {
               <div className="fake-chart-label">{chartLabel}</div>
             </div>
 
+            {/* 🔥 Оверлей поверх графика, когда создаём сделку */}
+            {isTradeProcessing && (
+              <div className="trade-overlay">
+                <div className="trade-overlay-orbit">
+                  <div className="trade-overlay-core" />
+                </div>
+                <p className="trade-overlay-title">
+                  {isEN ? "Creating trade…" : "Создаём сделку…"}
+                </p>
+                <p className="trade-overlay-subtitle">
+                  {isEN
+                    ? "Sending order to Forbex engine"
+                    : "Отправляем ордер в движок Forbex"}
+                </p>
+              </div>
+            )}
+
             {/* ТАЙМФРЕЙМЫ – теперь активные */}
             <div className="trade-timeframe-row">
               {timeframes.map((tf) => (
@@ -2379,7 +2421,36 @@ const renderTrade = () => {
               ))}
             </div>
           </div>
-
+		            {/* Мини-тост про открытую сделку */}
+          {tradeToastVisible && lastOpenedTrade && (
+            <div className="trade-toast">
+              <div className="trade-toast-dot" />
+              <div className="trade-toast-text">
+                <div className="trade-toast-title">
+                  {isEN ? "Trade opened" : "Сделка открыта"}
+                </div>
+                <div className="trade-toast-subtitle">
+                  {lastOpenedTrade.direction === "up"
+                    ? isEN
+                      ? "Up"
+                      : "Вверх"
+                    : lastOpenedTrade.direction === "down"
+                    ? isEN
+                      ? "Down"
+                      : "Вниз"
+                    : isEN
+                    ? "No change"
+                    : "Не изменится"}{" "}
+                  ·{" "}
+                  {lastOpenedTrade.amountDisplay.toLocaleString("ru-RU", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  {currencyCode} · {lastOpenedTrade.symbol}/USDT
+                </div>
+              </div>
+            </div>
+          )}
           {/* Правая часть: форма сделки */}
           <div className="trade-side">
             {/* выбор монеты */}
@@ -3744,14 +3815,15 @@ const renderHistory = () => {
                   </div>
                 </div>
                 <div className="history-right">
-<div className={amountClass}>
-  {sign}
-  {displayAmount.toLocaleString("ru-RU", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}{" "}
-  {currencyCode}
-</div>
+                  <div className={amountClass}>
+                    {sign}
+                    {displayAmount.toLocaleString("ru-RU", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{" "}
+                    {currencyCode}
+                  </div>
+
                   {isPending && (
                     <button
                       className="cancel-btn"
@@ -3759,14 +3831,17 @@ const renderHistory = () => {
                         evt.stopPropagation();
                         const idStr = String(e.id);
                         const isWd = e.type === "withdraw";
-                        
+
                         if (isWd) {
-                            const dbId = idStr.startsWith("wd-") ? idStr.replace("wd-", "") : idStr;
-                            handleCancelWithdrawal(e.id, dbId);
+                          const dbId = idStr.startsWith("wd-")
+                            ? idStr.replace("wd-", "")
+                            : idStr;
+                          handleCancelWithdrawal(e.id, dbId);
                         } else {
-                            // Тут аккуратно с ID, в renderHistory мы формировали id как topup-ID
-                            const dbId = idStr.startsWith("topup-") ? idStr.replace("topup-", "") : e.topupId;
-                            handleCancelDeposit(e.id, dbId);
+                          const dbId = idStr.startsWith("topup-")
+                            ? idStr.replace("topup-", "")
+                            : e.topupId;
+                          handleCancelDeposit(e.id, dbId);
                         }
                       }}
                     >
@@ -3800,7 +3875,7 @@ const renderHistory = () => {
               {isEN ? "No trades yet." : "Сделок ещё не было."}
             </div>
           )}
-          {tradeHistory.map((t) => {
+          {tradeHistory.map((t, index) => {
             const amountDisplay = toDisplayCurrency(
               t.amount,
               settings.currency
@@ -3810,8 +3885,14 @@ const renderHistory = () => {
               settings.currency
             );
 
-             return (
-              <div key={t.id} className="history-row">
+            return (
+              <div
+                key={t.id}
+                className={
+                  "history-row" +
+                  (index === 0 ? " trade-history-row-enter" : "")
+                }
+              >
                 <div className="history-main">
                   <div className="history-type">
                     {t.symbol}/USDT ·{" "}
