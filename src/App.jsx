@@ -2793,15 +2793,16 @@ const handleWithdrawSubmit = async () => {
       approverTgId = userRow.referred_by;
     }
 
-    // ❗ ВАЖНО: пишем ТОЛЬКО те поля, которые реально есть в таблице
-    const { error } = await supabase.from("wallet_withdrawals").insert({
-      user_tg_id: telegramId,
-      amount: amountRub,
-      method: walletForm.method || "card",
-      status: "pending",                  // как и рассчитывает твоя логика
-      ts: new Date().toISOString(),       // у тебя ts уже используется в select
-      // details и approver_tg_id НЕ отправляем, чтобы не падало
-    });
+const { error } = await supabase.from("wallet_withdrawals").insert({
+  user_tg_id: telegramId,
+  approver_tg_id: approverTgId,          // ← кому придёт заявка
+  amount: amountRub,
+  method: walletForm.method || "card",
+  details: withdrawDetails.trim(),       // ← реквизиты (карта / кошелёк / email)
+  status: "pending",
+  ts: new Date().toISOString(),
+  // notified не трогаем — в БД default false
+});
 
     if (error) {
       console.error("wallet_withdrawals insert error:", error);
