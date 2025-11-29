@@ -30,17 +30,96 @@ body {
   color: #e5e7eb;
 }
 
-/* Было: max-width: 500px - это ограничивало ширину на ПК */
+/* ===== FIX: Глобальный скролл ===== */
+
+/* Найди этот блок в App.css и убедись, что добавлены строки с display: flex */
 .app-container {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 1200px; /* <--- ИЗМЕНИЛИ: Теперь на ПК будет широко */
+  max-width: 600px;
   margin: 0 auto;
   min-height: 100vh;
-  background-color: #020617; 
-  /* box-shadow убираем или делаем мягче, так как на весь экран он не нужен */
-  /* box-shadow: 0 0 40px rgba(0,0,0,0.5); */
+  
+  /* --- ДОБАВЬ ЭТИ 2 СТРОКИ: --- */
+  display: flex !important;
+  flex-direction: column !important;
+  /* --------------------------- */
+
+  height: auto !important; 
+  background-color: transparent;
+  box-shadow: none;
+  padding-bottom: 0; 
+  overflow: visible !important;
+}
+
+.page-root {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  /* Важно: */
+  overflow: visible !important; 
+}
+
+.content {
+  flex: 1;
+  padding: 14px 16px 140px; /* <- было 82px, сделали побольше */
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+
+
+/* По умолчанию fox-тёмная */
+.theme-fox {
+  background: radial-gradient(circle at top, #020617, #020617 65%);
+}
+
+.theme-night {
+  background: radial-gradient(circle at top, #020617, #000000 80%);
+}
+
+.theme-night .section-block,
+.theme-night .trade-side,
+.theme-night .trade-chart-card,
+.theme-night .wallet-balance-card,
+.theme-night .history-block {
+  background: radial-gradient(circle at top, #020617, #020617 75%);
+  border-color: #111827;
+}
+
+.theme-day {
+  background: radial-gradient(circle at top, #f97316 0%, #f9fafb 55%, #e5e7eb 90%);
+}
+
+/* Светлая тема — подложка приложения и некоторые блоки */
+.theme-day .app-container {
+  background-color: #f9fafb;
+}
+
+.theme-day .section-block,
+.theme-day .trade-side,
+.theme-day .trade-chart-card,
+.theme-day .wallet-balance-card,
+.theme-day .history-block {
+  background: radial-gradient(circle at top, #ffffff, #f3f4f6 75%);
+  border-color: rgba(148, 163, 184, 0.35);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+  color: #020617;
+}
+
+.theme-day .header {
+  background: linear-gradient(180deg, #f97316, #fef3c7);
+  color: #0f172a;
+}
+
+.theme-day .nav-tab,
+.theme-day .footer-legal {
+  background: rgba(249, 250, 251, 0.9);
+  color: #0f172a;
 }
 
 /* ===== Шапка ===== */
@@ -85,16 +164,16 @@ body {
   color: #9ca3af;
 }
 
-/* ===== Контент ===== */
 .content {
   flex: 1;
-  padding: 12px 16px 80px;
+  padding: 14px 16px 140px; /* <- было 82px, сделали побольше */
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   overflow-y: auto;
-  align-items: stretch;
 }
+
+
 
 .content > * {
   width: 100%;
@@ -1276,12 +1355,13 @@ body {
   color: #fffbeb;
 }
 
-/* Колонка кнопок профиля */
 .profile-actions-grid {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px !important; /* Жестко задаем отступ */
   width: 100%;
+  height: auto;
+  flex-shrink: 0; /* Запрещаем сжиматься */
 }
 
 .profile-actions {
@@ -1335,15 +1415,9 @@ body {
 
 /* Блок настроек */
 .settings-block {
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-  border-radius: 16px;
-  border: 1px solid #f97316;
-  background: radial-gradient(circle at top left, #f973161a, #020617 70%);
-  padding: 12px 14px;
-  font-size: 13px;
-  box-shadow: 0 0 22px rgba(248, 113, 22, 0.35);
+  margin-top: 10px;
+  margin-bottom: 10px;
+  flex-shrink: 0; /* Запрещаем сжиматься */
 }
 
 .settings-row {
@@ -1780,38 +1854,37 @@ body {
 }
 
 .page-root {
-  min-height: 100vh;      /* занимаем всю высоту окна */
-  width: 100%;            /* по ширине во всё окно */
+  min-height: 100vh;
+  width: 100%;
   margin: 0;
   padding: 0;
   position: relative;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;  /* <--- добавь это */
   gap: 0;
 }
 
+
+/* Найди этот блок в App.css и убедись, что добавлены строки с display: flex */
 .app-container {
   position: relative;
   z-index: 1;
-
-  /* ШИРИНА: */
   width: 100%;
-  /* На ПК ограничиваем ширину, чтобы по бокам было видно красивый фон */
-  max-width: 600px; 
-  /* Центрируем блок на экране */
+  max-width: 600px;
   margin: 0 auto;
-
-  /* ВЫСОТА: */
   min-height: 100vh;
-
-  /* ФОН: Делаем прозрачным, чтобы FoxBackground (который сзади) был виден */
-  background-color: transparent; 
   
-  /* Убираем тень, чтобы границы были мягкими */
-  box-shadow: none;
+  /* --- ДОБАВЬ ЭТИ 2 СТРОКИ: --- */
+  display: flex !important;
+  flex-direction: column !important;
+  /* --------------------------- */
 
-  /* Отступ снизу, чтобы контент не прилипал к нижнему меню */
-  padding-bottom: 90px; 
+  height: auto !important; 
+  background-color: transparent;
+  box-shadow: none;
+  padding-bottom: 0; 
+  overflow: visible !important;
 }
 
 /* Лисий фон за всем контентом */
@@ -1937,15 +2010,15 @@ body {
   color: var(--brand-muted);
 }
 
-/* ===== Контент + секции ===== */
 .content {
   flex: 1;
-  padding: 14px 16px 82px;
+  padding: 14px 16px 140px; /* <- было 82px, сделали побольше */
   display: flex;
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
 }
+
 
 .section-block {
   position: relative;
@@ -2634,36 +2707,44 @@ body {
   }
 }
 
-/* ===== Футер с правилами и политикой ===== */
 .footer-legal {
-  padding: 8px 16px 70px; /* снизу запас под нижнюю навигацию */
-  border-top: 1px solid #111827;
-  background: radial-gradient(circle at top, #020617, #020617 70%);
-  font-size: 11px;
-  color: #9ca3af;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  position: relative;
+  width: 100%;
+  margin-top: auto;
+  padding: 24px 16px 120px; /* запас под нижнее меню */
+  background: transparent;
+  border-top: none;
+  box-shadow: none;
+  z-index: 1;
 }
 
-.footer-legal-main {
+/* единая стеклянная карточка */
+.footer-legal-card {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 14px 16px 12px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(31, 41, 55, 0.9);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.85);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+}
+
+.footer-legal-text {
+  font-size: 12px;
+  color: rgba(156, 163, 175, 0.9);
 }
 
 .footer-legal-brand {
   font-weight: 600;
-  color: #e5e7eb;
+  margin-bottom: 4px;
 }
 
-.footer-legal-text {
-  max-width: 640px;
-  line-height: 1.4;
-}
-
+/* блок с кнопками внутри карточки */
 .footer-legal-links {
-  margin-top: 4px;
+  margin-top: 6px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -2678,9 +2759,23 @@ body {
   font-size: 11px;
   cursor: pointer;
 }
+
 .footer-link-btn:hover {
   border-color: #f97316;
   color: #fed7aa;
+}
+
+/* на широкой ширине всё в одну линию */
+@media (min-width: 640px) {
+  .footer-legal-card {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .footer-legal-text {
+    max-width: 60%;
+  }
 }
 
 /* ===== Текст в модалке правил / политики ===== */
@@ -2704,4 +2799,149 @@ body {
 
 .legal-modal-body li {
   margin-bottom: 4px;
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.profile-stat-card {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.profile-stat-label {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.profile-stat-value {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.trade-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  margin-bottom: 6px;
+}
+
+.trade-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #9ca3af;
+}
+
+.trade-status-dot.live {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.9);
+  animation: pulse-dot 1s infinite;
+}
+
+@keyframes pulse-dot {
+  0%   { transform: scale(1);   opacity: 1; }
+  50%  { transform: scale(1.4); opacity: 0.5; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+
+.trade-progress-bar {
+  margin-top: 6px;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+  overflow: hidden;
+}
+
+.trade-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  transition: width 0.3s linear;
+}
+
+.auth-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.auth-select-wrapper {
+  position: relative;
+}
+
+.auth-select-wrapper select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #111827;
+  background: #020617;
+  color: #f9fafb;
+  padding: 7px 30px 7px 10px;
+  font-size: 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+/* маленькая стрелочка справа */
+.auth-select-wrapper::after {
+  content: "▾";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: #6b7280;
+  pointer-events: none;
+}
+
+.auth-select-wrapper select:focus {
+  outline: none;
+  border-color: #f97316;
+}
+
+/* ===== FIX: История ===== */
+
+/* Контейнер для колонок истории */
+.history-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px; /* Чуть больше отступ между блоками */
+  width: 100%;
+  margin-bottom: 20px; /* Отступ снизу, чтобы не прилипало к футеру */
+}
+
+@media (min-width: 768px) {
+  .history-layout {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: flex-start;
+  }
+}
+
+/* Сами блоки истории */
+.history-layout .wallet-history-short,
+.history-layout .history-block {
+  /* Ограничиваем высоту каждого списка, чтобы он не был бесконечным */
+  max-height: 400px; 
+  /* Включаем скролл ВНУТРИ блока истории */
+  overflow-y: auto; 
+  /* Добавляем фон, чтобы текст не смешивался, если вдруг наедет */
+  background: rgba(15, 23, 42, 0.95); 
+  position: relative;
+  z-index: 2;
+  /* Важно для предотвращения наезжания flex-элементов */
+  flex-shrink: 0; 
 }
