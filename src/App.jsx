@@ -290,6 +290,17 @@ function Loader({ title, subtitle }) {
 function App() {
   // auth
   const [user, setUser] = useState(null);
+const contentRef = useRef(null);
+
+const scrollToTop = () => {
+  // скроллим само окно
+  window.scrollTo({ top: 0, behavior: "auto" });
+
+  // и внутренний контейнер, если он скроллится
+  if (contentRef.current) {
+    contentRef.current.scrollTo({ top: 0, behavior: "auto" });
+  }
+};
   const [showLanding, setShowLanding] = useState(!localStorage.getItem("forbex_user"));
   const [authMode, setAuthMode] = useState("register"); // "login" | "register"
   const [authForm, setAuthForm] = useState({
@@ -325,7 +336,7 @@ function App() {
   // доп. шаг после регистрации (выбор языка/валюты)
   const [pendingUser, setPendingUser] = useState(null);
   const [postRegisterStep, setPostRegisterStep] = useState(false);
-const [tempSettings, setTempSettings] = useState({
+  const [tempSettings, setTempSettings] = useState({
   language: "ru",
   currency: "RUB",
   theme: "fox",
@@ -489,9 +500,15 @@ useEffect(() => {
   return () => clearTimeout(t);
 }, [navClickId]);
 
+useEffect(() => {
+  scrollToTop();
+}, [activeTab]);
+
+
 const handleTabClick = (id) => {
   setActiveTab(id);
   setNavClickId(id);
+  scrollToTop();
 };
 
 const accountStats = useMemo(() => {
@@ -1664,6 +1681,9 @@ const handleLogout = async () => {
   
   // Можно вернуть на лендинг, если хотите
   setShowLanding(true); 
+
+  // <<< ДОБАВЬ ЭТО
+  scrollToTop();
 };
   // смена пароля
   const handlePasswordInput = (field, value) => {
@@ -4855,32 +4875,36 @@ if (!user && showLanding) {
           subtitle={overlayText.subtitle}
         />
       )}
-
       <LandingPage
-        onLogin={() =>
+        onLogin={() => {
           showOverlay(
             "FORBEX TRADE",
-            isEN ? "Opening your personal area..." : "Открываем личный кабинет…",
+            isEN
+              ? "Opening your personal area..."
+              : "Открываем личный кабинет…",
             () => {
               setShowLanding(false);
               setAuthMode("login");
+              scrollToTop();
             },
             900
-          )
-        }
-        onRegister={() =>
+          );
+        }}
+        onRegister={() => {
           showOverlay(
             "FORBEX TRADE",
-            isEN ? "Creating account..." : "Создаём аккаунт трейдера…",
+            isEN
+              ? "Creating account..."
+              : "Создаём аккаунт трейдера…",
             () => {
               setShowLanding(false);
               setAuthMode("register");
+              scrollToTop();
             },
             900
-          )
-        }
+          );
+        }}
       />
-
       {/* Модалка с правилами / политикой для лендинга */}
       {legalModal && (
         <div
@@ -5022,16 +5046,18 @@ if (!user) {
         </div>
       )}
 
-      {/* Кнопка НАЗАД на лендинг */}
-      <button
-        onClick={() =>
-          showOverlay(
-            "FORBEX TRADE",
-            "Возвращаем на лендинг…",
-            () => setShowLanding(true),
-            600
-          )
-        }
+<button
+  onClick={() =>
+    showOverlay(
+      "FORBEX TRADE",
+      "Возвращаем на лендинг…",
+      () => {
+        setShowLanding(true);
+        window.scrollTo({ top: 0, behavior: "auto" });
+      },
+      600
+    )
+  }
         style={{
           position: "absolute",
           top: 16,
@@ -5193,15 +5219,15 @@ return (
       </div>
     </header>
 
-    <main className="content">
-      <div key={activeTab} className="tab-content">
-        {activeTab === 1 && renderHome()}
-        {activeTab === 2 && renderTrade()}
-        {activeTab === 3 && renderWallet()}
-        {activeTab === 4 && renderHistory()}
-        {activeTab === 5 && renderProfile()}
-      </div>
-    </main>
+<main className="content" ref={contentRef}>  {/* <--- ДОБАВЬ ref={contentRef} СЮДА */}
+  <div key={activeTab} className="tab-content">
+    {activeTab === 1 && renderHome()}
+    {activeTab === 2 && renderTrade()}
+    {activeTab === 3 && renderWallet()}
+    {activeTab === 4 && renderHistory()}
+    {activeTab === 5 && renderProfile()}
+  </div>
+</main>
 
 <footer className="footer-legal">
   <div className="footer-legal-card">
@@ -5237,15 +5263,15 @@ return (
 </footer>
 
     {/* Нижняя навигация */}
-    <nav className="bottom-nav">
-      {TABS.map((tab) => (
-        <button
-          key={tab.id}
-          className={
-            "nav-tab " + (activeTab === tab.id ? "nav-tab-active" : "")
-          }
-          onClick={() => setActiveTab(tab.id)}
-        >
+<nav className="bottom-nav">
+  {TABS.map((tab) => (
+    <button
+      key={tab.id}
+      className={
+        "nav-tab " + (activeTab === tab.id ? "nav-tab-active" : "")
+      }
+      onClick={() => handleTabClick(tab.id)}
+    >
           <span className="nav-tab-icon">{tab.icon}</span>
           <span className="nav-tab-label">
             {isEN ? tab.labelEn : tab.labelRu}

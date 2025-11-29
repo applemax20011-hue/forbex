@@ -76,12 +76,13 @@ body {
 
 .content {
   flex: 1;
-  padding: 14px 16px 140px; /* <- было 82px, сделали побольше */
+  padding: 14px 16px 140px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow-y: auto;
+  overflow-y: auto;   /* <-- скролл внутри .content, а НЕ у window */
 }
+
 
 /* Лисья (по умолчанию) */
 .theme-fox {
@@ -1286,31 +1287,43 @@ body {
   100% { box-shadow: 0 0 10px rgba(34, 197, 94, 0.45); transform: translateY(0); }
 }
 
-/* ===== Профиль ===== */
-
-/* Карточка профиля: делаем читаемый текст */
+/* Карточка профиля: выравнивание по центру и компактность */
 .profile-card {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
+  align-items: center; /* Строго по центру по вертикали */
+  justify-content: flex-start;
+  gap: 12px;           /* Аккуратный отступ от аватарки */
+  padding: 12px 16px;  /* Уменьшенные внутренние отступы */
   border-radius: 18px;
   background: linear-gradient(90deg, #f97316, #7c2d12);
-  color: #fefce8; /* ВСЕЙ карточке светлый текст */
+  color: #fefce8;
+  position: relative;
+  min-height: 72px;    /* Фиксируем минимальную высоту, чтобы не сплющило */
+}
+
+/* Текстовая часть профиля - убираем лишние отступы */
+.profile-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* Текст тоже по центру */
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding-right: 10px;
 }
 
 /* Аватар */
 .profile-avatar {
   flex-shrink: 0;
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
+  width: 48px;         /* Чуть меньше, чтобы влезало на мелкие экраны */
+  height: 48px;
+  border-radius: 14px;
   overflow: hidden;
   background: rgba(15, 23, 42, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 20px;
 }
 
 .profile-avatar-img {
@@ -1320,63 +1333,53 @@ body {
   border-radius: 16px;
 }
 
-
-/* Текстовая часть профиля */
-.profile-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
 .profile-login {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fefce8;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
 }
 
 .profile-email {
-  font-size: 12px;
-  color: #fef9c3;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.2;
 }
 
 .profile-created {
-  font-size: 11px;
-  color: #fffbeb;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 2px;
 }
 
 .profile-actions-grid {
   display: flex;
   flex-direction: column;
-  gap: 12px !important; /* Жестко задаем отступ */
+  /* БЫЛО 12px, СТАВИМ 6px !important, чтобы сжать отступы */
+  gap: 6px !important; 
   width: 100%;
   height: auto;
-  flex-shrink: 0; /* Запрещаем сжиматься */
+  flex-shrink: 0;
+  margin-top: 4px; /* Чуть приподнять весь блок кнопок */
 }
 
-.profile-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* Кнопки профиля */
+/* Сами кнопки тоже сделаем чуть компактнее */
 .profile-btn {
   width: 100%;
-  padding: 8px 0;
-  font-size: 11px;
-  border-radius: 999px;
+  padding: 10px 0; /* Высота кнопки */
+  font-size: 12px;
+  border-radius: 12px;
   border: 1px solid #1f2937;
   background: #020617;
   color: #e5e7eb;
   cursor: pointer;
-  transition:
-    box-shadow 0.15s ease,
-    transform 0.1s ease,
-    border-color 0.15s ease,
-    background 0.15s ease,
-    color 0.15s ease;
+  transition: transform 0.1s ease, background 0.15s;
+  margin: 0; /* Убираем внешние отступы, если были */
+}
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .profile-btn:hover {
@@ -2845,148 +2848,36 @@ body {
   border-color: #f97316;
 }
 
-/* ===== FIX: История ===== */
-
-/* Контейнер для колонок истории */
-.history-layout {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px; /* Чуть больше отступ между блоками */
-  width: 100%;
-  margin-bottom: 20px; /* Отступ снизу, чтобы не прилипало к футеру */
-}
-
-@media (min-width: 768px) {
-  .history-layout {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-items: flex-start;
-  }
-}
-
-/* Сами блоки истории */
-.history-layout .wallet-history-short,
-.history-layout .history-block {
-  /* Ограничиваем высоту каждого списка, чтобы он не был бесконечным */
-  max-height: 400px; 
-  /* Включаем скролл ВНУТРИ блока истории */
-  overflow-y: auto; 
-  /* Добавляем фон, чтобы текст не смешивался, если вдруг наедет */
-  background: rgba(15, 23, 42, 0.95); 
-  position: relative;
-  z-index: 2;
-  /* Важно для предотвращения наезжания flex-элементов */
-  flex-shrink: 0; 
-}
-
-/* === ПАТЧ: реально подключаем темы === */
-
-/* фон всего приложения + основной цвет текста */
-body,
-.page-root {
-  background: var(--bg-body);
-  color: var(--text-main);
-}
-
-/* основные «карточки» подчиняем теме */
-.section-block,
-.trade-chart-card,
-.trade-side,
-.wallet-balance-card,
-.wallet-modal,
-.history-block,
-.wallet-history-short,
-.auth-card,
-.footer-legal-card {
-  background: var(--surface-main) !important;
-  border-color: var(--border-subtle) !important;
-}
-
-/* более мягкий текст */
-.section-title p,
-.brand-sub,
-.coin-name,
-.wallet-sub,
-.history-sub,
-.settings-label,
-.auth-sub,
-.post-register-sub,
-.auth-note,
-.footer-legal-text {
-  color: var(--text-muted) !important;
-}
-/* === FIX: нижняя навигация — убрать прозрачность === */
-
-.bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 10px 16px 20px;
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  z-index: 40;
-  background: transparent; /* фон под кнопками пусть даёт тема */
-}
-
-/* сами кнопки навигации — плотные, без прозрачности и блюра */
-.bottom-nav .nav-tab {
-  flex: 1 1 0;
-  min-width: 0;
-  border: 1px solid var(--border-subtle);
-  outline: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 0 4px;
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 1.1;
-  background: var(--surface-main) !important;  /* ПЛОТНАЯ карточка */
-  color: var(--text-main) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
-}
-
-/* активная вкладка — яркая, но тоже НЕ прозрачная */
-.bottom-nav .nav-tab.nav-tab-active {
-  background: var(--accent) !important;
-  color: #020617 !important;
-  border-color: var(--accent) !important;
-}
-
-/* === FIX: отступы между основными блоками на страницах === */
-
-/* каждый крупный блок в контенте имеет нормальный нижний отступ */
-.content .home-hero,
+body, .page-root { background: var(--bg-body); color: var(--text-main); } /* основные «карточки» подчиняем теме */ .section-block, .trade-chart-card, .trade-side, .wallet-balance-card, .wallet-modal, .history-block, .wallet-history-short, .auth-card, .footer-legal-card { background: var(--surface-main) !important; border-color: var(--border-subtle) !important; } /* более мягкий текст */ .section-title p, .brand-sub, .coin-name, .wallet-sub, .history-sub, .settings-label, .auth-sub, .post-register-sub, .auth-note, .footer-legal-text { color: var(--text-muted) !important; }
+/* Отступы между большими карточками на странице */
 .content .section-block,
-.content .profile-card,
 .content .history-layout,
 .content .wallet-balance-card,
 .content .footer-legal {
-  margin-bottom: 16px;
+  margin-bottom: 16px;  /* можешь поставить 12px или 20px, как больше нравится */
 }
-
-/* дополнительно блокам истории запрещаем сжиматься */
-.history-layout > * {
-  flex-shrink: 0;
+/* Чуть больше места под зелёной кнопкой */
+.greenPulse {
+  margin-bottom: 10px;
 }
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  max-width: 100%;
+  min-width: 0 !important;
 
-/* профили — кнопки с нормальными расстояниями */
-.profile-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+  /* УБИРАЕМ ЭТО */
+  /* overflow: hidden; */
 
-/* запасной вариант, если gap где-то не срабатывает */
-.profile-btn + .profile-btn {
-  margin-top: 6px;
-}
+  /* если хочешь, можно явно указать */
+  overflow-y: auto;
 
-/* на всякий случай карточки истории не прилипают друг к другу */
-.history-row + .history-row {
-  margin-top: 0;
+  display: block !important;
+  place-items: initial !important;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 600;
+  background-color: #020617;
+  color: #e5e7eb;
 }
