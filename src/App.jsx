@@ -4678,8 +4678,23 @@ const renderAuth = () => {
                 <>
                   <div className="auth-note">
                     Нажимая «Зарегистрироваться», вы соглашаетесь с правилами
-                    обработки персональных данных, Правилами пользователя
-                    и Политикой конфиденциальности платформы Forbex Trade.
+                    обработки персональных данных,{" "}
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => setLegalModal("terms")}
+                    >
+                      Правилами пользователя
+                    </button>{" "}
+                    и{" "}
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => setLegalModal("privacy")}
+                    >
+                      Политикой конфиденциальности
+                    </button>{" "}
+                    платформы Forbex Trade.
                   </div>
                   <div className="auth-note">
                     Уже есть аккаунт?{" "}
@@ -4706,8 +4721,23 @@ const renderAuth = () => {
                   </div>
                   <div className="auth-note">
                     Входя в аккаунт, вы подтверждаете, что ознакомились
-                    и соглашаетесь с Правилами пользователя и Политикой
-                    конфиденциальности платформы Forbex Trade.
+                    и соглашаетесь с{" "}
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => setLegalModal("terms")}
+                    >
+                      Правилами пользователя
+                    </button>{" "}
+                    и{" "}
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => setLegalModal("privacy")}
+                    >
+                      Политикой конфиденциальности
+                    </button>{" "}
+                    платформы Forbex Trade.
                   </div>
                 </>
               )}
