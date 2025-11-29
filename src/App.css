@@ -2302,80 +2302,55 @@ body {
   border-bottom: 1px solid rgba(31, 41, 55, 0.8);
 }
 
-/* ===== Парящая навигация (Floating Island) ===== */
+/* ===== НИЖНЯЯ НАВИГАЦИЯ ===== */
+
 .bottom-nav {
-  position: fixed !important;
-  left: 50%;
-  transform: translateX(-50%); /* Строго по центру экрана */
-  z-index: 100;
-
-  /* ОТСТУП СНИЗУ: 
-     20px от края + учитываем полоску iPhone (safe-area).
-     Благодаря этому он "парит" и не прилипает к низу. */
-  bottom: calc(16px + env(safe-area-inset-bottom));
-
-  /* ШИРИНА:
-     Занимаем всю ширину минус 32px (по 16px отступа слева и справа).
-     Но не шире 500px (чтобы на ПК было красиво). */
-  width: calc(100% - 32px); 
-  max-width: 500px;
-
-  /* ВНУТРЕННОСТИ */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 16px 20px;
   display: flex;
-  align-items: center;
-  justify-content: space-around;
-  padding: 10px 16px; /* Внутренние отступы, чтобы иконкам было просторно */
-
-  /* ДИЗАЙН СТЕКЛА */
-  background: rgba(15, 23, 42, 0.85); /* Полупрозрачный темный фон */
-  backdrop-filter: blur(24px);        /* Размытие фона под меню */
-  -webkit-backdrop-filter: blur(24px);
-
-  /* ГРАНИЦЫ И ТЕНИ */
-  border: 1px solid rgba(255, 255, 255, 0.08); /* Тонкая светлая обводка */
-  border-radius: 24px; /* Сильное закругление краев (овальная форма) */
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6); /* Красивая тень снизу */
-
-  pointer-events: auto; /* Включаем клики */
+  justify-content: space-between;
+  gap: 10px;                  /* расстояние между кнопками */
+  z-index: 40;
 }
 
-/* кнопки внутри — как были */
-
+/* сама кнопка */
 .nav-tab {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   border: none;
-  background: transparent;
-  color: #9ca3af;
-  font-size: 10px;
-  padding: 4px;
-  border-radius: 1200px;
+  outline: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  justify-content: center;
+  padding: 6px 0 4px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.1;
+  background: rgba(15, 23, 42, 0.78);  /* дефолтный фон */
+  color: #e5e7eb;
+  backdrop-filter: blur(16px);
 }
 
+/* активная */
+.nav-tab-active {
+  background: linear-gradient(135deg, #f97316, #facc15);
+  color: #0f172a;
+}
+
+/* иконка и подпись */
 .nav-tab-icon {
   font-size: 18px;
   margin-bottom: 2px;
 }
 
 .nav-tab-label {
-  font-size:10px;
-  letter-spacing: 0.02em;
+  font-size: 11px;
+  white-space: nowrap;
 }
-
-.nav-tab:active {
-  transform: scale(0.95);
-}
-
-.nav-tab-active {
-  color: #f97316; /* Оранжевый цвет активной иконки */
-  background: rgba(249, 115, 22, 0.15); /* Легкая подсветка фона активной кнопки */
-}
-
 
 .toast-root {
   position: fixed;
