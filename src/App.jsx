@@ -294,8 +294,11 @@ function App() {
   password: "",
   confirmPassword: "",
   promo: "",
-  remember: true,
+  remember: false, // было true
 });
+
+  const [navClickId, setNavClickId] = useState(null);
+
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -469,8 +472,18 @@ const finishTrade = (trade) => {
   const isEN = settings.language === "en";
   const currencyCode = settings.currency === "RUB" ? "RUB" : "USD";
   
-// Загружаем историю логинов и сделок из Supabase
-// Загружаем историю логинов и сделок из Supabase
+useEffect(() => {
+  if (navClickId == null) return;
+  const t = setTimeout(() => setNavClickId(null), 300);
+  return () => clearTimeout(t);
+}, [navClickId]);
+
+const handleTabClick = (id) => {
+  setActiveTab(id);
+  setNavClickId(id);
+};
+
+
 useEffect(() => {
   if (!user) return;
 
@@ -537,51 +550,53 @@ useEffect(() => {
   loadUserHistoriesFromSupabase();
 }, [user]);
 
-// ===== Инициализация из localStorage =====
+useEffect(() => {
+  if (!user) return;
+
+  (async () => {
+    try {
+      const { data, error } = await supabase
+        .from("user_settings")
+        .select("language, currency")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!error && data) {
+        setSettings((prev) => ({
+          ...prev,
+          language: data.language || prev.language,
+          currency: data.currency || prev.currency,
+        }));
+      }
+    } catch (e) {
+      console.error("load user_settings on mount error:", e);
+    }
+  })();
+}, [user?.id]);
+
+
 useEffect(() => {
   const bootTimer = setTimeout(() => setBooting(false), 1300);
 
   try {
     const savedUser = localStorage.getItem(STORAGE_KEYS.user);
-    const savedPass = localStorage.getItem(STORAGE_KEYS.password);
     const savedRemember = localStorage.getItem(STORAGE_KEYS.remember);
-    const savedSettings = localStorage.getItem(STORAGE_KEYS.settings);
-
-    // настройки языка/валюты
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings);
-        setSettings((prev) => ({ ...prev, ...parsed }));
-      } catch {
-        // ignore
-      }
-    }
 
     const rememberFlag = savedRemember === "true";
 
-    // автологин
-    if (savedUser && savedPass && rememberFlag) {
+    // если есть сохранённый пользователь и включено "запомнить меня" — просто авторизуем
+    if (savedUser && rememberFlag) {
       const parsedUser = JSON.parse(savedUser);
       setUser(parsedUser);
-      setAuthForm((prev) => ({
-        ...prev,
-        login: parsedUser.login || "",
-        email: parsedUser.email || "",
-        password: savedPass || "",
-        remember: rememberFlag,
-      }));
-    } else if (savedUser && savedPass) {
-      const parsedUser = JSON.parse(savedUser);
-      setAuthForm((prev) => ({
-        ...prev,
-        login: parsedUser.login || "",
-        email: parsedUser.email || "",
-        password: savedPass || "",
-        remember: rememberFlag,
-      }));
+      setShowLanding(false);
     }
-  } catch {
-    // ignore
+
+    // галочка "запомнить" — по желанию сохраняем её состояние
+    if (rememberFlag) {
+      setAuthForm((prev) => ({ ...prev, remember: true }));
+    }
+  } catch (e) {
+    console.warn("init error:", e);
   }
 
   return () => clearTimeout(bootTimer);
@@ -626,18 +641,6 @@ useEffect(() => {
     const timer = setTimeout(initTg, 500);
     return () => clearTimeout(timer);
   }, []);
-
-// ===== Сохранение настроек в localStorage =====
-useEffect(() => {
-  try {
-    localStorage.setItem(
-      STORAGE_KEYS.settings,
-      JSON.stringify(settings)
-    );
-  } catch {
-    // ignore
-  }
-}, [settings]);
   
   // симуляция активности: активные юзеры и сделки за 24ч
   // симуляция активности: активные юзеры и сделки за 24ч
@@ -1156,6 +1159,23 @@ const updateSettings = (patch) => {
   };
 
   const validateEmail = (email) => /\S+@\S+\.\S+/.test(email);
+  
+const handleLandingAction = (mode) => {
+  const subtitle =
+    mode === "login"
+      ? "открываем форму входа…"
+      : "готовим регистрацию…";
+
+  showOverlay(
+    "FORBEX TRADE",
+    subtitle,
+    () => {
+      setAuthMode(mode === "login" ? "login" : "register");
+      setShowLanding(false);
+    },
+    900 // плавненько, поменьше, чем при большой загрузке
+  );
+};
 
 const handleRegister = async () => {
   const { login, email, password, confirmPassword, remember } = authForm;
@@ -1276,12 +1296,12 @@ const handleRegister = async () => {
 
     // сохраним пароль/remember и timestamp, чтобы completeRegistration мог это доиспользовать
     try {
-      localStorage.setItem(STORAGE_KEYS.password, password);
-      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-      localStorage.setItem(
-        STORAGE_KEYS.registrationTs,
-        String(createdAtTs)
-      );
+localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+localStorage.setItem(
+  STORAGE_KEYS.registrationTs,
+  String(createdAtTs)
+);
+
     } catch (e) {
       console.warn("localStorage error (register):", e);
     }
@@ -1315,12 +1335,11 @@ const completeRegistration = () => {
           STORAGE_KEYS.user,
           JSON.stringify(pendingUser)
         );
-        localStorage.setItem(STORAGE_KEYS.password, password);
-        localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-        localStorage.setItem(
-          STORAGE_KEYS.settings,
-          JSON.stringify(finalSettings)
-        );
+localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+localStorage.setItem(
+  STORAGE_KEYS.settings,
+  JSON.stringify(finalSettings)
+);
         if (!localStorage.getItem(STORAGE_KEYS.registrationTs)) {
           localStorage.setItem(
             STORAGE_KEYS.registrationTs,
@@ -1467,20 +1486,19 @@ const handleLogin = async () => {
 
     // localStorage
     try {
-      localStorage.setItem(
-        STORAGE_KEYS.user,
-        JSON.stringify(userWithCreatedAt)
-      );
-      localStorage.setItem(STORAGE_KEYS.password, password);
-      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-      localStorage.setItem(
-        STORAGE_KEYS.registrationTs,
-        String(createdAtTs)
-      );
-      localStorage.setItem(
-        STORAGE_KEYS.settings,
-        JSON.stringify(finalSettings)
-      );
+localStorage.setItem(
+  STORAGE_KEYS.user,
+  JSON.stringify(userWithCreatedAt)
+);
+localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+localStorage.setItem(
+  STORAGE_KEYS.registrationTs,
+  String(createdAtTs)
+);
+localStorage.setItem(
+  STORAGE_KEYS.settings,
+  JSON.stringify(finalSettings)
+);
     } catch (e) {
       console.warn("localStorage error (login):", e);
     }
@@ -1727,13 +1745,6 @@ const handlePasswordChange = async () => {
       console.error("password update error:", updateError);
       setPasswordError("Не удалось изменить пароль.");
       return;
-    }
-
-    // 5. Обновляем localStorage (для автологина)
-    try {
-      localStorage.setItem(STORAGE_KEYS.password, newPassword);
-    } catch (e) {
-      console.warn("localStorage password update error:", e);
     }
 
     setPasswordSuccess("Пароль успешно изменён.");
@@ -4738,14 +4749,15 @@ return (
       </div>
     </header>
 
-    {/* Контент */}
-    <main className="content">
-      {activeTab === 1 && renderHome()}
-      {activeTab === 2 && renderTrade()}
-      {activeTab === 3 && renderWallet()}
-      {activeTab === 4 && renderHistory()}
-      {activeTab === 5 && renderProfile()}
-    </main>
+<main className="content">
+  <div key={activeTab} className="tab-content">
+    {activeTab === 1 && renderHome()}
+    {activeTab === 2 && renderTrade()}
+    {activeTab === 3 && renderWallet()}
+    {activeTab === 4 && renderHistory()}
+    {activeTab === 5 && renderProfile()}
+  </div>
+</main>
 
     {/* Нижняя навигация */}
     <nav className="bottom-nav">

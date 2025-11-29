@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 
-// Данные для тикера
+// Данные для тикера (бегущая строка)
 const COINS = [
   { name: "BTC", price: "97,320.50", change: "+3.2%", up: true },
   { name: "ETH", price: "3,270.12", change: "+1.8%", up: true },
@@ -88,7 +88,6 @@ const ThreeBackground = () => {
     const THREE = window.THREE;
 
     const scene = new THREE.Scene();
-    // Немного тумана для глубины
     scene.fog = new THREE.FogExp2(0x030304, 0.02);
     
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -96,11 +95,10 @@ const ThreeBackground = () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     
     if (mountRef.current) {
-        mountRef.current.innerHTML = ''; // очистка при ререндере
+        mountRef.current.innerHTML = '';
         mountRef.current.appendChild(renderer.domElement);
     }
 
-    // Частицы
     const particlesGeometry = new THREE.BufferGeometry();
     const count = window.innerWidth < 768 ? 150 : 300;
     const posArray = new Float32Array(count * 3);
@@ -127,7 +125,6 @@ const ThreeBackground = () => {
         requestAnimationFrame(animate);
         particlesMesh.rotation.y += 0.0005;
         particlesMesh.rotation.x += 0.0002;
-        // Легкое движение за мышкой
         camera.position.x += (mouseX * 2 - camera.position.x) * 0.05;
         camera.position.y += (-mouseY * 2 - camera.position.y) * 0.05;
         camera.lookAt(scene.position);
@@ -161,16 +158,14 @@ const ThreeBackground = () => {
 
 // --- ОСНОВНОЙ КОМПОНЕНТ СТРАНИЦЫ ---
 export default function LandingPage({ onLogin, onRegister }) {
-    // Инициализация иконок Lucide
     useEffect(() => {
         if (window.lucide) window.lucide.createIcons();
     });
 
     return (
         <div className="relative min-h-screen text-white font-sans selection:bg-brand-accent selection:text-black pb-20">
-            {/* Шум на фоне */}
+            {/* Фон */}
             <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none -z-10"></div>
-            
             <ThreeBackground />
             <Ticker />
 
@@ -179,24 +174,13 @@ export default function LandingPage({ onLogin, onRegister }) {
                 <div className="container mx-auto px-6 flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-gradient-to-br from-brand-accent to-brand-blue rounded-lg flex items-center justify-center border border-brand-accent">
-                            {/* Иконка молнии заменена на эмодзи лисы или иконку */}
                             <span className="text-xl">🦊</span>
                         </div>
                         <span className="text-xl font-bold tracking-wider">FORBEX <span className="text-brand-accent">TRADE</span></span>
                     </div>
                     <div className="flex items-center space-x-4">
-                        <button 
-                            onClick={onLogin}
-                            className="text-sm font-medium hover:text-brand-accent transition-colors"
-                        >
-                            Вход
-                        </button>
-                        <button 
-                            onClick={onRegister}
-                            className="bg-white text-black px-5 py-2 rounded-full font-bold text-sm hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all"
-                        >
-                            Регистрация
-                        </button>
+                        <button onClick={onLogin} className="text-sm font-medium hover:text-brand-accent transition-colors">Вход</button>
+                        <button onClick={onRegister} className="bg-white text-black px-5 py-2 rounded-full font-bold text-sm hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all">Регистрация</button>
                     </div>
                 </div>
             </nav>
@@ -216,37 +200,22 @@ export default function LandingPage({ onLogin, onRegister }) {
                             Торгуй без <br/>
                             <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-accent to-brand-blue">Границ.</span>
                         </h1>
-                        
                         <p className="text-gray-400 text-base sm:text-lg max-w-lg mx-auto md:mx-0 leading-relaxed">
                             Единая экосистема для акций, крипты и форекса. Пополнение через СБП, P2P и криптовалюты. Никаких блокировок.
                         </p>
-                        
                         <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-                            <button 
-                                onClick={onRegister}
-                                className="px-8 py-4 bg-brand-accent text-black font-bold rounded-lg hover:bg-white hover:scale-105 transition-all duration-300 shadow-[0_0_20px_rgba(249,115,22,0.4)] flex items-center justify-center gap-2 group"
-                            >
+                            <button onClick={onRegister} className="px-8 py-4 bg-brand-accent text-black font-bold rounded-lg hover:bg-white hover:scale-105 transition-all duration-300 shadow-[0_0_20px_rgba(249,115,22,0.4)] flex items-center justify-center gap-2 group">
                                 Открыть счет
                                 <i data-lucide="arrow-right" className="w-4 h-4 group-hover:translate-x-1 transition-transform"></i>
                             </button>
-                            <button 
-                                onClick={onLogin}
-                                className="px-8 py-4 bg-white/5 backdrop-blur rounded-lg font-medium hover:bg-white/10 transition-all border border-white/10 flex items-center justify-center gap-2"
-                            >
+                            <button onClick={onLogin} className="px-8 py-4 bg-white/5 backdrop-blur rounded-lg font-medium hover:bg-white/10 transition-all border border-white/10 flex items-center justify-center gap-2">
                                 <i data-lucide="log-in" className="w-4 h-4"></i>
                                 Войти
                             </button>
                         </div>
-
                         <div className="flex justify-center md:justify-start gap-6 text-xs sm:text-sm text-gray-500 font-mono pt-4">
-                            <div className="flex items-center gap-2">
-                                <i data-lucide="shield-check" className="text-brand-accent w-4 h-4"></i>
-                                <span>No KYC до $15k</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <i data-lucide="zap" className="text-brand-blue w-4 h-4"></i>
-                                <span>Моментальный вывод</span>
-                            </div>
+                            <div className="flex items-center gap-2"><i data-lucide="shield-check" className="text-brand-accent w-4 h-4"></i><span>No KYC до $15k</span></div>
+                            <div className="flex items-center gap-2"><i data-lucide="zap" className="text-brand-blue w-4 h-4"></i><span>Моментальный вывод</span></div>
                         </div>
                     </div>
 
@@ -262,19 +231,15 @@ export default function LandingPage({ onLogin, onRegister }) {
                             </div>
                             <LiveChart />
                             <div className="grid grid-cols-2 gap-4 mt-6">
-                                <button className="bg-green-500/10 text-green-400 py-3 rounded-lg font-bold hover:bg-green-500 hover:text-black transition-colors text-sm">
-                                    Купить
-                                </button>
-                                <button className="bg-red-500/10 text-red-400 py-3 rounded-lg font-bold hover:bg-red-500 hover:text-black transition-colors text-sm">
-                                    Продать
-                                </button>
+                                <button onClick={onRegister} className="bg-green-500/10 text-green-400 py-3 rounded-lg font-bold hover:bg-green-500 hover:text-black transition-colors text-sm">Купить</button>
+                                <button onClick={onRegister} className="bg-red-500/10 text-red-400 py-3 rounded-lg font-bold hover:bg-red-500 hover:text-black transition-colors text-sm">Продать</button>
                             </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* Преимущества */}
+            {/* Карточки */}
             <section className="py-16 relative z-10 container mx-auto px-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {[
@@ -289,25 +254,6 @@ export default function LandingPage({ onLogin, onRegister }) {
                             <p className="text-xs text-gray-400">{card.desc}</p>
                         </div>
                     ))}
-                </div>
-            </section>
-
-            {/* CTA */}
-            <section className="py-16 relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-t from-brand-accent/10 via-transparent to-transparent pointer-events-none"></div>
-                <div className="container mx-auto px-6 text-center relative z-10">
-                    <h2 className="text-3xl md:text-5xl font-bold mb-6">
-                        Начни зарабатывать <br/>
-                        <span className="text-brand-accent">ПРЯМО СЕЙЧАС</span>
-                    </h2>
-                    <p className="text-gray-400 mb-8">Бонус 5000 RUB за регистрацию до конца дня.</p>
-                    <button 
-                        onClick={onRegister}
-                        className="bg-brand-accent text-black font-bold px-12 py-4 rounded-full hover:scale-105 transition-transform shadow-[0_0_30px_rgba(249,115,22,0.4)] text-lg"
-                    >
-                        Зарегистрироваться
-                    </button>
-                    <p className="mt-5 text-xs text-gray-600">Нажимая кнопку, вы соглашаетесь с условиями оферты.</p>
                 </div>
             </section>
 
