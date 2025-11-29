@@ -1410,41 +1410,20 @@ localStorage.setItem(
 const completeRegistration = () => {
   if (!pendingUser) return;
 
-  const { password, remember } = authForm;
   const finalSettings = { ...settings, ...tempSettings };
   const nowIso = new Date().toISOString();
   const nowTs = Date.now();
 
+  // показываем мягкую анимацию
   showOverlay(
     "FORBEX TRADE",
     "Загрузка торгового терминала…",
     () => {
-      // применяем настройки локально
+      // применяем настройки локально (в памяти)
       setSettings(finalSettings);
       setUser(pendingUser);
 
-      // localStorage
-      try {
-        localStorage.setItem(
-          STORAGE_KEYS.user,
-          JSON.stringify(pendingUser)
-        );
-localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-localStorage.setItem(
-  STORAGE_KEYS.settings,
-  JSON.stringify(finalSettings)
-);
-        if (!localStorage.getItem(STORAGE_KEYS.registrationTs)) {
-          localStorage.setItem(
-            STORAGE_KEYS.registrationTs,
-            String(pendingUser.createdAt || nowTs)
-          );
-        }
-      } catch (e) {
-        console.warn("localStorage error (completeRegistration):", e);
-      }
-
-      // пишем в локальную историю входов
+      // локальная история (в памяти)
       const entry = {
         id: nowTs,
         type: "register",
@@ -1461,19 +1440,19 @@ localStorage.setItem(
           if (pendingUser.id) {
             // user_settings
             await supabase.from("user_settings").upsert({
-  user_id: pendingUser.id,
-  language: finalSettings.language,
-  currency: finalSettings.currency,
-  theme: finalSettings.theme || "fox",
-});
+              user_id: pendingUser.id,
+              language: finalSettings.language,
+              currency: finalSettings.currency,
+              theme: finalSettings.theme || "fox",
+            });
 
-            // login_history (подправь названия колонок, если у тебя другие)
+            // login_history
             await supabase.from("login_history").insert({
               user_id: pendingUser.id,
-              event_type: "register",   // если колонка называется type – поменяй на type
+              event_type: "register",
               login: pendingUser.login,
               email: pendingUser.email,
-              ts: nowIso,               // если колонка created_at – поставь created_at: nowIso
+              ts: nowIso,
               device: navigator.userAgent || "",
             });
           }
@@ -1482,14 +1461,22 @@ localStorage.setItem(
         }
       })();
 
+      // чистим временные состояния шага регистрации
       setPendingUser(null);
       setPostRegisterStep(false);
+
+      // очистим поля паролей в форме
+      setAuthForm((prev) => ({
+        ...prev,
+        password: "",
+        confirmPassword: "",
+      }));
     }
   );
 };
 
 const handleLogin = async () => {
-  const { login, email, password, remember } = authForm;
+  const { login, email, password } = authForm;
   const loginOrEmail = (login || email || "").trim();
 
   if (!loginOrEmail || !password.trim()) {
@@ -1497,23 +1484,19 @@ const handleLogin = async () => {
     return;
   }
 
-  // для контроля минимальной длительности лоадера
+  // минимальная длительность лоадера
   const startedAt = Date.now();
-
   const finishWithDelay = (cb) => {
     const elapsed = Date.now() - startedAt;
     const rest = Math.max(0, MIN_LOGIN_OVERLAY_MS - elapsed);
     setTimeout(() => {
-      setOverlayLoading(false); // прячем анимацию
-      cb && cb();               // потом уже показываем ошибку / что угодно
+      setOverlayLoading(false);
+      cb && cb();
     }, rest);
   };
 
   setAuthError("");
-  setOverlayText({
-    title: "FORBEX TRADE",
-    subtitle: "Проверяем данные…",
-  });
+  setOverlayText({ title: "FORBEX TRADE", subtitle: "Проверяем данные…" });
   setOverlayLoading(true);
 
   try {
@@ -1528,32 +1511,26 @@ const handleLogin = async () => {
 
     if (error) {
       console.error("handleLogin select error:", error);
-      finishWithDelay(() =>
-        setAuthError("Ошибка при обращении к серверу. Попробуйте ещё раз.")
+      return finishWithDelay(() =>
+        setAuthError("Ошибка сервера. Попробуйте ещё раз.")
       );
-      return;
     }
 
     const row = rows?.[0];
     if (!row) {
-      finishWithDelay(() =>
+      return finishWithDelay(() =>
         setAuthError("Аккаунт с таким логином или email не найден.")
       );
-      return;
     }
 
     // проверяем пароль (SHA-256)
     const enc = new TextEncoder().encode(password);
     const buf = await crypto.subtle.digest("SHA-256", enc);
     const hashArray = Array.from(new Uint8Array(buf));
-    const passwordHash = hashArray
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    const passwordHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
     if (row.password_hash !== passwordHash) {
-      // ❗ Лоадер крутится минимум MIN_LOGIN_OVERLAY_MS, потом Неверный пароль
-      finishWithDelay(() => setAuthError("Неверный пароль."));
-      return;
+      return finishWithDelay(() => setAuthError("Неверный пароль."));
     }
 
     const createdAtTs = row.created_at
@@ -1567,56 +1544,37 @@ const handleLogin = async () => {
       createdAt: createdAtTs,
     };
 
-    // грузим настройки пользователя из user_settings
+    // грузим настройки пользователя из user_settings (если есть)
     let loadedSettings = null;
     try {
-const { data: sRow, error: sErr } = await supabase
-  .from("user_settings")
-  .select("language, currency, theme")
-  .eq("user_id", row.id)
-  .maybeSingle();
+      const { data: sRow, error: sErr } = await supabase
+        .from("user_settings")
+        .select("language, currency, theme")
+        .eq("user_id", row.id)
+        .maybeSingle();
 
-if (!sErr && sRow) {
-  loadedSettings = {
-    language: sRow.language || "ru",
-    currency: sRow.currency || "RUB",
-    theme: sRow.theme || "fox",
-  };
+      if (!sErr && sRow) {
+        loadedSettings = {
+          language: sRow.language || "ru",
+          currency: sRow.currency || "RUB",
+          theme: sRow.theme || "fox",
+        };
       }
     } catch (e) {
       console.error("load user_settings error:", e);
     }
 
-const finalSettings = {
-  language: loadedSettings?.language || "ru",
-  currency: loadedSettings?.currency || "RUB",
-  theme: loadedSettings?.theme || "fox",
-};
+    const finalSettings = {
+      language: loadedSettings?.language || "ru",
+      currency: loadedSettings?.currency || "RUB",
+      theme: loadedSettings?.theme || "fox",
+    };
 
-    // обновляем стейты (они могут обновиться пока крутится лоадер — это ок)
+    // ставим в память
     setUser(userWithCreatedAt);
     setSettings((prev) => ({ ...prev, ...finalSettings }));
 
-    // localStorage
-    try {
-      localStorage.setItem(
-        STORAGE_KEYS.user,
-        JSON.stringify(userWithCreatedAt)
-      );
-      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-      localStorage.setItem(
-        STORAGE_KEYS.registrationTs,
-        String(createdAtTs)
-      );
-      localStorage.setItem(
-        STORAGE_KEYS.settings,
-        JSON.stringify(finalSettings)
-      );
-    } catch (e) {
-      console.warn("localStorage error (login):", e);
-    }
-
-    // локальная история логинов
+    // локальная история (в памяти)
     const nowTs = Date.now();
     const entry = {
       id: nowTs,
@@ -1628,7 +1586,7 @@ const finalSettings = {
     };
     setLoginHistory((prev) => [entry, ...prev]);
 
-    // лог в Supabase (асинхронно, не влияет на лоадер)
+    // лог в Supabase (не блокируем)
     try {
       const nowIso = new Date().toISOString();
       await supabase.from("login_history").insert({
@@ -1643,7 +1601,10 @@ const finalSettings = {
       console.error("supabase login_history login error:", e);
     }
 
-    // ✅ Успешный кейс: просто скрываем лоадер с задержкой
+    // чистим пароли в форме
+    setAuthForm((prev) => ({ ...prev, password: "", confirmPassword: "" }));
+
+    // закрываем лоадер с минимальной задержкой
     finishWithDelay();
   } catch (e) {
     console.error("handleLogin error:", e);
@@ -1698,6 +1659,21 @@ const handleLogout = async () => {
   setBalance(0);
   
 setShowLanding(true);
+
+const resetAuthForm = () => {
+  setAuthForm({
+    login: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    promo: "",
+    remember: false,
+  });
+  setShowPassword(false);
+  setShowConfirmPassword(false);
+  setAuthError("");
+};
+
 
 // важный момент: сначала пусть смонтируется лендос, потом крутим вверх
 setTimeout(() => {
