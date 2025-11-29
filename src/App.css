@@ -2956,3 +2956,37 @@ body,
   color: #020617 !important;
   border-color: var(--accent) !important;
 }
+
+/* === FIX: отступы между основными блоками на страницах === */
+
+/* каждый крупный блок в контенте имеет нормальный нижний отступ */
+.content .home-hero,
+.content .section-block,
+.content .profile-card,
+.content .history-layout,
+.content .wallet-balance-card,
+.content .footer-legal {
+  margin-bottom: 16px;
+}
+
+/* дополнительно блокам истории запрещаем сжиматься */
+.history-layout > * {
+  flex-shrink: 0;
+}
+
+/* профили — кнопки с нормальными расстояниями */
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* запасной вариант, если gap где-то не срабатывает */
+.profile-btn + .profile-btn {
+  margin-top: 6px;
+}
+
+/* на всякий случай карточки истории не прилипают друг к другу */
+.history-row + .history-row {
+  margin-top: 0;
+}
