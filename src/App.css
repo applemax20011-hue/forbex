@@ -62,6 +62,18 @@ body {
   overflow: visible !important; 
 }
 
+.page-root {
+  --bg-body: radial-gradient(circle at top, #0b1120 0%, #020617 55%, #020617 100%);
+  --surface-main: rgba(15, 23, 42, 0.95);
+  --surface-soft: rgba(15, 23, 42, 0.8);
+  --border-subtle: rgba(148, 163, 184, 0.35);
+  --text-main: #f9fafb;
+  --text-muted: #9ca3af;
+  --accent: #f97316;
+  --accent-soft: rgba(249, 115, 22, 0.18);
+}
+
+
 .content {
   flex: 1;
   padding: 14px 16px 140px; /* <- было 82px, сделали побольше */
@@ -71,55 +83,34 @@ body {
   overflow-y: auto;
 }
 
-
-
-/* По умолчанию fox-тёмная */
+/* Лисья (по умолчанию) */
 .theme-fox {
-  background: radial-gradient(circle at top, #020617, #020617 65%);
+  --bg-body: radial-gradient(circle at top, #0f172a 0%, #020617 55%, #020617 100%);
+  --surface-main: rgba(15, 23, 42, 0.96);
+  --surface-soft: rgba(15, 23, 42, 0.82);
+  --accent: #f97316;
+  --accent-soft: rgba(249, 115, 22, 0.2);
 }
 
+/* Ночная */
 .theme-night {
-  background: radial-gradient(circle at top, #020617, #000000 80%);
+  --bg-body: radial-gradient(circle at top, #020617 0%, #000000 60%, #020617 100%);
+  --surface-main: rgba(15, 23, 42, 0.98);
+  --surface-soft: rgba(15, 23, 42, 0.86);
+  --accent: #38bdf8;
+  --accent-soft: rgba(56, 189, 248, 0.22);
 }
 
-.theme-night .section-block,
-.theme-night .trade-side,
-.theme-night .trade-chart-card,
-.theme-night .wallet-balance-card,
-.theme-night .history-block {
-  background: radial-gradient(circle at top, #020617, #020617 75%);
-  border-color: #111827;
-}
-
+/* Дневная */
 .theme-day {
-  background: radial-gradient(circle at top, #f97316 0%, #f9fafb 55%, #e5e7eb 90%);
-}
-
-/* Светлая тема — подложка приложения и некоторые блоки */
-.theme-day .app-container {
-  background-color: #f9fafb;
-}
-
-.theme-day .section-block,
-.theme-day .trade-side,
-.theme-day .trade-chart-card,
-.theme-day .wallet-balance-card,
-.theme-day .history-block {
-  background: radial-gradient(circle at top, #ffffff, #f3f4f6 75%);
-  border-color: rgba(148, 163, 184, 0.35);
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
-  color: #020617;
-}
-
-.theme-day .header {
-  background: linear-gradient(180deg, #f97316, #fef3c7);
-  color: #0f172a;
-}
-
-.theme-day .nav-tab,
-.theme-day .footer-legal {
-  background: rgba(249, 250, 251, 0.9);
-  color: #0f172a;
+  --bg-body: radial-gradient(circle at top, #f9fafb 0%, #e5e7eb 60%, #e5e7eb 100%);
+  --surface-main: rgba(255, 255, 255, 0.98);
+  --surface-soft: rgba(255, 255, 255, 0.9);
+  --border-subtle: rgba(148, 163, 184, 0.35);
+  --text-main: #0f172a;
+  --text-muted: #6b7280;
+  --accent: #fb923c;
+  --accent-soft: rgba(251, 146, 60, 0.25);
 }
 
 /* ===== Шапка ===== */
@@ -1645,40 +1636,6 @@ body {
   color: #9ca3af;
 }
 
-.nav-tab {
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: #9ca3af;
-  font-size: 10px;
-  padding: 4px;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.nav-tab-icon {
-  font-size: 20px;
-  margin-bottom: 2px;
-}
-
-.nav-tab-label {
-  font-size: 11px;
-}
-
-.nav-tab:active {
-  transform: scale(0.95);
-}
-
-.nav-tab-active {
-  color: #f97316; /* Оранжевый цвет активной иконки */
-  background: rgba(249, 115, 22, 0.15); /* Легкая подсветка фона активной кнопки */
-}
-
 /* Глазик у пароля */
 .password-field {
   position: relative;
@@ -2919,4 +2876,83 @@ body {
   z-index: 2;
   /* Важно для предотвращения наезжания flex-элементов */
   flex-shrink: 0; 
+}
+
+/* === ПАТЧ: реально подключаем темы === */
+
+/* фон всего приложения + основной цвет текста */
+body,
+.page-root {
+  background: var(--bg-body);
+  color: var(--text-main);
+}
+
+/* основные «карточки» подчиняем теме */
+.section-block,
+.trade-chart-card,
+.trade-side,
+.wallet-balance-card,
+.wallet-modal,
+.history-block,
+.wallet-history-short,
+.auth-card,
+.footer-legal-card {
+  background: var(--surface-main) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+/* более мягкий текст */
+.section-title p,
+.brand-sub,
+.coin-name,
+.wallet-sub,
+.history-sub,
+.settings-label,
+.auth-sub,
+.post-register-sub,
+.auth-note,
+.footer-legal-text {
+  color: var(--text-muted) !important;
+}
+/* === FIX: нижняя навигация — убрать прозрачность === */
+
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  z-index: 40;
+  background: transparent; /* фон под кнопками пусть даёт тема */
+}
+
+/* сами кнопки навигации — плотные, без прозрачности и блюра */
+.bottom-nav .nav-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  outline: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0 4px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.1;
+  background: var(--surface-main) !important;  /* ПЛОТНАЯ карточка */
+  color: var(--text-main) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
+}
+
+/* активная вкладка — яркая, но тоже НЕ прозрачная */
+.bottom-nav .nav-tab.nav-tab-active {
+  background: var(--accent) !important;
+  color: #020617 !important;
+  border-color: var(--accent) !important;
 }
