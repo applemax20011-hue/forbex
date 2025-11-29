@@ -289,11 +289,16 @@ function App() {
   const [showLanding, setShowLanding] = useState(!localStorage.getItem("forbex_user"));
   const [authMode, setAuthMode] = useState("register"); // "login" | "register"
   const [authForm, setAuthForm] = useState({
-    login: "",
-    email: "",
-    password: "",
-    remember: true,
-  });
+  login: "",
+  email: "",
+  password: "",
+  confirmPassword: "",
+  promo: "",
+  remember: true,
+});
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [authError, setAuthError] = useState("");
   
   const [coins, setCoins] = useState(INITIAL_COINS);
@@ -1152,31 +1157,42 @@ const updateSettings = (patch) => {
 
   const validateEmail = (email) => /\S+@\S+\.\S+/.test(email);
 
-// РЕГИСТРАЦИЯ ЧЕРЕЗ SUPABASE
 const handleRegister = async () => {
-  const { login, email, password, remember } = authForm;
+  const { login, email, password, confirmPassword, remember } = authForm;
 
-  // базовая валидация как раньше
-  if (!login.trim() || !email.trim() || !password.trim()) {
+  if (
+    !login.trim() ||
+    !email.trim() ||
+    !password.trim() ||
+    !confirmPassword.trim()
+  ) {
     setAuthError("Заполните все поля.");
     return;
   }
+
   if (login.trim().length < 4) {
     setAuthError("Логин должен быть от 4 символов.");
     return;
   }
+
   if (!validateEmail(email.trim())) {
     setAuthError("Введите корректный email (с @ и доменом).");
     return;
   }
+
   if (password.length < 4) {
     setAuthError("Пароль должен быть от 4 символов.");
     return;
   }
 
+  if (password !== confirmPassword) {
+    setAuthError("Пароли не совпадают.");
+    return;
+  }
+
   const trimmedLogin = login.trim();
   const trimmedEmail = email.trim().toLowerCase();
-
+  // дальше оставляешь всё как у тебя было
   setAuthError("");
   setOverlayText({
     title: "FORBEX TRADE",
@@ -4277,293 +4293,415 @@ const renderProfile = () => {
   );
 };
 
-  // ===== Рендер AUTH (когда нет user) =====
+// ===== Рендер AUTH (когда нет user) =====
 
-  const renderAuth = () => (
-    <div className="auth-screen">
-      <div className="auth-card">
-        <div className="auth-fox">🦊</div>
-        <div className="auth-title">Forbex Trade</div>
-        {!postRegisterStep && (
-          <div className="auth-sub">
-            Биржевой интерфейс под Telegram WebApp. Создайте аккаунт, чтобы
-            продолжить.
+const renderAuth = () => (
+  <div className="auth-screen fade-in">
+    <div className="auth-card fade-in delay-1">
+      <div className="auth-fox">🦊</div>
+      <div className="auth-title">Forbex Trade</div>
+      {!postRegisterStep && (
+        <div className="auth-sub">
+          Биржевой интерфейс под Telegram WebApp. Создайте аккаунт, чтобы
+          продолжить.
+        </div>
+      )}
+
+      {postRegisterStep && pendingUser ? (
+        <div className="post-register">
+          <div className="post-register-title">✅ Успешно зарегистрированы</div>
+          <div className="post-register-sub">
+            Аккаунт: <b>{pendingUser.login}</b> · {pendingUser.email}
           </div>
-        )}
 
-        {postRegisterStep && pendingUser ? (
-          <div className="post-register">
-            <div className="post-register-title">
-              ✅ Успешно зарегистрированы
-            </div>
-            <div className="post-register-sub">
-              Аккаунт: <b>{pendingUser.login}</b> · {pendingUser.email}
-            </div>
-
-            <div className="settings-block">
-              <div className="settings-row">
-                <div className="settings-label">Выберите язык</div>
-                <div className="settings-chips">
-                  <button
-                    className={
-                      "settings-chip " +
-                      (tempSettings.language === "ru" ? "active" : "")
-                    }
-                    onClick={() =>
-                      setTempSettings((prev) => ({
-                        ...prev,
-                        language: "ru",
-                      }))
-                    }
-                  >
-                    🇷🇺 Русский
-                  </button>
-                  <button
-                    className={
-                      "settings-chip " +
-                      (tempSettings.language === "en" ? "active" : "")
-                    }
-                    onClick={() =>
-                      setTempSettings((prev) => ({
-                        ...prev,
-                        language: "en",
-                      }))
-                    }
-                  >
-                    🇺🇸 English
-                  </button>
-                </div>
-              </div>
-
-              <div className="settings-row">
-                <div className="settings-label">
-                  Выберите валюту баланса
-                </div>
-                <div className="settings-chips">
-                  <button
-                    className={
-                      "settings-chip " +
-                      (tempSettings.currency === "RUB" ? "active" : "")
-                    }
-                    onClick={() =>
-                      setTempSettings((prev) => ({
-                        ...prev,
-                        currency: "RUB",
-                      }))
-                    }
-                  >
-                    RUB
-                  </button>
-                  <button
-                    className={
-                      "settings-chip " +
-                      (tempSettings.currency === "USD" ? "active" : "")
-                    }
-                    onClick={() =>
-                      setTempSettings((prev) => ({
-                        ...prev,
-                        currency: "USD",
-                      }))
-                    }
-                  >
-                     USD
-                  </button>
-                </div>
+          <div className="settings-block">
+            <div className="settings-row">
+              <div className="settings-label">Выберите язык</div>
+              <div className="settings-chips">
+                <button
+                  className={
+                    "settings-chip " +
+                    (tempSettings.language === "ru" ? "active" : "")
+                  }
+                  onClick={() =>
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      language: "ru",
+                    }))
+                  }
+                >
+                  🇷🇺 Русский
+                </button>
+                <button
+                  className={
+                    "settings-chip " +
+                    (tempSettings.language === "en" ? "active" : "")
+                  }
+                  onClick={() =>
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      language: "en",
+                    }))
+                  }
+                >
+                  🇺🇸 English
+                </button>
               </div>
             </div>
+
+            <div className="settings-row">
+              <div className="settings-label">Выберите валюту баланса</div>
+              <div className="settings-chips">
+                <button
+                  className={
+                    "settings-chip " +
+                    (tempSettings.currency === "RUB" ? "active" : "")
+                  }
+                  onClick={() =>
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      currency: "RUB",
+                    }))
+                  }
+                >
+                  RUB
+                </button>
+                <button
+                  className={
+                    "settings-chip " +
+                    (tempSettings.currency === "USD" ? "active" : "")
+                  }
+                  onClick={() =>
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      currency: "USD",
+                    }))
+                  }
+                >
+                  USD
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button className="auth-submit" onClick={completeRegistration}>
+            Продолжить
+          </button>
+
+          <div className="auth-note">
+            Выбор языка и валюты можно потом поменять в профиле.
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="auth-tabs">
+            <button
+              className={
+                "auth-tab " + (authMode === "login" ? "active" : "")
+              }
+              onClick={() => {
+                setAuthMode("login");
+                setAuthError("");
+              }}
+            >
+              Вход
+            </button>
+            <button
+              className={
+                "auth-tab " + (authMode === "register" ? "active" : "")
+              }
+              onClick={() => {
+                setAuthMode("register");
+                setAuthError("");
+              }}
+            >
+              Регистрация
+            </button>
+          </div>
+
+          <div className="auth-form">
+            {authMode === "login" ? (
+              <>
+                <label>
+                  Логин или email
+                  <input
+                    type="text"
+                    value={authForm.login}
+                    onChange={(e) =>
+                      handleAuthInput("login", e.target.value)
+                    }
+                    placeholder="Введите логин или email"
+                  />
+                </label>
+
+                <label>
+                  Пароль
+                  <div className="password-field">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      className="password-input"
+                      value={authForm.password}
+                      onChange={(e) =>
+                        handleAuthInput("password", e.target.value)
+                      }
+                      placeholder="Не менее 4 символов"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowPassword((v) => !v)}
+                    >
+                      {showPassword ? "🙈" : "👁"}
+                    </button>
+                  </div>
+                </label>
+              </>
+            ) : (
+              <>
+                <label>
+                  Ваш логин
+                  <input
+                    type="text"
+                    value={authForm.login}
+                    onChange={(e) =>
+                      handleAuthInput("login", e.target.value)
+                    }
+                    placeholder="Ваш логин"
+                  />
+                </label>
+
+                <label>
+                  Email
+                  <input
+                    type="email"
+                    value={authForm.email}
+                    onChange={(e) =>
+                      handleAuthInput("email", e.target.value)
+                    }
+                    placeholder="name@example.com"
+                  />
+                </label>
+
+                <label>
+                  Пароль
+                  <div className="password-field">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      className="password-input"
+                      value={authForm.password}
+                      onChange={(e) =>
+                        handleAuthInput("password", e.target.value)
+                      }
+                      placeholder="Не менее 4 символов"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowPassword((v) => !v)}
+                    >
+                      {showPassword ? "🙈" : "👁"}
+                    </button>
+                  </div>
+                </label>
+
+                <label>
+                  Повторите пароль
+                  <div className="password-field">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      className="password-input"
+                      value={authForm.confirmPassword}
+                      onChange={(e) =>
+                        handleAuthInput("confirmPassword", e.target.value)
+                      }
+                      placeholder="Введите пароль ещё раз"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() =>
+                        setShowConfirmPassword((v) => !v)
+                      }
+                    >
+                      {showConfirmPassword ? "🙈" : "👁"}
+                    </button>
+                  </div>
+                </label>
+
+                <label>
+                  Промокод <span style={{ color: "#6b7280" }}>(необязательно)</span>
+                  <input
+                    type="text"
+                    value={authForm.promo}
+                    onChange={(e) =>
+                      handleAuthInput("promo", e.target.value)
+                    }
+                    placeholder="Введите промокод (если есть)"
+                  />
+                </label>
+              </>
+            )}
+
+            <div
+              className="auth-remember"
+              onClick={() =>
+                handleAuthInput("remember", !authForm.remember)
+              }
+            >
+              <div
+                className={
+                  "remember-toggle " + (authForm.remember ? "on" : "")
+                }
+              >
+                <div className="remember-thumb" />
+              </div>
+              <span>Запомнить меня</span>
+            </div>
+
+            {authError && (
+              <div className="auth-error">{authError}</div>
+            )}
 
             <button
               className="auth-submit"
-              onClick={completeRegistration}
+              onClick={
+                authMode === "register" ? handleRegister : handleLogin
+              }
             >
-              Продолжить
+              {authMode === "register"
+                ? "Зарегистрироваться"
+                : "Войти"}
             </button>
 
+            {authMode === "register" ? (
+              <>
+                <div className="auth-note">
+                  Нажимая «Зарегистрироваться», вы соглашаетесь с правилами
+                  обработки персональных данных.
+                </div>
+                <div className="auth-note">
+                  Уже есть аккаунт?{" "}
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setAuthMode("login")}
+                  >
+                    Войти
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="auth-note">
+                Нет аккаунта?{" "}
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => setAuthMode("register")}
+                >
+                  Зарегистрироваться
+                </button>
+              </div>
+            )}
+
             <div className="auth-note">
-              Выбор языка и валюты можно потом поменять в профиле.
+              Данные аккаунта хранятся в защищённой базе Supabase. Часть
+              истории и настроек сохраняется локально в вашем браузере.
             </div>
           </div>
-        ) : (
-          <>
-            <div className="auth-tabs">
-              <button
-                className={
-                  "auth-tab " +
-                  (authMode === "register" ? "active" : "")
-                }
-                onClick={() => {
-                  setAuthMode("register");
-                  setAuthError("");
-                }}
-              >
-                Регистрация
-              </button>
-              <button
-                className={
-                  "auth-tab " + (authMode === "login" ? "active" : "")
-                }
-                onClick={() => {
-                  setAuthMode("login");
-                  setAuthError("");
-                }}
-              >
-                Вход
-              </button>
-            </div>
-
-<div className="auth-form">
-  {authMode === "register" ? (
-    <>
-      <label>
-        Логин / никнейм
-        <input
-          type="text"
-          value={authForm.login}
-          onChange={(e) =>
-            handleAuthInput("login", e.target.value)
-          }
-          placeholder="Например, fox_trader"
-        />
-      </label>
-
-      <label>
-        Email
-        <input
-          type="email"
-          value={authForm.email}
-          onChange={(e) =>
-            handleAuthInput("email", e.target.value)
-          }
-          placeholder="name@example.com"
-        />
-      </label>
-    </>
-  ) : (
-    <>
-      <label>
-        Логин или email
-        <input
-          type="text"
-          value={authForm.login}
-          onChange={(e) =>
-            handleAuthInput("login", e.target.value)
-          }
-          placeholder="Введите логин или email"
-        />
-      </label>
-    </>
-  )}
-
-  <label>
-    Пароль
-    <input
-      type="password"
-      value={authForm.password}
-      onChange={(e) =>
-        handleAuthInput("password", e.target.value)
-      }
-      placeholder="Не менее 4 символов"
-    />
-  </label>
-
-  <div
-    className="auth-remember"
-    onClick={() =>
-      handleAuthInput("remember", !authForm.remember)
-    }
-  >
-    <div
-      className={
-        "remember-toggle " +
-        (authForm.remember ? "on" : "")
-      }
-    >
-      <div className="remember-thumb" />
+        </>
+      )}
     </div>
-    <span>Запомнить меня</span>
   </div>
+);
 
-  {authError && (
-    <div className="auth-error">{authError}</div>
-  )}
-
-  <button
-    className="auth-submit"
-    onClick={
-      authMode === "register"
-        ? handleRegister
-        : handleLogin
-    }
-  >
-    {authMode === "register"
-      ? "Зарегистрироваться"
-      : "Войти"}
-  </button>
-</div>
-            <div className="auth-note">
-              Данные аккаунта хранятся в защищённой базе Supabase.
-              Часть истории и настроек сохраняется локально в вашем браузере.
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-
-  // ===== Основной JSX =====
+// ===== Основной JSX =====
 
 if (booting) {
-    return <Shell><Loader /></Shell>;
-  }
+  return (
+    <Shell>
+      <Loader />
+    </Shell>
+  );
+}
 
-  // 1. ПОКАЗЫВАЕМ ЛЕНДИНГ
-  if (!user && showLanding) {
-    return (
-      <LandingPage 
-        onLogin={() => {
-          setShowLanding(false); 
-          setAuthMode("login");
-        }}
-        onRegister={() => {
-          setShowLanding(false); 
-          setAuthMode("register");
-        }}
-      />
-    );
-  }
+// 1. ПОКАЗЫВАЕМ ЛЕНДИНГ
+if (!user && showLanding) {
+  return (
+    <LandingPage
+      onLogin={() =>
+        showOverlay(
+          "FORBEX TRADE",
+          "Открываем личный кабинет…",
+          () => {
+            setShowLanding(false);
+            setAuthMode("login");
+          },
+          800
+        )
+      }
+      onRegister={() =>
+        showOverlay(
+          "FORBEX TRADE",
+          "Готовим регистрацию…",
+          () => {
+            setShowLanding(false);
+            setAuthMode("register");
+          },
+          800
+        )
+      }
+    />
+  );
+}
+
 if (!user) {
-    return (
-      <Shell>
-        {overlayLoading && (
-          <div className="boot-loader">
-             {/* ... (код лоадера тот же) ... */}
-            <div className="fox-orbit">
-               <div className="fox-core">🦊</div>
-               <div className="orbit-ring orbit-ring-1" />
-               <div className="orbit-ring orbit-ring-2" />
-               <div className="orbit-dot orbit-dot-1" />
-               <div className="orbit-dot orbit-dot-2" />
-            </div>
-            <div className="boot-title">{overlayText.title || "FORBEX TRADE"}</div>
-            <div className="boot-sub">{overlayText.subtitle || "Please wait..."}</div>
+  return (
+    <Shell>
+      {overlayLoading && (
+        <div className="boot-loader">
+          <div className="fox-orbit">
+            <div className="fox-core">🦊</div>
+            <div className="orbit-ring orbit-ring-1" />
+            <div className="orbit-ring orbit-ring-2" />
+            <div className="orbit-dot orbit-dot-1" />
+            <div className="orbit-dot orbit-dot-2" />
           </div>
-        )}
-        
-        {/* Кнопка НАЗАД на лендинг */}
-        <button 
-            onClick={() => setShowLanding(true)}
-            style={{
-                position: 'absolute', top: 16, left: 16, zIndex: 50, 
-                background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'
-            }}
-        >
-            ✕
-        </button>
+          <div className="boot-title">{overlayText.title || "FORBEX TRADE"}</div>
+          <div className="boot-sub">
+            {overlayText.subtitle || "Please wait."}
+          </div>
+        </div>
+      )}
 
-        {renderAuth()}
-      </Shell>
-    );
-  }
+      {/* Кнопка НАЗАД на лендинг */}
+      <button
+        onClick={() =>
+          showOverlay(
+            "FORBEX TRADE",
+            "Возвращаем на лендинг…",
+            () => setShowLanding(true),
+            600
+          )
+        }
+        style={{
+          position: "absolute",
+          top: 16,
+          left: 16,
+          zIndex: 50,
+          background: "none",
+          border: "none",
+          color: "#fff",
+          fontSize: "24px",
+          cursor: "pointer",
+        }}
+      >
+        ✕
+      </button>
+
+      {renderAuth()}
+    </Shell>
+  );
+}
 return (
   <Shell>
     {overlayLoading && (
