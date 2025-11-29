@@ -4635,33 +4635,43 @@ if (booting) {
   );
 }
 
-// 1. ПОКАЗЫВАЕМ ЛЕНДИНГ
 if (!user && showLanding) {
   return (
-    <LandingPage
-      onLogin={() =>
-        showOverlay(
-          "FORBEX TRADE",
-          "Открываем личный кабинет…",
-          () => {
-            setShowLanding(false);
-            setAuthMode("login");
-          },
-          800
-        )
-      }
-      onRegister={() =>
-        showOverlay(
-          "FORBEX TRADE",
-          "Готовим регистрацию…",
-          () => {
-            setShowLanding(false);
-            setAuthMode("register");
-          },
-          800
-        )
-      }
-    />
+    <>
+      {/* Оверлей поверх лендинга */}
+      {overlayLoading && (
+        <Loader
+          title={overlayText.title}
+          subtitle={overlayText.subtitle}
+        />
+      )}
+
+      <LandingPage
+        onLogin={() =>
+          showOverlay(
+            "FORBEX TRADE",
+            isEN ? "Opening your personal area..." : "Открываем личный кабинет…",
+            () => {
+              // сначала прячем лендинг, переключаем режим
+              setShowLanding(false);
+              setAuthMode("login");
+            },
+            900 // можно чуть дольше для ощущения «анимации»
+          )
+        }
+        onRegister={() =>
+          showOverlay(
+            "FORBEX TRADE",
+            isEN ? "Creating account..." : "Создаём аккаунт трейдера…",
+            () => {
+              setShowLanding(false);
+              setAuthMode("register");
+            },
+            900
+          )
+        }
+      />
+    </>
   );
 }
 

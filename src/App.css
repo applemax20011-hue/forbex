@@ -2385,3 +2385,93 @@ body {
 .nav-tab-animate {
   animation: navBounce 0.28s ease-out;
 }
+
+/* ==== ЛЕНДИНГ: кастомные анимации в стиле index.html ==== */
+
+/* Градиентный брендовый текст типа SELLBIT / FORBEX */
+.gradient-brand {
+  background: linear-gradient(90deg, #f97316, #fb923c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Базовый фон бренда, если используешь bg-brand-bg */
+.bg-brand-bg {
+  background-color: #030304;
+}
+
+/* Карточки на лендинге (bg-brand-card) */
+.bg-brand-card {
+  background-color: rgba(10, 10, 12, 0.95);
+}
+
+/* Акцентный текст/бордер оранжевого цвета */
+.text-brand-accent {
+  color: #f97316;
+}
+.border-brand-accent {
+  border-color: #f97316;
+}
+
+/* Лёгкое «стекло» как в index.html .glass */
+.glass {
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* Шумовый фон (bg-noise), если хочешь так же, как в html */
+.bg-noise {
+  position: fixed;
+  inset: 0;
+  background: url('https://grainy-gradients.vercel.app/noise.svg');
+  opacity: 0.05;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* ====== Анимация бегущей строки (тикер) ====== */
+@keyframes marquee {
+  0%   { transform: translateX(0%); }
+  100% { transform: translateX(-100%); }
+}
+
+.animate-marquee {
+  animation: marquee 25s linear infinite;
+}
+
+/* ====== Лёгкая пульсация (для точек / бейджей) ====== */
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 16px rgba(249, 115, 22, 0.7);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.4);
+  }
+}
+
+/* Можно вешать на любые элементы, которые должны мягко «дышать» */
+.pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* ====== Плавное выезжание блоков вверх (если хочешь отдельно от .fade-in) ====== */
+@keyframes fadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.8s ease-out forwards;
+}
