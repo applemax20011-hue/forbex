@@ -65,6 +65,12 @@ const STORAGE_KEYS = {
   stats: "forbex_stats",            // для активных юзеров и сделок
 };
 
+const REMEMBER_KEYS = {
+  flag: "forbex_remember",
+  login: "forbex_remember_login",
+  email: "forbex_remember_email",
+};
+
 // Курс для отображения баланса. Поставь свой.
 const USD_RATE = 100; // 1 USD = 100 RUB
 // где-то сверху файла, рядом с константами
@@ -663,6 +669,19 @@ useEffect(() => {
 
 useEffect(() => {
   const bootTimer = setTimeout(() => setBooting(false), 1300);
+  try {
+  const remember = localStorage.getItem(REMEMBER_KEYS.flag) === "true";
+  if (remember) {
+    const rememberedLogin = localStorage.getItem(REMEMBER_KEYS.login) || "";
+    const rememberedEmail = localStorage.getItem(REMEMBER_KEYS.email) || "";
+    setAuthForm((prev) => ({
+      ...prev,
+      remember: true,
+      login: rememberedLogin || prev.login,
+      email: rememberedEmail || prev.email,
+    }));
+  }
+} catch {}
   return () => clearTimeout(bootTimer);
 }, []);
   
@@ -1340,6 +1359,17 @@ const handleRegister = async () => {
       email: inserted?.email ?? trimmedEmail,
       createdAt: createdAtTs,
     };
+	
+	
+if (authForm.remember) {
+  localStorage.setItem(REMEMBER_KEYS.flag, "true");
+  localStorage.setItem(REMEMBER_KEYS.login, (authForm.login || "").trim());
+  localStorage.setItem(REMEMBER_KEYS.email, (authForm.email || "").trim().toLowerCase());
+} else {
+  localStorage.removeItem(REMEMBER_KEYS.flag);
+  localStorage.removeItem(REMEMBER_KEYS.login);
+  localStorage.removeItem(REMEMBER_KEYS.email);
+}
 
     // шаг выбора языка/валюты — оставляем твою логику
     setPendingUser(newUser);
@@ -1425,8 +1455,15 @@ const completeRegistration = () => {
 };
 
 const handleLogin = async () => {
-  const { login, email, password } = authForm;
+  const { login, email, password, remember } = authForm;
   const loginOrEmail = (login || email || "").trim();
+
+  // локальные ключи для remember-me (не храним пароль!)
+  const REMEMBER_KEYS = {
+    flag: "forbex_remember",
+    login: "forbex_remember_login",
+    email: "forbex_remember_email",
+  };
 
   if (!loginOrEmail || !password.trim()) {
     setAuthError("Введите логин/email и пароль.");
@@ -1548,6 +1585,21 @@ const handleLogin = async () => {
       });
     } catch (e) {
       console.error("supabase login_history login error:", e);
+    }
+
+    // remember-me (сохраняем ТОЛЬКО логин/email по галочке)
+    try {
+      if (remember) {
+        localStorage.setItem(REMEMBER_KEYS.flag, "true");
+        localStorage.setItem(REMEMBER_KEYS.login, (row.login || "").trim());
+        localStorage.setItem(REMEMBER_KEYS.email, (row.email || "").trim().toLowerCase());
+      } else {
+        localStorage.removeItem(REMEMBER_KEYS.flag);
+        localStorage.removeItem(REMEMBER_KEYS.login);
+        localStorage.removeItem(REMEMBER_KEYS.email);
+      }
+    } catch (e) {
+      console.warn("remember-me localStorage error:", e);
     }
 
     // чистим пароли в форме
