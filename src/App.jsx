@@ -68,7 +68,7 @@ const STORAGE_KEYS = {
 // Курс для отображения баланса. Поставь свой.
 const USD_RATE = 100; // 1 USD = 100 RUB
 // где-то сверху файла, рядом с константами
-const MIN_LOGIN_OVERLAY_MS = 1200; // 1.2 секунды, можешь поставить 2000
+const MIN_LOGIN_OVERLAY_MS = 1000; // 1.2 секунды, можешь поставить 2000
 
 // ===== Supabase (frontend) =====
 const supabase = createClient(
