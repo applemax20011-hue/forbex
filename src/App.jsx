@@ -275,7 +275,7 @@ function Loader({ title, subtitle }) {
       </div>
       <div className="boot-title">{title || "FORBEX TRADE"}</div>
       <div className="boot-sub">
-        {subtitle || "загрузка торгового терминала…"}
+        {subtitle || "Загрузка торгового терминала…"}
       </div>
     </div>
   );
@@ -1327,7 +1327,7 @@ const completeRegistration = () => {
 
   showOverlay(
     "FORBEX TRADE",
-    "загрузка торгового терминала…",
+    "Загрузка торгового терминала…",
     () => {
       // применяем настройки локально
       setSettings(finalSettings);
@@ -1397,8 +1397,6 @@ localStorage.setItem(
   );
 };
 
-// ЛОГИН ЧЕРЕЗ SUPABASE
-// ЛОГИН ЧЕРЕЗ SUPABASE
 const handleLogin = async () => {
   const { login, email, password, remember } = authForm;
   const loginOrEmail = (login || email || "").trim();
@@ -1407,6 +1405,18 @@ const handleLogin = async () => {
     setAuthError("Введите логин/email и пароль.");
     return;
   }
+
+  // для контроля минимальной длительности лоадера
+  const startedAt = Date.now();
+
+  const finishWithDelay = (cb?: () => void) => {
+    const elapsed = Date.now() - startedAt;
+    const rest = Math.max(0, MIN_LOGIN_OVERLAY_MS - elapsed);
+    setTimeout(() => {
+      setOverlayLoading(false); // прячем анимацию
+      cb && cb();               // потом уже показываем ошибку / что угодно
+    }, rest);
+  };
 
   setAuthError("");
   setOverlayText({
@@ -1427,13 +1437,17 @@ const handleLogin = async () => {
 
     if (error) {
       console.error("handleLogin select error:", error);
-      setAuthError("Ошибка при обращении к серверу. Попробуйте ещё раз.");
+      finishWithDelay(() =>
+        setAuthError("Ошибка при обращении к серверу. Попробуйте ещё раз.")
+      );
       return;
     }
 
     const row = rows?.[0];
     if (!row) {
-      setAuthError("Аккаунт с таким логином или email не найден.");
+      finishWithDelay(() =>
+        setAuthError("Аккаунт с таким логином или email не найден.")
+      );
       return;
     }
 
@@ -1446,7 +1460,8 @@ const handleLogin = async () => {
       .join("");
 
     if (row.password_hash !== passwordHash) {
-      setAuthError("Неверный пароль.");
+      // ❗ Лоадер крутится минимум MIN_LOGIN_OVERLAY_MS, потом Неверный пароль
+      finishWithDelay(() => setAuthError("Неверный пароль."));
       return;
     }
 
@@ -1468,7 +1483,7 @@ const handleLogin = async () => {
         .from("user_settings")
         .select("language, currency")
         .eq("user_id", row.id)
-        .maybeSingle(); // если нет строки — вернётся null
+        .maybeSingle();
 
       if (!sErr && sRow) {
         loadedSettings = {
@@ -1485,24 +1500,25 @@ const handleLogin = async () => {
       currency: loadedSettings?.currency || "RUB",
     };
 
+    // обновляем стейты (они могут обновиться пока крутится лоадер — это ок)
     setUser(userWithCreatedAt);
     setSettings((prev) => ({ ...prev, ...finalSettings }));
 
     // localStorage
     try {
-localStorage.setItem(
-  STORAGE_KEYS.user,
-  JSON.stringify(userWithCreatedAt)
-);
-localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-localStorage.setItem(
-  STORAGE_KEYS.registrationTs,
-  String(createdAtTs)
-);
-localStorage.setItem(
-  STORAGE_KEYS.settings,
-  JSON.stringify(finalSettings)
-);
+      localStorage.setItem(
+        STORAGE_KEYS.user,
+        JSON.stringify(userWithCreatedAt)
+      );
+      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+      localStorage.setItem(
+        STORAGE_KEYS.registrationTs,
+        String(createdAtTs)
+      );
+      localStorage.setItem(
+        STORAGE_KEYS.settings,
+        JSON.stringify(finalSettings)
+      );
     } catch (e) {
       console.warn("localStorage error (login):", e);
     }
@@ -1519,25 +1535,28 @@ localStorage.setItem(
     };
     setLoginHistory((prev) => [entry, ...prev]);
 
-    // лог в Supabase
+    // лог в Supabase (асинхронно, не влияет на лоадер)
     try {
       const nowIso = new Date().toISOString();
       await supabase.from("login_history").insert({
         user_id: row.id,
-        event_type: "login",   // если колонка называется type – поменяй
+        event_type: "login",
         login: row.login,
         email: row.email,
-        ts: nowIso,            // если колонка created_at – поменяй
+        ts: nowIso,
         device: navigator.userAgent || "",
       });
     } catch (e) {
       console.error("supabase login_history login error:", e);
     }
+
+    // ✅ Успешный кейс: просто скрываем лоадер с задержкой
+    finishWithDelay();
   } catch (e) {
     console.error("handleLogin error:", e);
-    setAuthError("Неожиданная ошибка. Попробуйте ещё раз.");
-  } finally {
-    setOverlayLoading(false);
+    finishWithDelay(() =>
+      setAuthError("Неожиданная ошибка. Попробуйте ещё раз.")
+    );
   }
 };
 
