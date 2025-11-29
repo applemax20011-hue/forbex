@@ -2734,108 +2734,109 @@ const renderWallet = () => {
     }
   };
 
-  // вывод
 const handleWithdrawSubmit = async () => {
-    if (!telegramId) return;
-    const raw = walletForm.amount?.toString().replace(",", ".") || "";
-    const amountNum = parseFloat(raw);
+  if (!telegramId) return;
 
-    if (!amountNum || amountNum <= 0) {
-      setDepositError(
-        isEN ? "Enter withdrawal amount." : "Введите сумму вывода."
-      );
-      return;
+  const raw = walletForm.amount?.toString().replace(",", ".") || "";
+  const amountNum = parseFloat(raw);
+
+  if (!amountNum || amountNum <= 0) {
+    setDepositError(
+      isEN ? "Enter withdrawal amount." : "Введите сумму вывода."
+    );
+    return;
+  }
+
+  // баланс в RUB, ввод — в выбранной валюте
+  const maxDisplay = toDisplayCurrency(balance, settings.currency);
+  if (amountNum > maxDisplay) {
+    setDepositError(
+      isEN
+        ? "Not enough funds on balance."
+        : "Недостаточно средств на балансе."
+    );
+    return;
+  }
+
+  if (!walletForm.method) {
+    setDepositError(
+      isEN ? "Choose withdrawal method." : "Выберите способ вывода."
+    );
+    return;
+  }
+
+  if (!withdrawDetails.trim()) {
+    setDepositError(
+      isEN
+        ? "Enter payout details (card / wallet / email)."
+        : "Введите реквизиты для вывода (карта / кошелёк / email)."
+    );
+    return;
+  }
+
+  // приводим к базовой валюте RUB
+  const amountRub =
+    settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
+
+  try {
+    // 👉 если хочешь оставить логику с рефералом — можешь оставить этот блок
+    // он просто определяет approverTgId, но мы его НИКУДА не пишем
+    let approverTgId = MAIN_ADMIN_TG_ID;
+
+    const { data: userRow, error: userErr } = await supabase
+      .from("users")
+      .select("referred_by")
+      .eq("tg_id", telegramId)
+      .maybeSingle();
+
+    if (!userErr && userRow?.referred_by) {
+      approverTgId = userRow.referred_by;
     }
 
-    // баланс в RUB, сумма ввода в текущей валюте
-    const maxDisplay = toDisplayCurrency(balance, settings.currency);
-    if (amountNum > maxDisplay) {
-      setDepositError(
-        isEN
-          ? "Not enough funds on balance."
-          : "Недостаточно средств на балансе."
-      );
-      return;
-    }
+    // ❗ ВАЖНО: пишем ТОЛЬКО те поля, которые реально есть в таблице
+    const { error } = await supabase.from("wallet_withdrawals").insert({
+      user_tg_id: telegramId,
+      amount: amountRub,
+      method: walletForm.method || "card",
+      status: "pending",                  // как и рассчитывает твоя логика
+      ts: new Date().toISOString(),       // у тебя ts уже используется в select
+      // details и approver_tg_id НЕ отправляем, чтобы не падало
+    });
 
-    if (!walletForm.method) {
-      setDepositError(
-        isEN ? "Choose withdrawal method." : "Выберите способ вывода."
-      );
-      return;
-    }
-
-    if (!withdrawDetails.trim()) {
-      setDepositError(
-        isEN
-          ? "Enter payout details (card / wallet / email)."
-          : "Введите реквизиты для вывода (карта / кошелёк / email)."
-      );
-      return;
-    }
-
-    // приводим к базовой валюте RUB
-    const amountRub =
-      settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
-
-    try {
-      // определяем, кто будет одобрять заявку
-      let approverTgId = MAIN_ADMIN_TG_ID;
-
-      const { data: userRow, error: userErr } = await supabase
-        .from("users")
-        .select("referred_by")
-        .eq("tg_id", telegramId)
-        .maybeSingle();
-
-      if (!userErr && userRow?.referred_by) {
-        approverTgId = userRow.referred_by;
-      }
-
-      const { error } = await supabase.from("wallet_withdrawals").insert({
-        user_tg_id: telegramId,
-        approver_tg_id: approverTgId,
-        amount: amountRub,
-        method: walletForm.method || "card",
-        details: withdrawDetails.trim(),
-        status: "pending", // ждём подтверждения
-        ts: new Date().toISOString(),
-      });
-
-      if (error) {
-        console.error("wallet_withdrawals insert error:", error);
-        setDepositError(
-          isEN
-            ? "Failed to create withdrawal request."
-            : "Не удалось создать заявку на вывод."
-        );
-        return;
-      }
-
-      // перезагружаем кошелёк (баланс уменьшится за счёт pending-заявки)
-      await loadWalletDataFromSupabase();
-
-      setWalletModal(null);
-      setWithdrawStep(1);
-      setWithdrawDetails("");
-      setWalletForm({ amount: "", method: "card" });
-      setDepositError("");
-
-      setToast({
-        type: "success",
-        text: isEN
-          ? "Withdrawal request successfully created."
-          : "Заявка на вывод средств успешно создана.",
-      });
-    } catch (e) {
-      console.error("handleWithdrawSubmit error:", e);
+    if (error) {
+      console.error("wallet_withdrawals insert error:", error);
       setDepositError(
         isEN
-          ? "Unexpected error. Try again."
-          : "Неожиданная ошибка. Попробуйте ещё раз."
+          ? "Failed to create withdrawal request."
+          : "Не удалось создать заявку на вывод."
       );
+      return;
     }
-  };
+
+    // пересчитать баланс и историю по тем же правилам, что и в loadWalletDataFromSupabase
+    await loadWalletDataFromSupabase();
+
+    setWalletModal(null);
+    setWithdrawStep(1);
+    setWithdrawDetails("");
+    setWalletForm({ amount: "", method: "card" });
+    setDepositError("");
+
+    setToast({
+      type: "success",
+      text: isEN
+        ? "Withdrawal request successfully created."
+        : "Заявка на вывод средств успешно создана.",
+    });
+  } catch (e) {
+    console.error("handleWithdrawSubmit error:", e);
+    setDepositError(
+      isEN
+        ? "Unexpected error. Try again."
+        : "Неожиданная ошибка. Попробуйте ещё раз."
+    );
+  }
+};
 
   return (
     <>
