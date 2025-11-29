@@ -102,11 +102,10 @@ function FoxBackground() {
   );
 }
 
-function Shell({ children, theme = "fox" }) {
+function Shell({ children, theme = "fox", uiFx = null }) {
   const isFox = theme === "fox";
-
   return (
-    <div className={`page-root theme-${theme}`}>
+    <div className={`page-root theme-${theme} ${uiFx ? "ui-swap" : ""}`}>
       {isFox && <FoxBackground />}
       <div className="app-container">{children}</div>
     </div>
@@ -293,14 +292,22 @@ function App() {
 const contentRef = useRef(null);
 
 const scrollToTop = () => {
-  // скроллим само окно
-  window.scrollTo({ top: 0, behavior: "auto" });
-
-  // и внутренний контейнер, если он скроллится
-  if (contentRef.current) {
-    contentRef.current.scrollTo({ top: 0, behavior: "auto" });
-  }
+  const doScroll = () => {
+    try {
+      window.scrollTo(0, 0);
+      // Фолбэки для webview/телеграм/мобильных браузеров:
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+    } catch {}
+  };
+  // Скроллим несколько раз, чтобы поймать рефлоу/перерисовку
+  requestAnimationFrame(() => {
+    doScroll();
+    setTimeout(doScroll, 0);
+    setTimeout(doScroll, 100);
+  });
 };
+
   const [showLanding, setShowLanding] = useState(!localStorage.getItem("forbex_user"));
   const [authMode, setAuthMode] = useState("register"); // "login" | "register"
   const [authForm, setAuthForm] = useState({
@@ -313,7 +320,15 @@ const scrollToTop = () => {
 });
 
   const [navClickId, setNavClickId] = useState(null);
+const [uiFx, setUiFx] = useState(null); // 'lang' | 'currency' | 'theme' | null
 
+const applyWithFx = (patch, kind) => {
+  setUiFx(kind);
+  // применяем настройку сразу
+  updateSettings(patch);
+  // убираем эффект через 1 секунду
+  setTimeout(() => setUiFx(null), 1000);
+};
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -504,6 +519,9 @@ useEffect(() => {
   scrollToTop();
 }, [activeTab]);
 
+useEffect(() => {
+  if (showLanding) scrollToTop();
+}, [showLanding]);
 
 const handleTabClick = (id) => {
   setActiveTab(id);
@@ -1679,14 +1697,16 @@ const handleLogout = async () => {
   setTradeHistory([]);
   setBalance(0);
   
-  // Можно вернуть на лендинг, если хотите
-  setShowLanding(true); 
+setShowLanding(true);
 
-  // <<< ДОБАВЬ ЭТО
+// важный момент: сначала пусть смонтируется лендос, потом крутим вверх
+setTimeout(() => {
   scrollToTop();
-};
-  // смена пароля
-  const handlePasswordInput = (field, value) => {
+}, 0);
+}; // <— ЭТО ЗАКРЫВАЕТ handleLogout
+
+// смена пароля
+const handlePasswordInput = (field, value) => {
     setPasswordForm((prev) => ({ ...prev, [field]: value }));
     setPasswordError("");
     setPasswordSuccess("");
@@ -4236,24 +4256,23 @@ const renderProfile = () => {
               {isEN ? "Language" : "Язык интерфейса"}
             </div>
             <div className="settings-chips">
-              <button
-                className={
-                  "settings-chip " +
-                  (settings.language === "ru" ? "active" : "")
-                }
-                onClick={() => updateSettings({ language: "ru" })}
-              >
-                RU
-              </button>
-              <button
-                className={
-                  "settings-chip " +
-                  (settings.language === "en" ? "active" : "")
-                }
-                onClick={() => updateSettings({ language: "en" })}
-              >
-                EN
-              </button>
+<button
+  className={"settings-chip " + (settings.language === "ru" ? "active" : "")}
+  onClick={() => applyWithFx({ language: "ru" }, "lang")}
+  aria-label="Russian"
+>
+  <span className="flag" aria-hidden>🇷🇺</span>
+  <span className="chip-label">RU</span>
+</button>
+
+<button
+  className={"settings-chip " + (settings.language === "en" ? "active" : "")}
+  onClick={() => applyWithFx({ language: "en" }, "lang")}
+  aria-label="English"
+>
+  <span className="flag" aria-hidden>🇺🇸</span>
+  <span className="chip-label">EN</span>
+</button>
             </div>
           </div>
 
@@ -4268,7 +4287,7 @@ const renderProfile = () => {
                   "settings-chip " +
                   (settings.currency === "RUB" ? "active" : "")
                 }
-                onClick={() => updateSettings({ currency: "RUB" })}
+                onClick={() => applyWithFx({ currency: "RUB" }, "currency")}
               >
                 RUB
               </button>
@@ -4277,7 +4296,7 @@ const renderProfile = () => {
                   "settings-chip " +
                   (settings.currency === "USD" ? "active" : "")
                 }
-                onClick={() => updateSettings({ currency: "USD" })}
+                onClick={() => applyWithFx({ currency: "USD" }, "currency")}
               >
                 USD
               </button>
@@ -4294,7 +4313,7 @@ const renderProfile = () => {
                 className={
                   "settings-chip " + (settings.theme === "fox" ? "active" : "")
                 }
-                onClick={() => updateSettings({ theme: "fox" })}
+                onClick={() => applyWithFx({ theme: "fox" }, "theme")}
               >
                 🦊 Fox
               </button>
@@ -4302,7 +4321,7 @@ const renderProfile = () => {
                 className={
                   "settings-chip " + (settings.theme === "night" ? "active" : "")
                 }
-                onClick={() => updateSettings({ theme: "night" })}
+                onClick={() => applyWithFx({ theme: "night" }, "theme")}
               >
                 🌙 Night
               </button>
@@ -4310,7 +4329,7 @@ const renderProfile = () => {
                 className={
                   "settings-chip " + (settings.theme === "day" ? "active" : "")
                 }
-                onClick={() => updateSettings({ theme: "day" })}
+                onClick={() => applyWithFx({ theme: "day" }, "theme")}
               >
                 ☀ Day
               </button>
@@ -4858,10 +4877,10 @@ const renderAuth = () => {
 // ===== Основной JSX =====
 
 if (booting) {
-  return (
-    <Shell theme={settings.theme || "fox"}>
-      <Loader />
-    </Shell>
+return (
+  <Shell theme={settings.theme || "fox"} uiFx={uiFx}>
+    <Loader />
+  </Shell>
   );
 }
 
@@ -5029,7 +5048,7 @@ if (!user && showLanding) {
 
 if (!user) {
   return (
-    <Shell theme={settings.theme || "fox"}>
+    <Shell theme={settings.theme || "fox"} uiFx={uiFx}>
       {overlayLoading && (
         <div className="boot-loader">
           <div className="fox-orbit">
@@ -5197,7 +5216,7 @@ if (!user) {
   );
 }
 return (
-  <Shell theme={settings.theme || "fox"}>
+  <Shell theme={settings.theme || "fox"} uiFx={uiFx}>
     {overlayLoading && (
       <div className="boot-loader">
         {/* сюда можешь вставить свой fox-loader, как в других местах */}
@@ -5219,7 +5238,7 @@ return (
       </div>
     </header>
 
-<main className="content" ref={contentRef}>  {/* <--- ДОБАВЬ ref={contentRef} СЮДА */}
+<main className="content">
   <div key={activeTab} className="tab-content">
     {activeTab === 1 && renderHome()}
     {activeTab === 2 && renderTrade()}

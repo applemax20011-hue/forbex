@@ -80,8 +80,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow-y: auto;   /* <-- скролл внутри .content, а НЕ у window */
+  /* УБИРАЕМ это: */
+  /* overflow-y: auto; */
 }
+
 
 
 /* Лисья (по умолчанию) */
@@ -158,13 +160,13 @@ body {
 
 .content {
   flex: 1;
-  padding: 14px 16px 140px; /* <- было 82px, сделали побольше */
+  padding: 14px 16px 140px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow-y: auto;
+  /* УБИРАЕМ это: */
+  /* overflow-y: auto; */
 }
-
 
 
 .content > * {
@@ -1972,12 +1974,14 @@ body {
 
 .content {
   flex: 1;
-  padding: 14px 16px 140px; /* <- было 82px, сделали побольше */
+  padding: 14px 16px 140px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow-y: auto;
+  /* УБИРАЕМ это: */
+  /* overflow-y: auto; */
 }
+
 
 
 .section-block {
@@ -2864,20 +2868,40 @@ html,
 body {
   margin: 0;
   padding: 0;
-  height: 100%;
+  min-height: 100%;
   max-width: 100%;
-  min-width: 0 !important;
-
-  /* УБИРАЕМ ЭТО */
-  /* overflow: hidden; */
-
-  /* если хочешь, можно явно указать */
+  /* ВАЖНО: никакого overflow: hidden тут */
+  overflow-x: hidden;
   overflow-y: auto;
 
-  display: block !important;
-  place-items: initial !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-weight: 600;
   background-color: #020617;
   color: #e5e7eb;
+}
+
+.settings-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-chip .flag {
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+.settings-chip .chip-label {
+  letter-spacing: 0.02em;
+}
+
+/* Глобальный эффект при смене языка/валюты/темы */
+.page-root.ui-swap .app-container {
+  animation: uiSwapFade 1s ease;
+}
+
+@keyframes uiSwapFade {
+  0%   { opacity: 0.0; transform: translateY(6px); filter: blur(2px); }
+  40%  { opacity: 0.6; transform: translateY(3px); filter: blur(1px); }
+  100% { opacity: 1;   transform: translateY(0);   filter: blur(0); }
 }
