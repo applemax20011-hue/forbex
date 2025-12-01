@@ -113,11 +113,47 @@ function Shell({ children, theme = "fox" }) {
     </div>
   );
 }
+// Компонент для плавной анимации чисел
+function AnimatedNumber({ value, currency, rate = 1 }) {
+  const [displayValue, setDisplayValue] = useState(value);
 
+  useEffect(() => {
+    let start = displayValue;
+    const end = value;
+    if (start === end) return;
+
+    const duration = 1000; // длительность анимации 1 сек
+    const startTime = performance.now();
+
+    const animate = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Функция плавности (easeOutQuart)
+      const ease = 1 - Math.pow(1 - progress, 4);
+      
+      const current = start + (end - start) * ease;
+      setDisplayValue(current);
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }, [value]);
+
+  // Форматируем для отображения
+  const formatted = toDisplayCurrency(displayValue, currency).toLocaleString("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return <span className="tabular-nums">{formatted}</span>;
+}
 function ScenarioLightweightChart({ points, scenario, progress }) {
   const svgRef = useRef(null);
 
-  // считаем, какие точки показывать с учётом progress
   const processed = useMemo(() => {
     if (!Array.isArray(points) || points.length === 0) return null;
 
@@ -132,81 +168,90 @@ function ScenarioLightweightChart({ points, scenario, progress }) {
     const maxV = Math.max(...values);
     const minT = Math.min(...times);
     const maxT = Math.max(...times);
-
-    const vRange = maxV - minV || 1;
+    // Добавляем отступы сверху/снизу, чтобы график не прилипал к краям
+    const padding = (maxV - minV) * 0.1; 
+    const vRange = (maxV - minV) + padding * 2 || 1;
     const tRange = maxT - minT || 1;
 
-    const width = 100;
-    const height = 100;
+    const width = 100; // viewBox width
+    const height = 100; // viewBox height
 
-const path = data
-  .map((p) => {
-    const x = ((p.time - minT) / tRange) * width;
-    const y = height - ((p.value - minV) / vRange) * height;
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
-  })
-  .join(" ");
+    // Генерация линии
+    const linePoints = data.map((p) => {
+      const x = ((p.time - minT) / tRange) * width;
+      // учитываем padding
+      const y = height - ((p.value - (minV - padding)) / vRange) * height;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(" ");
 
-    return { path, width, height };
+    // Генерация заливки (Area)
+    // Начинаем снизу-слева, идем по линии, заканчиваем снизу-справа
+    const firstX = ((data[0].time - minT) / tRange) * width;
+    const lastX = ((data[data.length - 1].time - minT) / tRange) * width;
+    
+    const areaPath = `M ${firstX},${height} ${data.map(p => {
+       const x = ((p.time - minT) / tRange) * width;
+       const y = height - ((p.value - (minV - padding)) / vRange) * height;
+       return `L ${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(" ")} L ${lastX},${height} Z`;
+
+    // Координаты последней точки для кружочка
+    const lastPoint = data[data.length - 1];
+    const dotX = ((lastPoint.time - minT) / tRange) * width;
+    const dotY = height - ((lastPoint.value - (minV - padding)) / vRange) * height;
+
+    return { linePoints, areaPath, dotX, dotY, width, height };
   }, [points, progress]);
 
-  if (!processed) {
-    return (
-      <div
-        className="lw-chart"
-        style={{ width: "100%", height: "260px", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.5 }}
-      >
-        нет данных для графика
-      </div>
-    );
-  }
+  if (!processed) return <div className="lw-chart">loading...</div>;
 
-  const { path, width, height } = processed;
-  const color =
-    scenario && scenario.endsWith("win") ? "#22c55e" : "#f97316";
+  const { linePoints, areaPath, dotX, dotY, width, height } = processed;
+  // Цвет зависит от сценария
+  const isWin = scenario && scenario.endsWith("win");
+  const isLose = scenario && scenario.endsWith("lose");
+  
+  // Базовый цвет (оранжевый), если win - зеленый
+  const mainColor = isWin ? "#22c55e" : (isLose ? "#ef4444" : "#f97316");
 
   return (
-<svg
-  ref={svgRef}
-  viewBox={`0 0 ${width} ${height}`}
-  className="lw-chart-svg"
-  style={{ width: "100%", height: "260px" }}
->
-      {/* фон-сетка (просто декоративная) */}
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${width} ${height}`}
+      className="lw-chart-svg"
+      style={{ width: "100%", height: "260px", overflow: 'visible' }}
+      preserveAspectRatio="none"
+    >
       <defs>
-        <pattern
-          id="grid"
-          x="0"
-          y="0"
-          width="10"
-          height="10"
-          patternUnits="userSpaceOnUse"
-        >
-          <path
-            d="M 10 0 L 0 0 0 10"
-            fill="none"
-            stroke="#111827"
-            strokeWidth="0.3"
-          />
-        </pattern>
+        {/* Градиент заливки */}
+        <linearGradient id={`chartGradient-${scenario}`} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={mainColor} stopOpacity="0.4" />
+          <stop offset="100%" stopColor={mainColor} stopOpacity="0" />
+        </linearGradient>
       </defs>
-      <rect
-        x="0"
-        y="0"
-        width={width}
-        height={height}
-        fill="url(#grid)"
-      />
 
-      {/* линия цены */}
+      {/* Сетка */}
+      {/* ... твой старый код сетки, если нужен ... */}
+
+      {/* Заливка под графиком */}
+      <path d={areaPath} fill={`url(#chartGradient-${scenario})`} stroke="none" />
+
+      {/* Линия цены */}
       <polyline
         fill="none"
-        stroke={color}
+        stroke={mainColor}
         strokeWidth="1.5"
         strokeLinejoin="round"
         strokeLinecap="round"
-        points={path}
+        points={linePoints}
+        vectorEffect="non-scaling-stroke" // Чтобы линия не плющилась при ресайзе
       />
+
+      {/* Пульсирующая точка на конце */}
+      <circle cx={dotX} cy={dotY} r="1.5" fill="#fff" />
+      <circle cx={dotX} cy={dotY} r="4" fill={mainColor} opacity="0.5">
+        <animate attributeName="r" from="2" to="6" dur="1.5s" repeatCount="indefinite" />
+        <animate attributeName="opacity" from="0.8" to="0" dur="1.5s" repeatCount="indefinite" />
+      </circle>
     </svg>
   );
 }
@@ -285,7 +330,21 @@ function Loader({ title, subtitle }) {
     </div>
   );
 }
+// --- Вставь это после импортов, перед function App() ---
+const tg = window.Telegram?.WebApp;
 
+// Утилита для вибрации
+const triggerHaptic = (style = 'light') => {
+  if (tg?.HapticFeedback) {
+    tg.HapticFeedback.impactOccurred(style); // light, medium, heavy, rigid, soft
+  }
+};
+
+const triggerNotification = (type = 'success') => {
+  if (tg?.HapticFeedback) {
+    tg.HapticFeedback.notificationOccurred(type); // success, error, warning
+  }
+};
 // ===== Приложение =====
 
 function App() {
@@ -402,30 +461,31 @@ const [settings, setSettings] = useState({
   const [isTradeProcessing, setIsTradeProcessing] = useState(false);
   const [lastOpenedTrade, setLastOpenedTrade] = useState(null);
   const [tradeToastVisible, setTradeToastVisible] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
   
 // Не забудь добавить импорт в самом верху файла App.jsx:
 // import confetti from 'canvas-confetti';
 
+// Не забудь: import confetti from "canvas-confetti" уже есть выше
 const finishTrade = (trade) => {
   const win = trade.resultDirection === trade.direction; // up / down / flat
-  const profit = win
-    ? trade.amount * (trade.multiplier - 1)
-    : -trade.amount;
+  const profit = win ? trade.amount * (trade.multiplier - 1) : -trade.amount;
 
-  // === ИСПРАВЛЕННЫЙ БЛОК ===
+  // Хаптик + конфетти
   if (win) {
-    // 1. Запускаем салют
+    triggerNotification("success");
     confetti({
       particleCount: 100,
       spread: 70,
       origin: { y: 0.6 },
-      colors: ['#f97316', '#fbbf24', '#ffffff'] // Твои брендовые цвета
-    }); // <--- ВАЖНО: закрыли скобки функции confetti
-
-    // 2. Начисляем баланс
-    setBalance((prev) => prev + trade.amount * trade.multiplier);
+      colors: ["#f97316", "#fbbf24", "#ffffff"],
+    });
+  } else {
+    triggerNotification("error");
   }
-  // ==========================
+
+  // Начисляем обратно ставку + профит (ставка списывалась при старте)
+  setBalance((prev) => prev + trade.amount * trade.multiplier);
 
   const finishedAt = Date.now();
 
@@ -438,7 +498,7 @@ const finishTrade = (trade) => {
 
   setTradeHistory((prev) => [finished, ...prev]);
   setActiveTrade(null);
-  
+
   setLastTradeResult({
     status: win ? "win" : "lose",
     chartDirection: trade.resultDirection,
@@ -463,7 +523,6 @@ const finishTrade = (trade) => {
         symbol: trade.symbol,
         amount: trade.amount,
         direction: trade.direction,
-        // в таблице trade_history НЕТ result_direction, поэтому не пишем его
         multiplier: trade.multiplier,
         duration: trade.duration,
         status: win ? "win" : "lose",
@@ -476,6 +535,7 @@ const finishTrade = (trade) => {
     }
   })();
 };
+
 
   // смена пароля
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -1101,9 +1161,12 @@ const withdrawSum = withdrawals
     });
 
     history.sort((a, b) => b.ts - a.ts);
-    setWalletHistory(history);
+setWalletHistory(history);
   } catch (e) {
     console.error("loadWalletDataFromSupabase exception", e);
+  } finally {
+    // ВАЖНО: Выключаем скелетоны, когда данные пришли
+    setHistoryLoading(false); 
   }
 }, [telegramId]);
 
@@ -1773,7 +1836,11 @@ const handleStartTrade = () => {
     return;
   }
 
-  if (activeTrade) return; // уже идёт сделка — вторую не даём открыть
+  if (activeTrade) return; 
+
+  triggerHaptic('heavy'); // <--- ВСТАВИТЬ СЮДА (Вибрация при нажатии кнопки)
+
+  setIsTradeProcessing(true);
 
   // 🔥 запускаем анимацию «создаём сделку»
   setIsTradeProcessing(true);
@@ -3028,8 +3095,8 @@ const renderWallet = () => {
               {isEN ? "Main balance" : "Основной баланс"}
             </div>
             <div className="wallet-amount">
-              {formatBalance} {currencyCode}
-            </div>
+   <AnimatedNumber value={balance} currency={settings.currency} /> {currencyCode}
+</div>
             <div className="wallet-actions-row">
               <button
                 className="wallet-action-btn primary"
@@ -3862,7 +3929,6 @@ const renderHistory = () => {
 
   return (
     <>
-      {/* История входов */}
       <section className="section-block fade-in delay-1">
         <div className="section-title">
           <h2>{isEN ? "Login history" : "История входов"}</h2>
@@ -3880,37 +3946,31 @@ const renderHistory = () => {
                 : "Входов пока не зафиксировано."}
             </div>
           )}
-          {loginHistory.map((e) => {
-            const typeLabel =
-              e.type === "register"
-                ? isEN
-                  ? "Registration"
-                  : "Регистрация"
-                : e.type === "logout"
-                ? isEN
-                  ? "Logout"
-                  : "Выход"
-                : isEN
-                ? "Login"
-                : "Вход";
 
-            return (
-              <div key={e.id} className="history-row">
-                <div className="history-main">
-                  <div className="history-type">{typeLabel}</div>
-                  <div className="history-sub">
-                    {e.login} · {e.email}
-                  </div>
-                </div>
-                <div className="history-time">
-                  {formatDateTime(e.ts)}
-                </div>
-              </div>
-            );
+          {loginHistory.map((e) => {
+    const typeLabel =
+      e.type === "register"
+        ? (isEN ? "Registration" : "Регистрация")
+        : e.type === "logout"
+        ? (isEN ? "Logout" : "Выход")
+        : (isEN ? "Login" : "Вход");
+
+    return (
+      <div key={e.id} className="history-row">
+        <div className="history-main">
+          <div className="history-type">{typeLabel}</div>
+          <div className="history-sub">
+            {e.login} · {e.email}
+          </div>
+        </div>
+        <div className="history-time">
+          {formatDateTime(e.ts)}
+        </div>
+      </div>
+    );
           })}
         </div>
-      </section>
-
+      </section>   {/* ← ДОБАВИЛИ ЭТО */}
       {/* История кошелька */}
       <section className="section-block fade-in delay-2">
         <div className="section-title">
@@ -3921,15 +3981,33 @@ const renderHistory = () => {
               : "Пополнения и выводы в вашем кошельке Forbex."}
           </p>
         </div>
-        <div className="history-block">
-          {walletHistory.length === 0 && (
-            <div className="history-empty">
-              {isEN
-                ? "No wallet operations yet."
-                : "Операций по кошельку ещё не было."}
-            </div>
-          )}
-          {walletHistory.map((e) => {
+<div className="history-block">
+  {/* ЛОГИКА СКЕЛЕТОНОВ */}
+  {historyLoading ? (
+    // Показываем 3 фейковые строки, пока грузится
+    [1, 2, 3].map((i) => (
+      <div key={i} className="history-row">
+        <div className="history-main">
+          {/* Скелетон для заголовка */}
+          <div className="skeleton" style={{ width: "100px", height: "14px", marginBottom: "4px" }}></div>
+          {/* Скелетон для подзаголовка */}
+          <div className="skeleton" style={{ width: "60px", height: "10px" }}></div>
+        </div>
+        <div className="history-right" style={{ alignItems: "flex-end", display: "flex", flexDirection: "column" }}>
+          {/* Скелетон для суммы */}
+          <div className="skeleton" style={{ width: "80px", height: "14px", marginBottom: "4px" }}></div>
+          {/* Скелетон для времени */}
+          <div className="skeleton" style={{ width: "40px", height: "10px" }}></div>
+        </div>
+      </div>
+    ))
+  ) : walletHistory.length === 0 ? (
+    <div className="history-empty">
+      {isEN ? "No wallet operations yet." : "Операций по кошельку ещё не было."}
+    </div>
+  ) : (
+    // ТВОЙ СТАРЫЙ КОД МАППИНГА ИСТОРИИ (оставь как есть)
+    walletHistory.map((e) => {
             const displayAmount = toDisplayCurrency(
               e.amount,
               settings.currency
@@ -4048,7 +4126,7 @@ const renderHistory = () => {
                 </div>
               </div>
             );
-          })}
+          }))}
         </div>
       </section>
 

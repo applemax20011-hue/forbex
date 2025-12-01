@@ -1802,19 +1802,35 @@ body {
 
 .toast-root {
   position: fixed;
-  top: 16px;         /* <--- БЫЛО bottom, СТАЛО top (чтобы было сверху) */
-  right: 16px;       /* Прижато к правому краю */
-  width: auto;       /* Ширина по содержимому */
-  max-width: 280px;  /* Ограничение, чтобы не было на весь экран */
+  top: 12px; /* Отступ сверху */
+  left: 50%; /* Центрируем по горизонтали */
+  transform: translateX(-50%); /* Сдвиг для точного центра */
+  
+  width: auto;
+  min-width: 300px;
+  max-width: 90%;
+  
   padding: 12px 16px;
-  border-radius: 16px;
-  background: rgba(3, 7, 18, 0.98);
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-  font-size: 12px;
-  z-index: 2000;     /* Поверх всего */
+  border-radius: 99px; /* Полностью круглые края */
+  
+  /* Стекло и тень */
+  background: rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(12px);
-  animation: slideInRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Текст по центру */
+  text-align: center;
+  
+  z-index: 9999;
+  animation: toastSlideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes toastSlideDown {
+  from { transform: translate(-50%, -150%); opacity: 0; }
+  to   { transform: translate(-50%, 0); opacity: 1; }
 }
 
 .toast-success {
@@ -2401,19 +2417,35 @@ body {
 
 .toast-root {
   position: fixed;
-  top: 16px;         /* <--- БЫЛО bottom, СТАЛО top (чтобы было сверху) */
-  right: 16px;       /* Прижато к правому краю */
-  width: auto;       /* Ширина по содержимому */
-  max-width: 280px;  /* Ограничение, чтобы не было на весь экран */
+  top: 12px; /* Отступ сверху */
+  left: 50%; /* Центрируем по горизонтали */
+  transform: translateX(-50%); /* Сдвиг для точного центра */
+  
+  width: auto;
+  min-width: 300px;
+  max-width: 90%;
+  
   padding: 12px 16px;
-  border-radius: 16px;
-  background: rgba(3, 7, 18, 0.98);
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-  font-size: 12px;
-  z-index: 2000;     /* Поверх всего */
+  border-radius: 99px; /* Полностью круглые края */
+  
+  /* Стекло и тень */
+  background: rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(12px);
-  animation: slideInRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Текст по центру */
+  text-align: center;
+  
+  z-index: 9999;
+  animation: toastSlideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes toastSlideDown {
+  from { transform: translate(-50%, -150%); opacity: 0; }
+  to   { transform: translate(-50%, 0); opacity: 1; }
 }
 .toast-title {
   font-weight: 700;
@@ -3248,3 +3280,38 @@ body {
     transform: translateY(0) scale(1);
   }
 }
+
+/* Эффект мерцания */
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, 
+      rgba(255,255,255,0.05) 25%, 
+      rgba(255,255,255,0.1) 50%, 
+      rgba(255,255,255,0.05) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 8px;
+  color: transparent !important;
+  pointer-events: none;
+}
+
+.tabular-nums {
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+  font-family: "JetBrains Mono", monospace; /* Убедись, что шрифт подключен */
+}
+
+/* ... lines above ... */
+.wallet-amount, 
+.trade-price, 
+.coin-price, 
+.history-amount {
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+  font-family: "JetBrains Mono", monospace;
+}
+/* No extra } here */
