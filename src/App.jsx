@@ -70,6 +70,9 @@ const STORAGE_KEYS = {
 const USD_RATE = 100; // 1 USD = 100 RUB
 // где-то сверху файла, рядом с константами
 const MIN_LOGIN_OVERLAY_MS = 1000; // 1.2 секунды, можешь поставить 2000
+// --- НОВОЕ: Регулярки для проверки (только латиница, цифры, символы) ---
+const ONLY_LATIN_REGEX = /^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$/;
+const NO_CYRILLIC_REGEX = /[а-яА-ЯёЁ]/;
 
 // ===== Supabase (frontend) =====
 const supabase = createClient(
@@ -439,7 +442,7 @@ const [settings, setSettings] = useState({
   const [selectedSymbol, setSelectedSymbol] = useState("BTC");
   const [chartDirection, setChartDirection] = useState("idle");
   const [chartScenario, setChartScenario] = useState("idle");
-  const [chartTimeframe, setChartTimeframe] = useState("4H"); // 1M | 15M | 1H | 4H | 1D
+  const [chartTimeframe, setChartTimeframe] = useState("1H"); // 1M | 15M | 1H | 4H | 1D
 
 
 // база = реальная история, chartPoints = база + сценарий
@@ -1102,53 +1105,59 @@ const loadWalletDataFromSupabase = useCallback(async () => {
       console.error("loadWalletData topups error:", topupsRes.error);
     }
     if (withdrawsRes.error) {
-      console.error(
-        "loadWalletData withdrawals error:",
-        withdrawsRes.error
-      );
+      console.error("loadWalletData withdrawals error:", withdrawsRes.error);
     }
 
-    const topups = topupsRes.data || [];
-    const withdrawals = withdrawsRes.data || [];
+    // === ФИЛЬТРАЦИЯ: скрываем старые операции для нового аккаунта ===
+    const userRegTime = user?.createdAt || 0;
+    const rawTopups = topupsRes.data || [];
+    const rawWithdrawals = withdrawsRes.data || [];
+
+    // Оставляем только те, что были созданы ПОСЛЕ регистрации этого аккаунта
+    const topups = rawTopups.filter(t => {
+      const tTime = t.created_at ? new Date(t.created_at).getTime() : 0;
+      return tTime >= userRegTime;
+    });
+
+    const withdrawals = rawWithdrawals.filter(w => {
+      const wTime = w.ts ? new Date(w.ts).getTime() : 0;
+      return wTime >= userRegTime;
+    });
+    // ================================================================
 
     const normalizeStatus = (s) => (s || "").toLowerCase();
 
-    // учитываем только approved-пополнения
+    // Считаем баланс только по отфильтрованным (новым) операциям
     const approvedDepositSum = topups
       .filter((t) => normalizeStatus(t.status) === "approved")
       .reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
-const withdrawSum = withdrawals
-  .filter((w) => {
-    const st = normalizeStatus(w.status);
-    // pending и done держат/списывают деньги,
-    // rejected — деньги возвращаем
-    return st === "pending" || st === "done";
-  })
-  .reduce((acc, w) => acc + Number(w.amount || 0), 0);
+    const withdrawSum = withdrawals
+      .filter((w) => {
+        const st = normalizeStatus(w.status);
+        return st === "pending" || st === "done";
+      })
+      .reduce((acc, w) => acc + Number(w.amount || 0), 0);
 
     setBalance(Math.max(0, approvedDepositSum - withdrawSum));
 
     const history = [];
 
-    // пополнения
+    // Формируем историю пополнений
     topups.forEach((row) => {
       const status = normalizeStatus(row.status) || "pending";
-
       history.push({
         id: `topup-${row.id}`,
         topupId: row.id,
         type: "deposit",
         amount: Number(row.amount || 0),
         method: row.method || "card",
-        ts: row.created_at
-          ? new Date(row.created_at).getTime()
-          : Date.now(),
-        status, // always "pending" / "approved" / "rejected"
+        ts: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+        status, 
       });
     });
 
-    // выводы
+    // Формируем историю выводов
     withdrawals.forEach((row) => {
       history.push({
         id: `wd-${row.id}`,
@@ -1161,14 +1170,13 @@ const withdrawSum = withdrawals
     });
 
     history.sort((a, b) => b.ts - a.ts);
-setWalletHistory(history);
+    setWalletHistory(history);
   } catch (e) {
     console.error("loadWalletDataFromSupabase exception", e);
   } finally {
-    // ВАЖНО: Выключаем скелетоны, когда данные пришли
-    setHistoryLoading(false); 
+    setHistoryLoading(false);
   }
-}, [telegramId]);
+}, [telegramId, user]); // Добавили user в зависимости
 
 useEffect(() => {
   loadWalletDataFromSupabase();
@@ -1370,6 +1378,23 @@ const handleRegister = async () => {
     return;
   }
 
+  // --- НОВЫЕ ПРОВЕРКИ (Только латиница) ---
+  if (NO_CYRILLIC_REGEX.test(login) || !ONLY_LATIN_REGEX.test(login)) {
+    setAuthError("Логин должен быть только на английском (цифры допустимы).");
+    return;
+  }
+
+  if (NO_CYRILLIC_REGEX.test(email)) {
+    setAuthError("Email должен быть только на английском.");
+    return;
+  }
+
+  if (NO_CYRILLIC_REGEX.test(password) || !ONLY_LATIN_REGEX.test(password)) {
+    setAuthError("Пароль должен содержать только английские буквы, цифры и символы.");
+    return;
+  }
+  // ----------------------------------------
+
   if (login.trim().length < 4) {
     setAuthError("Логин должен быть от 4 символов.");
     return;
@@ -1392,7 +1417,7 @@ const handleRegister = async () => {
 
   const trimmedLogin = login.trim();
   const trimmedEmail = email.trim().toLowerCase();
-  // дальше оставляешь всё как у тебя было
+
   setAuthError("");
   setOverlayText({
     title: "FORBEX TRADE",
@@ -1403,7 +1428,7 @@ const handleRegister = async () => {
   try {
     // 1. Проверяем, есть ли уже такой логин или email
     const { data: existingRows, error: existingError } = await supabase
-      .from("app_users") // <<< ЕСЛИ ТАБЛИЦА НАЗЫВАЕТСЯ ИНАЧЕ — ПОМЕНЯЙ ЗДЕСЬ
+      .from("app_users")
       .select("id, login, email")
       .or(`login.eq.${trimmedLogin},email.eq.${trimmedEmail}`)
       .limit(1);
@@ -1437,12 +1462,12 @@ const handleRegister = async () => {
 
     // 3. Создаём пользователя в Supabase
     const { data: insertedRows, error: insertError } = await supabase
-      .from("app_users") // <<< имя таблицы
+      .from("app_users")
       .insert({
         login: trimmedLogin,
         email: trimmedEmail,
-        password_hash: passwordHash, // колонка password_hash
-        created_at: createdAtIso,    // колонка created_at / CreatedAt
+        password_hash: passwordHash,
+        created_at: createdAtIso,
       })
       .select()
       .limit(1);
@@ -1466,7 +1491,6 @@ const handleRegister = async () => {
       createdAt: createdAtTs,
     };
 
-    // шаг выбора языка/валюты — оставляем твою логику
     setPendingUser(newUser);
     setPostRegisterStep(true);
     setTempSettings({
@@ -1474,14 +1498,9 @@ const handleRegister = async () => {
       currency: "RUB",
     });
 
-    // сохраним пароль/remember и timestamp, чтобы completeRegistration мог это доиспользовать
     try {
-localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-localStorage.setItem(
-  STORAGE_KEYS.registrationTs,
-  String(createdAtTs)
-);
-
+      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+      localStorage.setItem(STORAGE_KEYS.registrationTs, String(createdAtTs));
     } catch (e) {
       console.warn("localStorage error (register):", e);
     }
@@ -1583,6 +1602,13 @@ const handleLogin = async () => {
     return;
   }
 
+  // --- НОВАЯ ПРОВЕРКА (Только латиница) ---
+  if (NO_CYRILLIC_REGEX.test(loginOrEmail) || NO_CYRILLIC_REGEX.test(password)) {
+     setAuthError("Используйте только английскую раскладку (латиницу).");
+     return;
+  }
+  // ----------------------------------------
+
   // для контроля минимальной длительности лоадера
   const startedAt = Date.now();
 
@@ -1590,8 +1616,8 @@ const handleLogin = async () => {
     const elapsed = Date.now() - startedAt;
     const rest = Math.max(0, MIN_LOGIN_OVERLAY_MS - elapsed);
     setTimeout(() => {
-      setOverlayLoading(false); // прячем анимацию
-      cb && cb();               // потом уже показываем ошибку / что угодно
+      setOverlayLoading(false);
+      cb && cb();
     }, rest);
   };
 
@@ -1605,7 +1631,6 @@ const handleLogin = async () => {
   try {
     const lowered = loginOrEmail.toLowerCase();
 
-    // ищем по логину ИЛИ email
     const { data: rows, error } = await supabase
       .from("app_users")
       .select("id, login, email, password_hash, created_at")
@@ -1628,7 +1653,6 @@ const handleLogin = async () => {
       return;
     }
 
-    // проверяем пароль (SHA-256)
     const enc = new TextEncoder().encode(password);
     const buf = await crypto.subtle.digest("SHA-256", enc);
     const hashArray = Array.from(new Uint8Array(buf));
@@ -1637,7 +1661,6 @@ const handleLogin = async () => {
       .join("");
 
     if (row.password_hash !== passwordHash) {
-      // ❗ Лоадер крутится минимум MIN_LOGIN_OVERLAY_MS, потом Неверный пароль
       finishWithDelay(() => setAuthError("Неверный пароль."));
       return;
     }
@@ -1653,56 +1676,43 @@ const handleLogin = async () => {
       createdAt: createdAtTs,
     };
 
-    // грузим настройки пользователя из user_settings
     let loadedSettings = null;
     try {
-const { data: sRow, error: sErr } = await supabase
-  .from("user_settings")
-  .select("language, currency, theme")
-  .eq("user_id", row.id)
-  .maybeSingle();
+      const { data: sRow, error: sErr } = await supabase
+        .from("user_settings")
+        .select("language, currency, theme")
+        .eq("user_id", row.id)
+        .maybeSingle();
 
-if (!sErr && sRow) {
-  loadedSettings = {
-    language: sRow.language || "ru",
-    currency: sRow.currency || "RUB",
-    theme: sRow.theme || "fox",
-  };
+      if (!sErr && sRow) {
+        loadedSettings = {
+          language: sRow.language || "ru",
+          currency: sRow.currency || "RUB",
+          theme: sRow.theme || "fox",
+        };
       }
     } catch (e) {
       console.error("load user_settings error:", e);
     }
 
-const finalSettings = {
-  language: loadedSettings?.language || "ru",
-  currency: loadedSettings?.currency || "RUB",
-  theme: loadedSettings?.theme || "fox",
-};
+    const finalSettings = {
+      language: loadedSettings?.language || "ru",
+      currency: loadedSettings?.currency || "RUB",
+      theme: loadedSettings?.theme || "fox",
+    };
 
-    // обновляем стейты (они могут обновиться пока крутится лоадер — это ок)
     setUser(userWithCreatedAt);
     setSettings((prev) => ({ ...prev, ...finalSettings }));
 
-    // localStorage
     try {
-      localStorage.setItem(
-        STORAGE_KEYS.user,
-        JSON.stringify(userWithCreatedAt)
-      );
+      localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(userWithCreatedAt));
       localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-      localStorage.setItem(
-        STORAGE_KEYS.registrationTs,
-        String(createdAtTs)
-      );
-      localStorage.setItem(
-        STORAGE_KEYS.settings,
-        JSON.stringify(finalSettings)
-      );
+      localStorage.setItem(STORAGE_KEYS.registrationTs, String(createdAtTs));
+      localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(finalSettings));
     } catch (e) {
       console.warn("localStorage error (login):", e);
     }
 
-    // локальная история логинов
     const nowTs = Date.now();
     const entry = {
       id: nowTs,
@@ -1714,7 +1724,6 @@ const finalSettings = {
     };
     setLoginHistory((prev) => [entry, ...prev]);
 
-    // лог в Supabase (асинхронно, не влияет на лоадер)
     try {
       const nowIso = new Date().toISOString();
       await supabase.from("login_history").insert({
@@ -1729,7 +1738,6 @@ const finalSettings = {
       console.error("supabase login_history login error:", e);
     }
 
-    // ✅ Успешный кейс: просто скрываем лоадер с задержкой
     finishWithDelay();
   } catch (e) {
     console.error("handleLogin error:", e);
@@ -2634,25 +2642,6 @@ const renderTrade = () => {
                 </p>
               </div>
             )}
-
-            {/* ТАЙМФРЕЙМЫ – теперь активные */}
-            <div className="trade-timeframe-row">
-              {timeframes.map((tf) => (
-                <button
-                  key={tf.id}
-                  type="button"
-                  className={
-                    "tf-pill " +
-                    (chartTimeframe === tf.id ? "tf-pill-active" : "")
-                  }
-                  onClick={() => setChartTimeframe(tf.id)}
-                >
-                  {tf.label}
-                </button>
-              ))}
-            </div>
-          </div>
-		            {/* Мини-тост про открытую сделку */}
           {tradeToastVisible && lastOpenedTrade && (
             <div className="trade-toast">
               <div className="trade-toast-dot" />
