@@ -215,7 +215,7 @@ const Modal = ({ open, onClose, title, children }) => {
             onClick={onClose}
             className="text-xs text-orange-500 hover:text-orange-400 font-bold transition-colors"
           >
-            ZAKRYT
+            ЗАКРЫТЬ
           </button>
         </div>
       </div>
@@ -223,24 +223,26 @@ const Modal = ({ open, onClose, title, children }) => {
   );
 };
 
-// === COSMIC ORANGE BACKGROUND EFFECT ===
-// Заменяет стандартный серый фон на глубокий космос с оранжевым свечением
+// === COSMIC ORANGE BACKGROUND (ОРАНЖЕВЫЙ КОСМОС) ===
 const BackgroundEffects = () => (
   <>
-    {/* Основной черный фон */}
-    <div className="fixed inset-0 bg-[#020100] -z-50" />
+    {/* 1. Глубокая черная база */}
+    <div className="fixed inset-0 bg-[#050201] -z-50" />
     
-    {/* Шум для текстуры */}
-    <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.04] pointer-events-none -z-40 mix-blend-overlay" />
+    {/* 2. Текстура шума (зернистость) */}
+    <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.06] pointer-events-none -z-40 mix-blend-overlay" />
     
-    {/* Верхнее оранжевое свечение (Cosmic Flare) */}
-    <div className="fixed top-[-20%] left-[-10%] w-[70%] h-[70%] bg-orange-600/15 rounded-full blur-[130px] -z-30 animate-pulse" style={{ animationDuration: '8s' }} />
+    {/* 3. Оранжевое свечение сверху (Основной Cosmic Orange) */}
+    <div 
+      className="fixed top-[-20%] left-[-10%] w-[80%] h-[80%] bg-orange-600/20 rounded-full blur-[140px] -z-30 animate-pulse" 
+      style={{ animationDuration: '8s' }} 
+    />
     
-    {/* Нижнее холодное свечение для контраста (Cyber deep) */}
-    <div className="fixed bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-blue-900/10 rounded-full blur-[130px] -z-30" />
+    {/* 4. Вторичное свечение снизу (Глубокий красный/оранжевый) */}
+    <div className="fixed bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-red-900/15 rounded-full blur-[120px] -z-30" />
 
-    {/* Оранжевая кибер-сетка */}
-    <div className="fixed inset-0 bg-[linear-gradient(rgba(249,115,22,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(249,115,22,0.05)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,#000_70%,transparent_100%)] -z-20 pointer-events-none" />
+    {/* 5. Кибер-сетка оранжевого цвета */}
+    <div className="fixed inset-0 bg-[linear-gradient(rgba(249,115,22,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(249,115,22,0.07)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_50%,#000_70%,transparent_100%)] -z-20 pointer-events-none" />
   </>
 );
 

@@ -1167,32 +1167,50 @@ useEffect(() => {
   return () => supabase.removeChannel(channel);
 }, [telegramId, isEN, settings.currency, loadWalletDataFromSupabase]);
 
-// === ЗАМЕНИТЬ ПРОШЛЫЙ БЛОК НА ЭТОТ ===
+// === СКРОЛЛ НАВЕРХ (ИСПРАВЛЕННАЯ ВЕРСИЯ) ===
   useEffect(() => {
-    // 1. Принудительно отключаем "память" браузера на позицию скролла
-    if ('scrollRestoration' in window.history) {
-      window.history.scrollRestoration = 'manual';
+    // 1. Отключаем восстановление скролла браузером
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
     }
 
-    // 2. Скроллим само окно и основные контейнеры
-    window.scrollTo(0, 0);
-    document.body.scrollTop = 0;
-    document.documentElement.scrollTop = 0;
-    
-    // 3. Если скролл "застрял" внутри корневого элемента (из-за index.css)
-    const root = document.getElementById("root");
-    if (root) root.scrollTop = 0;
-
-    // 4. "Контрольный выстрел" через мгновение после отрисовки
-    const timer = setTimeout(() => {
+    const resetAllScrolls = () => {
+      // А. Скроллим само окно
       window.scrollTo(0, 0);
       document.body.scrollTop = 0;
       document.documentElement.scrollTop = 0;
-      if (root) root.scrollTop = 0;
-    }, 10); // 10мс задержка
 
-    return () => clearTimeout(timer);
+      // Б. Скроллим все основные контейнеры, где может прятаться скроллбар
+      const selectors = [
+        "#root",           // Корневой div
+        ".app-container",  // Ваш основной контейнер
+        ".page-root",      // Обертка темы
+        ".content",        // <--- СКОРЕЕ ВСЕГО СКРОЛЛ ЗДЕСЬ
+        "main",            // Тег main
+        ".tab-content"     // Обертка вкладки
+      ];
+
+      selectors.forEach((sel) => {
+        const el = document.querySelector(sel);
+        if (el) {
+          el.scrollTop = 0;
+        }
+      });
+    };
+
+    // Выполняем сразу
+    resetAllScrolls();
+
+    // И выполняем чуть позже (React может перерисовать DOM через мгновение)
+    const t1 = setTimeout(resetAllScrolls, 10);
+    const t2 = setTimeout(resetAllScrolls, 100);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [activeTab, showLanding, authMode, user]);
+  // ===========================================
   // ======================================
   const showOverlay = (title, subtitle, callback, delay = 1100) => {
     setOverlayText({
