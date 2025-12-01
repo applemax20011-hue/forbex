@@ -106,11 +106,11 @@ function FoxBackground() {
   );
 }
 
-function Shell({ children, theme = "fox" }) {
+function Shell({ children, theme = "fox", className = "" }) { // <--- Добавили className
   const isFox = theme === "fox";
-
   return (
-    <div className={`page-root theme-${theme}`}>
+    // Добавляем className в div
+    <div className={`page-root theme-${theme} ${className}`}> 
       {isFox && <FoxBackground />}
       <div className="app-container">{children}</div>
     </div>
@@ -336,10 +336,15 @@ function Loader({ title, subtitle }) {
 // --- Вставь это после импортов, перед function App() ---
 const tg = window.Telegram?.WebApp;
 
-// Утилита для вибрации
+// Утилита для вибрации (БЕЗОПАСНАЯ ВЕРСИЯ)
 const triggerHaptic = (style = 'light') => {
-  if (tg?.HapticFeedback) {
-    tg.HapticFeedback.impactOccurred(style); // light, medium, heavy, rigid, soft
+  // Проверяем, существует ли tg, HapticFeedback и сам метод impactOccurred
+  if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.impactOccurred === 'function') {
+    try {
+      tg.HapticFeedback.impactOccurred(style); 
+    } catch (e) {
+      // Игнорируем ошибку, если вибрация не сработала
+    }
   }
 };
 
@@ -516,9 +521,19 @@ function App() {
   remember: false, // было true
 });
 
+const [isUiSwapping, setIsUiSwapping] = useState(false);
   const [navClickId, setNavClickId] = useState(null);
+// Добавь это в начало App(), если еще не добавил:
+const [profileToggles, setProfileToggles] = useState({
+  notifications: true,
+  sounds: true,
+  biometry: false,
+});
 
-
+const toggleProfileSetting = (key) => {
+  setProfileToggles(prev => ({ ...prev, [key]: !prev[key] }));
+  triggerHaptic("light");
+};
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [authError, setAuthError] = useState("");
@@ -1465,32 +1480,42 @@ useEffect(() => {
   };
 
 const updateSettings = (patch) => {
-  setSettings((prev) => {
-    const next = { ...prev, ...patch };
+  // 1. Запускаем анимацию
+  setIsUiSwapping(true);
+  triggerHaptic("medium"); 
 
-    try {
-      localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next));
-    } catch (e) {
-      console.warn("localStorage settings update error:", e);
-    }
+  // 2. Через 250мс (когда экран размыт) меняем настройки
+  setTimeout(() => {
+    setSettings((prev) => {
+      const next = { ...prev, ...patch };
 
-    if (user && user.id) {
-      (async () => {
-        try {
-          await supabase.from("user_settings").upsert({
-            user_id: user.id,
-            language: next.language,
-            currency: next.currency,
-            theme: next.theme, // <--- добавили
+      try {
+        localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next));
+      } catch (e) {
+        console.warn("localStorage settings update error:", e);
+      }
+      
+      // === ИСПРАВЛЕНИЕ ЗДЕСЬ ===
+      if (user && user.id) {
+          supabase.from("user_settings").upsert({
+              user_id: user.id,
+              language: next.language,
+              currency: next.currency,
+              theme: next.theme,
+          }).then(({ error }) => {
+              if (error) console.error("Supabase settings error:", error);
           });
-        } catch (err) {
-          console.error("user_settings upsert error:", err);
-        }
-      })();
-    }
+      }
+      // =========================
 
-    return next;
-  });
+      return next;
+    });
+  }, 250); 
+
+  // 3. Через 600мс убираем класс анимации
+  setTimeout(() => {
+    setIsUiSwapping(false);
+  }, 600);
 };
 
   const handleAuthInput = (field, value) => {
@@ -1676,32 +1701,20 @@ const completeRegistration = () => {
     "FORBEX TRADE",
     "Загрузка торгового терминала…",
     () => {
-      // применяем настройки локально
       setSettings(finalSettings);
       setUser(pendingUser);
 
-      // localStorage
       try {
-        localStorage.setItem(
-          STORAGE_KEYS.user,
-          JSON.stringify(pendingUser)
-        );
-localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-localStorage.setItem(
-  STORAGE_KEYS.settings,
-  JSON.stringify(finalSettings)
-);
+        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(pendingUser));
+        localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+        localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(finalSettings));
         if (!localStorage.getItem(STORAGE_KEYS.registrationTs)) {
-          localStorage.setItem(
-            STORAGE_KEYS.registrationTs,
-            String(pendingUser.createdAt || nowTs)
-          );
+          localStorage.setItem(STORAGE_KEYS.registrationTs, String(pendingUser.createdAt || nowTs));
         }
       } catch (e) {
-        console.warn("localStorage error (completeRegistration):", e);
+        console.warn("localStorage error:", e);
       }
 
-      // пишем в локальную историю входов
       const entry = {
         id: nowTs,
         type: "register",
@@ -1712,32 +1725,35 @@ localStorage.setItem(
       };
       setLoginHistory((prev) => [entry, ...prev]);
 
-      // сохраняем настройки и лог регистрации в Supabase
+      // === ИСПРАВЛЕНИЕ ЗДЕСЬ ===
       (async () => {
         try {
           if (pendingUser.id) {
-            // user_settings
-            await supabase.from("user_settings").upsert({
-  user_id: pendingUser.id,
-  language: finalSettings.language,
-  currency: finalSettings.currency,
-  theme: finalSettings.theme || "fox",
-});
-
-            // login_history (подправь названия колонок, если у тебя другие)
-            await supabase.from("login_history").insert({
-              user_id: pendingUser.id,
-              event_type: "register",   // если колонка называется type – поменяй на type
-              login: pendingUser.login,
-              email: pendingUser.email,
-              ts: nowIso,               // если колонка created_at – поставь created_at: nowIso
-              device: navigator.userAgent || "",
+            // 1. Сохраняем настройки
+            const { error: settingsError } = await supabase.from("user_settings").upsert({
+                user_id: pendingUser.id,
+                language: finalSettings.language,
+                currency: finalSettings.currency,
+                theme: finalSettings.theme || "fox",
             });
+            if (settingsError) console.error("Settings upsert error:", settingsError);
+
+            // 2. Логируем вход
+            const { error: logError } = await supabase.from("login_history").insert({
+                user_id: pendingUser.id,
+                event_type: "register",
+                login: pendingUser.login,
+                email: pendingUser.email,
+                ts: nowIso,
+                device: navigator.userAgent || "",
+            });
+            if (logError) console.error("Login history error:", logError);
           }
         } catch (e) {
-          console.error("supabase completeRegistration error:", e);
+          console.error("completeRegistration critical error:", e);
         }
       })();
+      // =========================
 
       setPendingUser(null);
       setPostRegisterStep(false);
@@ -4261,6 +4277,7 @@ const renderHistory = () => {
 const renderProfile = () => {
   if (!user) return null;
 
+  // 1. Форматирование даты
   const getRegDateString = () => {
     try {
       const date = new Date(user.createdAt || Date.now());
@@ -4269,119 +4286,187 @@ const renderProfile = () => {
         month: "2-digit",
         year: "numeric",
       });
-      const timeStr = date.toLocaleTimeString("ru-RU", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      return isEN ? `${dateStr} at ${timeStr}` : `${dateStr} в ${timeStr}`;
+      return isEN ? `With us since ${dateStr}` : `С нами с ${dateStr}`;
     } catch {
       return "...";
     }
   };
 
+  // 2. Расчет статистики (Безопасный метод)
+  const safeHistory = Array.isArray(tradeHistory) ? tradeHistory : [];
+  
+  const totalTrades = safeHistory.length;
+  const netProfit = safeHistory.reduce((acc, t) => acc + (Number(t.profit) || 0), 0);
+  const wins = safeHistory.filter(t => t.status === 'win').length;
+  const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
+    
+  let bestSeries = 0;
+  let currentSeries = 0;
+  safeHistory.forEach(t => {
+      if (t.status === 'win') {
+          currentSeries++;
+          if (currentSeries > bestSeries) bestSeries = currentSeries;
+      } else {
+          currentSeries = 0;
+      }
+  });
+
+  const displayProfit = toDisplayCurrency(netProfit, settings.currency);
+
+  // Безопасный доступ к переключателям
+  const safeToggles = typeof profileToggles !== 'undefined' ? profileToggles : { notifications: true, sounds: true };
+  const safeToggleHandler = (key) => {
+     if (typeof toggleProfileSetting === 'function') {
+         toggleProfileSetting(key);
+     }
+  };
+
   return (
     <>
-      {/* Верхняя карточка профиля с аватаром и Telegram */}
+      {/* 1. КАРТОЧКА ПРОФИЛЯ */}
       <section className="section-block fade-in delay-1">
-        <div className="profile-card" style={{ position: "relative" }}>
-          {/* АВАТАР */}
+        <div className="profile-card">
           <div className="profile-avatar">
             {userAvatarUrl ? (
-              <img
-                src={userAvatarUrl}
-                alt="Telegram avatar"
-                className="profile-avatar-img"
-              />
+              <img src={userAvatarUrl} alt="Avatar" className="profile-avatar-img" />
             ) : (
               <span>🦊</span>
             )}
           </div>
-
           <div className="profile-main">
             <div className="profile-login">{user.login}</div>
             <div className="profile-email">{user.email}</div>
-            <div
-              className="profile-created"
-              style={{ marginTop: "4px", fontSize: "11px" }}
-            >
-              {isEN
-                ? `On Forbex since ${getRegDateString()}`
-                : `На Forbex с ${getRegDateString()}`}
-            </div>
+            <div className="profile-created">{getRegDateString()}</div>
           </div>
-
-          {/* Telegram username + ID */}
-          <div
-            style={{
-              position: "absolute",
-              top: "12px",
-              right: "14px",
-              textAlign: "right",
-              fontSize: "10px",
-              color: "rgba(255,255,255,0.7)",
-              lineHeight: "1.4",
-            }}
-          >
-            {telegramUsername && (
-              <div style={{ color: "#fff", fontWeight: 600 }}>
-                @{telegramUsername}
-              </div>
-            )}
-            {telegramId && <div>ID: {telegramId}</div>}
+          <div style={{ position: "absolute", top: 12, right: 14, opacity: 0.5, fontSize: 10 }}>
+            ID: {telegramId || user.id.toString().slice(0,6)}
           </div>
         </div>
       </section>
 
-      {/* Действия с аккаунтом */}
+      {/* 2. ЛИЧНАЯ СТАТИСТИКА */}
       <section className="section-block fade-in delay-2">
         <div className="section-title">
-          <h2>{isEN ? "Account actions" : "Управление аккаунтом"}</h2>
+          <h2>{isEN ? "My Statistics" : "Моя Статистика"}</h2>
+        </div>
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-label">{isEN ? "Total Profit" : "Общая прибыль"}</div>
+            <div className={`stat-value ${netProfit >= 0 ? 'positive' : 'negative'}`}>
+              {netProfit > 0 ? "+" : ""}
+              {displayProfit.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} {currencyCode}
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{isEN ? "Win Rate" : "Винрейт %"}</div>
+            <div className="stat-value text-brand-accent">{winRate}%</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{isEN ? "Total Trades" : "Кол-во сделок"}</div>
+            <div className="stat-value">{totalTrades}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">{isEN ? "Best Series" : "Лучшая серия"}</div>
+            <div className="stat-value positive">
+               🔥 {bestSeries}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. НАСТРОЙКИ */}
+      <section className="section-block fade-in delay-3">
+        <div className="section-title">
+          <h2>{isEN ? "App Settings" : "Настройки приложения"}</h2>
         </div>
 
+        <div className="settings-block">
+          {/* Язык и Валюта */}
+          <div className="settings-row">
+            <div className="settings-label">{isEN ? "Language & Currency" : "Язык и Валюта"}</div>
+            <div className="settings-chips">
+              <button 
+                className={`settings-chip ${settings.language === "ru" ? "active" : ""}`}
+                onClick={() => updateSettings({ language: "ru" })}
+              >RU</button>
+              <button 
+                className={`settings-chip ${settings.language === "en" ? "active" : ""}`}
+                onClick={() => updateSettings({ language: "en" })}
+              >EN</button>
+              
+              <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
+              
+              <button 
+                className={`settings-chip ${settings.currency === "RUB" ? "active" : ""}`}
+                onClick={() => updateSettings({ currency: "RUB" })}
+              >RUB</button>
+              <button 
+                className={`settings-chip ${settings.currency === "USD" ? "active" : ""}`}
+                onClick={() => updateSettings({ currency: "USD" })}
+              >USD</button>
+            </div>
+          </div>
+
+          {/* Тема */}
+          <div className="settings-row" style={{ marginTop: 12 }}>
+            <div className="settings-label">{isEN ? "Theme" : "Тема"}</div>
+            <div className="settings-chips">
+              <button className={`settings-chip ${settings.theme === "fox" ? "active" : ""}`} onClick={() => updateSettings({ theme: "fox" })}>🦊 Fox</button>
+              <button className={`settings-chip ${settings.theme === "night" ? "active" : ""}`} onClick={() => updateSettings({ theme: "night" })}>🌙 Night</button>
+              <button className={`settings-chip ${settings.theme === "day" ? "active" : ""}`} onClick={() => updateSettings({ theme: "day" })}>☀ Day</button>
+            </div>
+          </div>
+
+          {/* Переключатели (Без FaceID) */}
+          <div style={{ marginTop: 16, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 8 }}>
+            <div className="toggle-row" onClick={() => safeToggleHandler('notifications')}>
+              <div className="toggle-label">{isEN ? "Push Notifications" : "Уведомления"}</div>
+              <div className={`toggle-switch ${safeToggles.notifications ? 'active' : ''}`}>
+                <div className="toggle-thumb" />
+              </div>
+            </div>
+            <div className="toggle-row" onClick={() => safeToggleHandler('sounds')}>
+              <div className="toggle-label">{isEN ? "Sound Effects" : "Звуки и вибрация"}</div>
+              <div className={`toggle-switch ${safeToggles.sounds ? 'active' : ''}`}>
+                <div className="toggle-thumb" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. УПРАВЛЕНИЕ АККАУНТОМ */}
+      <section className="section-block fade-in delay-4">
+        <div className="section-title">
+          <h2>{isEN ? "Security" : "Управление аккаунтом"}</h2>
+        </div>
         <div className="profile-actions-grid">
-          <button className="profile-btn" type="button">
-            {isEN ? "Verification" : "Верификация"}
+          <button className="profile-btn" onClick={() => {
+             setSettingsMsg("");
+             setLoginForm({ login: user.login || "" });
+             setLoginModalOpen(true);
+          }}>
+            {isEN ? "Change Login" : "Сменить логин"}
           </button>
-          <button
-            className="profile-btn"
-            type="button"
-            onClick={() => {
-              setSettingsMsg("");
-              setLoginForm({ login: user.login || "" });
-              setLoginModalOpen(true);
-            }}
-          >
-            {isEN ? "Change login" : "Сменить логин"}
+          <button className="profile-btn" onClick={() => {
+             setSettingsMsg("");
+             setEmailForm({ email: user.email || "" });
+             setEmailModalOpen(true);
+          }}>
+            {isEN ? "Change Email" : "Сменить Email"}
           </button>
-          <button
-            className="profile-btn"
-            type="button"
-            onClick={() => {
-              setSettingsMsg("");
-              setEmailForm({ email: user.email || "" });
-              setEmailModalOpen(true);
-            }}
-          >
-            {isEN ? "Change email" : "Сменить email"}
+          <button className="profile-btn" onClick={() => {
+             setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
+             setPasswordError(""); setPasswordSuccess("");
+             setPasswordModalOpen(true);
+          }}>
+            {isEN ? "Change Password" : "Сменить пароль"}
           </button>
-          <button
-            className="profile-btn"
-            type="button"
-            onClick={() => {
-              setPasswordForm({
-                oldPassword: "",
-                newPassword: "",
-                confirmPassword: "",
-              });
-              setPasswordError("");
-              setPasswordSuccess("");
-              setPasswordModalOpen(true);
-            }}
-          >
-            {isEN ? "Change password" : "Сменить пароль"}
+          <button className="profile-btn" style={{ borderColor: 'rgba(34, 197, 94, 0.3)', color: '#4ade80' }}>
+            {isEN ? "Verify Identity (KYC)" : "Верификация (KYC)"}
           </button>
         </div>
-
+        
         {settingsMsg && (
           <div className="wallet-modal-note" style={{ marginTop: 8 }}>
             {settingsMsg}
@@ -4389,284 +4474,86 @@ const renderProfile = () => {
         )}
       </section>
 
-      {/* Кнопка техподдержки */}
-      <section className="section-block fade-in delay-3">
-        <a
-          href="https://t.me/ForbexSupport"
-          target="_blank"
-          rel="noreferrer"
-          className="greenPulse support-cta"
+      {/* 5. ТЕХПОДДЕРЖКА (ЗЕЛЕНАЯ + PULSE) */}
+      <section className="section-block fade-in delay-5">
+        <a 
+            href="https://t.me/ForbexSupport" 
+            target="_blank" 
+            rel="noreferrer"
+            // Вернули класс greenPulse и убрали button внутри
+            className="greenPulse support-cta" 
+            style={{ width: '100%', textDecoration: 'none', margin: 0 }}
         >
-          <span className="support-cta-icon">👨‍💻</span>
-          <span className="support-cta-text">
-            {isEN ? "Write to support" : "Связаться с Тех.Поддержкой"}
-          </span>
+            <span className="support-cta-icon">👨‍💻</span>
+            <span className="support-cta-text">
+              {isEN ? "Contact Support" : "Написать в поддержку"}
+            </span>
         </a>
       </section>
 
-      {/* Настройки языка / валюты / темы */}
-      <section className="section-block fade-in delay-4">
-        <div className="section-title">
-          <h2>{isEN ? "Settings" : "Настройки"}</h2>
-        </div>
-
-        <div className="settings-block">
-          {/* Язык */}
-          <div className="settings-row">
-            <div className="settings-label">
-              {isEN ? "Language" : "Язык интерфейса"}
-            </div>
-            <div className="settings-chips">
-              <button
-                className={
-                  "settings-chip " +
-                  (settings.language === "ru" ? "active" : "")
-                }
-                onClick={() => updateSettings({ language: "ru" })}
-              >
-                RU
-              </button>
-              <button
-                className={
-                  "settings-chip " +
-                  (settings.language === "en" ? "active" : "")
-                }
-                onClick={() => updateSettings({ language: "en" })}
-              >
-                EN
-              </button>
-            </div>
-          </div>
-
-          {/* Валюта */}
-          <div className="settings-row">
-            <div className="settings-label">
-              {isEN ? "Currency" : "Валюта"}
-            </div>
-            <div className="settings-chips">
-              <button
-                className={
-                  "settings-chip " +
-                  (settings.currency === "RUB" ? "active" : "")
-                }
-                onClick={() => updateSettings({ currency: "RUB" })}
-              >
-                RUB
-              </button>
-              <button
-                className={
-                  "settings-chip " +
-                  (settings.currency === "USD" ? "active" : "")
-                }
-                onClick={() => updateSettings({ currency: "USD" })}
-              >
-                USD
-              </button>
-            </div>
-          </div>
-
-          {/* Тема */}
-          <div className="settings-row">
-            <div className="settings-label">
-              {isEN ? "Theme" : "Тема оформления"}
-            </div>
-            <div className="settings-chips">
-              <button
-                className={
-                  "settings-chip " + (settings.theme === "fox" ? "active" : "")
-                }
-                onClick={() => updateSettings({ theme: "fox" })}
-              >
-                🦊 Fox
-              </button>
-              <button
-                className={
-                  "settings-chip " + (settings.theme === "night" ? "active" : "")
-                }
-                onClick={() => updateSettings({ theme: "night" })}
-              >
-                🌙 Night
-              </button>
-              <button
-                className={
-                  "settings-chip " + (settings.theme === "day" ? "active" : "")
-                }
-                onClick={() => updateSettings({ theme: "day" })}
-              >
-                ☀ Day
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* 6. ВЫХОД (В самом низу, в отдельной карточке) */}
+      <section className="section-block fade-in delay-5" style={{ marginBottom: 24 }}>
+        <button className="profile-btn logout" onClick={handleLogout}>
+          {isEN ? "Log Out" : "Выйти из аккаунта"}
+        </button>
       </section>
 
-      {/* Выход из аккаунта */}
-      <section className="section-block fade-in delay-5">
-        <div className="profile-actions">
-          <button className="profile-btn logout" onClick={handleLogout}>
-            {isEN ? "Log out" : "Выйти из аккаунта"}
-          </button>
-        </div>
-      </section>
-
-      {/* Модалка смены пароля */}
-      {passwordModalOpen && (
-        <div
-          className="wallet-modal-backdrop"
-          onClick={() => setPasswordModalOpen(false)}
-        >
-          <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="wallet-modal-title">
-              {isEN ? "Change password" : "Смена пароля"}
-            </div>
-
-            <div className="wallet-modal-input-group">
-              <label>{isEN ? "Current password" : "Текущий пароль"}</label>
-              <input
-                type="password"
-                value={passwordForm.oldPassword}
-                onChange={(e) =>
-                  handlePasswordInput("oldPassword", e.target.value)
-                }
-              />
-            </div>
-
-            <div className="wallet-modal-input-group">
-              <label>{isEN ? "New password" : "Новый пароль"}</label>
-              <input
-                type="password"
-                value={passwordForm.newPassword}
-                onChange={(e) =>
-                  handlePasswordInput("newPassword", e.target.value)
-                }
-              />
-            </div>
-
-            <div className="wallet-modal-input-group">
-              <label>{isEN ? "Repeat" : "Повтор нового пароля"}</label>
-              <input
-                type="password"
-                value={passwordForm.confirmPassword}
-                onChange={(e) =>
-                  handlePasswordInput("confirmPassword", e.target.value)
-                }
-              />
-            </div>
-
-            {passwordError && (
-              <div className="wallet-modal-note error">{passwordError}</div>
-            )}
-            {passwordSuccess && (
-              <div className="wallet-modal-note success">
-                {passwordSuccess}
-              </div>
-            )}
-
-            <div className="wallet-modal-actions">
-              <button
-                className="wallet-modal-btn secondary"
-                onClick={() => setPasswordModalOpen(false)}
-              >
-                {isEN ? "Close" : "Закрыть"}
-              </button>
-              <button
-                className="wallet-modal-btn primary"
-                onClick={handlePasswordChange}
-              >
-                {isEN ? "Save" : "Сохранить"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Модалка смены логина */}
+      {/* === МОДАЛКИ === */}
       {loginModalOpen && (
-        <div
-          className="wallet-modal-backdrop"
-          onClick={() => setLoginModalOpen(false)}
-        >
+        <div className="wallet-modal-backdrop" onClick={() => setLoginModalOpen(false)}>
           <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="wallet-modal-title">
-              {isEN ? "Change login" : "Смена логина"}
-            </div>
-
+            <div className="wallet-modal-title">{isEN ? "Change login" : "Смена логина"}</div>
             <div className="wallet-modal-input-group">
               <label>{isEN ? "New login" : "Новый логин"}</label>
-              <input
-                type="text"
-                value={loginForm.login}
-                onChange={(e) => {
-                  setLoginForm({ login: e.target.value });
-                  setSettingsMsg("");
-                }}
-                placeholder={isEN ? "New login" : "Введите новый логин"}
-              />
+              <input type="text" value={loginForm.login} onChange={(e) => { setLoginForm({ login: e.target.value }); setSettingsMsg(""); }} placeholder={isEN ? "New login" : "Введите новый логин"} />
             </div>
-
-            {settingsMsg && (
-              <div className="wallet-modal-note">{settingsMsg}</div>
-            )}
-
+            {settingsMsg && <div className="wallet-modal-note">{settingsMsg}</div>}
             <div className="wallet-modal-actions">
-              <button
-                className="wallet-modal-btn secondary"
-                onClick={() => setLoginModalOpen(false)}
-              >
-                {isEN ? "Close" : "Закрыть"}
-              </button>
-              <button
-                className="wallet-modal-btn primary"
-                onClick={handleLoginChange}
-              >
-                {isEN ? "Save" : "Сохранить"}
-              </button>
+              <button className="wallet-modal-btn secondary" onClick={() => setLoginModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
+              <button className="wallet-modal-btn primary" onClick={handleLoginChange}>{isEN ? "Save" : "Сохранить"}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Модалка смены email */}
       {emailModalOpen && (
-        <div
-          className="wallet-modal-backdrop"
-          onClick={() => setEmailModalOpen(false)}
-        >
+        <div className="wallet-modal-backdrop" onClick={() => setEmailModalOpen(false)}>
           <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="wallet-modal-title">
-              {isEN ? "Change email" : "Смена email"}
-            </div>
-
+            <div className="wallet-modal-title">{isEN ? "Change email" : "Смена email"}</div>
             <div className="wallet-modal-input-group">
               <label>{isEN ? "New email" : "Новый email"}</label>
-              <input
-                type="email"
-                value={emailForm.email}
-                onChange={(e) => {
-                  setEmailForm({ email: e.target.value });
-                  setSettingsMsg("");
-                }}
-                placeholder={isEN ? "name@example.com" : "name@example.com"}
-              />
+              <input type="email" value={emailForm.email} onChange={(e) => { setEmailForm({ email: e.target.value }); setSettingsMsg(""); }} placeholder="name@example.com" />
             </div>
-
-            {settingsMsg && (
-              <div className="wallet-modal-note">{settingsMsg}</div>
-            )}
-
+            {settingsMsg && <div className="wallet-modal-note">{settingsMsg}</div>}
             <div className="wallet-modal-actions">
-              <button
-                className="wallet-modal-btn secondary"
-                onClick={() => setEmailModalOpen(false)}
-              >
-                {isEN ? "Close" : "Закрыть"}
-              </button>
-              <button
-                className="wallet-modal-btn primary"
-                onClick={handleEmailChange}
-              >
-                {isEN ? "Save" : "Сохранить"}
-              </button>
+              <button className="wallet-modal-btn secondary" onClick={() => setEmailModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
+              <button className="wallet-modal-btn primary" onClick={handleEmailChange}>{isEN ? "Save" : "Сохранить"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {passwordModalOpen && (
+        <div className="wallet-modal-backdrop" onClick={() => setPasswordModalOpen(false)}>
+          <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="wallet-modal-title">{isEN ? "Change password" : "Смена пароля"}</div>
+            <div className="wallet-modal-input-group">
+              <label>{isEN ? "Current password" : "Текущий пароль"}</label>
+              <input type="password" value={passwordForm.oldPassword} onChange={(e) => handlePasswordInput("oldPassword", e.target.value)} />
+            </div>
+            <div className="wallet-modal-input-group">
+              <label>{isEN ? "New password" : "Новый пароль"}</label>
+              <input type="password" value={passwordForm.newPassword} onChange={(e) => handlePasswordInput("newPassword", e.target.value)} />
+            </div>
+            <div className="wallet-modal-input-group">
+              <label>{isEN ? "Repeat" : "Повтор нового пароля"}</label>
+              <input type="password" value={passwordForm.confirmPassword} onChange={(e) => handlePasswordInput("confirmPassword", e.target.value)} />
+            </div>
+            {passwordError && <div className="wallet-modal-note error">{passwordError}</div>}
+            {passwordSuccess && <div className="wallet-modal-note success">{passwordSuccess}</div>}
+            <div className="wallet-modal-actions">
+              <button className="wallet-modal-btn secondary" onClick={() => setPasswordModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
+              <button className="wallet-modal-btn primary" onClick={handlePasswordChange}>{isEN ? "Save" : "Сохранить"}</button>
             </div>
           </div>
         </div>
@@ -5040,7 +4927,7 @@ const renderAuth = () => {
 
 if (booting) {
   return (
-    <Shell theme={settings.theme || "fox"}>
+    <Shell theme={settings.theme || "fox"} className={isUiSwapping ? "ui-swapping" : ""}>
       <Loader />
     </Shell>
   );
@@ -5206,7 +5093,7 @@ if (!user && showLanding) {
 
 if (!user) {
   return (
-    <Shell theme={settings.theme || "fox"}>
+    <Shell theme={settings.theme || "fox"} className={isUiSwapping ? "ui-swapping" : ""}>
       {overlayLoading && (
         <div className="boot-loader">
           <div className="fox-orbit">
@@ -5372,7 +5259,7 @@ if (!user) {
   );
 }
 return (
-  <Shell theme={settings.theme || "fox"}>
+  <Shell theme={settings.theme || "fox"} className={isUiSwapping ? "ui-swapping" : ""}>
     {overlayLoading && (
       <div className="boot-loader">
         {/* сюда можешь вставить свой fox-loader, как в других местах */}

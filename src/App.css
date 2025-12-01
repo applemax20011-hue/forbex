@@ -3524,3 +3524,278 @@ body {
   from { opacity: 0; transform: translate(-50%, -20px) scale(0.9); }
   to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
+
+/* ===== ПРОФИЛЬ: НОВЫЕ БЛОКИ ===== */
+
+/* 1. Блок уровня (Level Card) */
+.level-card {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Фоновая иконка уровня */
+.level-card::after {
+  content: "🏆";
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  font-size: 80px;
+  opacity: 0.1;
+  transform: rotate(-15deg);
+  pointer-events: none;
+}
+
+.level-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+
+.level-title {
+  font-size: 12px;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.level-current {
+  font-size: 18px;
+  font-weight: 800;
+  color: #f97316; /* Fox Orange */
+  text-shadow: 0 0 15px rgba(249, 115, 22, 0.4);
+}
+
+.level-xp {
+  font-size: 11px;
+  color: #e5e7eb;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.level-progress-bg {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.level-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f97316, #fb923c, #facc15);
+  border-radius: 99px;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.6);
+  transition: width 1s ease-out;
+}
+
+/* 2. Сетка статистики (Stats Grid) */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* 2 колонки */
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.stat-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: transform 0.2s;
+}
+
+.stat-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f3f4f6;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.stat-value.positive { color: #22c55e; }
+.stat-value.negative { color: #ef4444; }
+
+/* 3. Переключатели (Toggles) */
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.toggle-row:last-child { border-bottom: none; }
+
+.toggle-label {
+  font-size: 13px;
+  color: #e5e7eb;
+}
+
+.toggle-switch {
+  width: 40px;
+  height: 22px;
+  background: #374151;
+  border-radius: 99px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.toggle-switch.active {
+  background: #22c55e; /* Green */
+}
+
+.toggle-thumb {
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.toggle-switch.active .toggle-thumb {
+  transform: translateX(18px);
+}
+
+/* 4. Реферальный баннер */
+.referral-banner {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+.referral-banner::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.2), transparent 60%);
+  animation: pulse-glow 4s infinite;
+}
+
+.referral-title {
+  font-weight: 800;
+  font-size: 16px;
+  margin-bottom: 4px;
+  position: relative;
+  z-index: 1;
+}
+.referral-desc {
+  font-size: 12px;
+  opacity: 0.9;
+  position: relative;
+  z-index: 1;
+  max-width: 80%;
+}
+.referral-icon {
+  position: absolute;
+  right: 10px;
+  bottom: -5px;
+  font-size: 50px;
+  opacity: 0.3;
+  transform: rotate(15deg);
+}
+
+/* ==============================================
+   MAGIC: ГЛОБАЛЬНАЯ ПЛАВНОСТЬ (SMOOTH UI)
+   ============================================== */
+
+/* 1. Плавная смена темы для всех основных элементов */
+body,
+.page-root,
+.app-container,
+.section-block,
+.profile-card,
+.stat-card,
+.wallet-balance-card,
+.settings-chip,
+.toggle-switch,
+.toggle-thumb,
+.nav-tab,
+.trade-chart-card,
+.trade-side,
+.history-block,
+.wallet-modal {
+  /* Плавно меняем фон, цвет текста, рамки и тени */
+  transition: 
+    background-color 0.4s cubic-bezier(0.25, 0.8, 0.25, 1),
+    color 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.4s ease,
+    transform 0.2s ease;
+}
+
+/* 2. Улучшенные переключатели (Toggles) */
+.toggle-switch {
+  /* Более мягкий переход цвета фона */
+  transition: background-color 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.toggle-thumb {
+  /* Пружинистый эффект при движении кружочка */
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* Активное состояние переключателя - более яркое и с тенью */
+.toggle-switch.active {
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.4); /* Зеленое свечение */
+}
+
+/* 3. Анимация "Свопа" (для смены языка/валюты) */
+/* Мы будем добавлять этот класс на секунду при клике */
+.ui-swapping {
+  animation: uiBlurSwap 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes uiBlurSwap {
+  0% { 
+    opacity: 1; 
+    filter: blur(0);
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.8; 
+    filter: blur(4px); /* Размываем контент */
+    transform: scale(0.995); /* Чуть уменьшаем */
+  }
+  100% { 
+    opacity: 1; 
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+/* 4. Плавность при наведении на чипсы настроек */
+.settings-chip {
+  transition: all 0.3s ease !important;
+}
