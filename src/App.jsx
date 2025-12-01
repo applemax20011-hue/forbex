@@ -2627,6 +2627,7 @@ const renderTrade = () => {
             </div>
 
             {/* 🔥 Оверлей поверх графика, когда создаём сделку */}
+{/* 🔥 Оверлей поверх графика, когда создаём сделку */}
             {isTradeProcessing && (
               <div className="trade-overlay">
                 <div className="trade-overlay-orbit">
@@ -2642,6 +2643,8 @@ const renderTrade = () => {
                 </p>
               </div>
             )}
+          </div> {/* <--- ДОБАВИТЬ ЭТОТ ЗАКРЫВАЮЩИЙ ТЕГ */}
+
           {tradeToastVisible && lastOpenedTrade && (
             <div className="trade-toast">
               <div className="trade-toast-dot" />
@@ -2650,17 +2653,12 @@ const renderTrade = () => {
                   {isEN ? "Trade opened" : "Сделка открыта"}
                 </div>
                 <div className="trade-toast-subtitle">
+                  {/* ... код тоста ... */}
                   {lastOpenedTrade.direction === "up"
-                    ? isEN
-                      ? "Up"
-                      : "Вверх"
+                    ? isEN ? "Up" : "Вверх"
                     : lastOpenedTrade.direction === "down"
-                    ? isEN
-                      ? "Down"
-                      : "Вниз"
-                    : isEN
-                    ? "No change"
-                    : "Не изменится"}{" "}
+                    ? isEN ? "Down" : "Вниз"
+                    : isEN ? "No change" : "Не изменится"}{" "}
                   ·{" "}
                   {lastOpenedTrade.amountDisplay.toLocaleString("ru-RU", {
                     minimumFractionDigits: 2,
@@ -2671,6 +2669,7 @@ const renderTrade = () => {
               </div>
             </div>
           )}
+
           {/* Правая часть: форма сделки */}
           <div className="trade-side">
             {/* выбор монеты */}
