@@ -348,6 +348,140 @@ const triggerNotification = (type = 'success') => {
     tg.HapticFeedback.notificationOccurred(type); // success, error, warning
   }
 };
+
+// === КОМПОНЕНТ SLOT NUMBER (TICKER) ===
+const SlotDigit = ({ value }) => {
+  const isNumber = !Number.isNaN(parseInt(value));
+  
+  if (!isNumber) return <span className="slot-char">{value}</span>;
+
+  return (
+    <span className="slot-digit-window">
+      <span 
+        className="slot-digit-tape" 
+        style={{ transform: `translateY(-${value * 10}%)` }}
+      >
+        {/* Рендерим цифры от 0 до 9 */}
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
+          <span key={i} className="slot-digit-val">{i}</span>
+        ))}
+      </span>
+    </span>
+  );
+};
+
+const TickerNumber = ({ value, currency }) => {
+  // Форматируем число (например: 12 345.67)
+  const formatted = value.toLocaleString("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  // Разбиваем строку на символы
+  const chars = formatted.split("");
+
+  return (
+    <span className="ticker-container">
+      {chars.map((char, index) => (
+        <SlotDigit key={index} value={char} />
+      ))}
+    </span>
+  );
+};
+
+// === КОМПОНЕНТ SWIPE BUTTON ===
+const SwipeButton = ({ onConfirm, label, disabled, isEN }) => {
+  const [dragWidth, setDragWidth] = useState(0);
+  const trackRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+
+  const handleStart = (clientX) => {
+    if (disabled || confirmed) return;
+    setIsDragging(true);
+  };
+
+  const handleMove = (clientX) => {
+    if (!isDragging || !trackRef.current || confirmed) return;
+    
+    const rect = trackRef.current.getBoundingClientRect();
+    const offsetX = clientX - rect.left;
+    const maxDrag = rect.width - 50; // 50px - ширина ползунка
+
+    const width = Math.min(Math.max(0, offsetX), maxDrag);
+    setDragWidth(width);
+
+    // Если дотянули до конца (90%)
+    if (width > maxDrag * 0.9) {
+      setConfirmed(true);
+      setIsDragging(false);
+      setDragWidth(maxDrag); // Фиксируем в конце
+      triggerHaptic("success"); // Вибрация
+      onConfirm();
+      
+      // Сброс через 1 сек
+      setTimeout(() => {
+        setConfirmed(false);
+        setDragWidth(0);
+      }, 1000);
+    }
+  };
+
+  const handleEnd = () => {
+    if (confirmed) return;
+    setIsDragging(false);
+    setDragWidth(0); // Возвращаем назад если не дотянули
+  };
+
+  // Touch Events
+  const onTouchMove = (e) => handleMove(e.touches[0].clientX);
+  const onTouchStart = (e) => handleStart(e.touches[0].clientX);
+
+  // Mouse Events
+  const onMouseMove = (e) => {
+    if(isDragging) handleMove(e.clientX);
+  };
+  const onMouseDown = (e) => handleStart(e.clientX);
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', handleEnd);
+    } else {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', handleEnd);
+    }
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', handleEnd);
+    };
+  }, [isDragging]);
+
+  return (
+    <div 
+      className={`swipe-track ${confirmed ? 'confirmed' : ''}`} 
+      ref={trackRef}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={handleEnd}
+      onMouseDown={onMouseDown}
+    >
+      <div className="swipe-text">
+        {confirmed 
+          ? (isEN ? "ORDER SENT!" : "ОРДЕР ОТПРАВЛЕН!") 
+          : (label || (isEN ? "SWIPE TO TRADE" : "СВАЙП ДЛЯ СДЕЛКИ"))}
+      </div>
+      <div className="swipe-text-shimmer" />
+      
+      <div 
+        className="swipe-handle" 
+        style={{ transform: `translateX(${dragWidth}px)` }}
+      >
+        <div className="swipe-arrow">➜</div>
+      </div>
+    </div>
+  );
+};
 // ===== Приложение =====
 
 function App() {
@@ -2608,13 +2742,15 @@ const renderTrade = () => {
                 $
               </div>
             </div>
-			<div className="trade-status-pill">
-  <span className={
-    "trade-status-dot " +
-    (isTradeProcessing || activeTrade ? "live" : "")
-  } />
-  <span>{tradeStatusText}</span>
-</div>
+            <div className="trade-status-pill">
+              <span
+                className={
+                  "trade-status-dot " +
+                  (isTradeProcessing || activeTrade ? "live" : "")
+                }
+              />
+              <span>{tradeStatusText}</span>
+            </div>
 
             <div className={`fake-chart chart-${scenario}`}>
               <ScenarioLightweightChart
@@ -2626,8 +2762,7 @@ const renderTrade = () => {
               <div className="fake-chart-label">{chartLabel}</div>
             </div>
 
-            {/* 🔥 Оверлей поверх графика, когда создаём сделку */}
-{/* 🔥 Оверлей поверх графика, когда создаём сделку */}
+            {/* Оверлей поверх графика */}
             {isTradeProcessing && (
               <div className="trade-overlay">
                 <div className="trade-overlay-orbit">
@@ -2643,8 +2778,9 @@ const renderTrade = () => {
                 </p>
               </div>
             )}
-          </div> {/* <--- ДОБАВИТЬ ЭТОТ ЗАКРЫВАЮЩИЙ ТЕГ */}
+          </div>
 
+          {/* Тост "Сделка открыта" */}
           {tradeToastVisible && lastOpenedTrade && (
             <div className="trade-toast">
               <div className="trade-toast-dot" />
@@ -2653,12 +2789,17 @@ const renderTrade = () => {
                   {isEN ? "Trade opened" : "Сделка открыта"}
                 </div>
                 <div className="trade-toast-subtitle">
-                  {/* ... код тоста ... */}
                   {lastOpenedTrade.direction === "up"
-                    ? isEN ? "Up" : "Вверх"
+                    ? isEN
+                      ? "Up"
+                      : "Вверх"
                     : lastOpenedTrade.direction === "down"
-                    ? isEN ? "Down" : "Вниз"
-                    : isEN ? "No change" : "Не изменится"}{" "}
+                    ? isEN
+                      ? "Down"
+                      : "Вниз"
+                    : isEN
+                    ? "No change"
+                    : "Не изменится"}{" "}
                   ·{" "}
                   {lastOpenedTrade.amountDisplay.toLocaleString("ru-RU", {
                     minimumFractionDigits: 2,
@@ -2697,9 +2838,7 @@ const renderTrade = () => {
             {/* сумма инвестиций */}
             <div className="trade-param-row">
               <div className="trade-input-label">
-                {isEN
-                  ? "Investment amount"
-                  : "Сумма инвестиций"}
+                {isEN ? "Investment amount" : "Сумма инвестиций"}
               </div>
               <div className="trade-input-with-suffix">
                 <input
@@ -2707,18 +2846,14 @@ const renderTrade = () => {
                   min="0"
                   step="0.01"
                   value={tradeForm.amount}
-                  onChange={(e) =>
-                    handleTradeInput("amount", e.target.value)
-                  }
+                  onChange={(e) => handleTradeInput("amount", e.target.value)}
                   placeholder={
                     settings.currency === "RUB"
                       ? "Например, 1000"
                       : "For example, 20"
                   }
                 />
-                <span className="trade-input-suffix">
-                  {currencyCode}
-                </span>
+                <span className="trade-input-suffix">{currencyCode}</span>
               </div>
               <div className="trade-hint">
                 {isEN
@@ -2734,9 +2869,7 @@ const renderTrade = () => {
             {/* направление */}
             <div className="trade-param-row">
               <div className="trade-input-label">
-                {isEN
-                  ? "Where will the price go?"
-                  : "Куда пойдёт курс актива?"}
+                {isEN ? "Where will the price go?" : "Куда пойдёт курс актива?"}
               </div>
               <div className="trade-direction-row">
                 <button
@@ -2747,10 +2880,7 @@ const renderTrade = () => {
                   }
                   onClick={() => handleTradeInput("direction", "up")}
                 >
-                  ⬆{" "}
-                  {isEN
-                    ? "Up (LONG)"
-                    : "Вверх (покупка)"}
+                  ⬆ {isEN ? "Up (LONG)" : "Вверх (покупка)"}
                 </button>
                 <button
                   type="button"
@@ -2760,10 +2890,7 @@ const renderTrade = () => {
                   }
                   onClick={() => handleTradeInput("direction", "flat")}
                 >
-                  ↔{" "}
-                  {isEN
-                    ? "No change"
-                    : "Не изменится"}
+                  ↔ {isEN ? "No change" : "Не изменится"}
                 </button>
                 <button
                   type="button"
@@ -2773,10 +2900,7 @@ const renderTrade = () => {
                   }
                   onClick={() => handleTradeInput("direction", "down")}
                 >
-                  ⬇{" "}
-                  {isEN
-                    ? "Down (SHORT)"
-                    : "Вниз (продажа)"}
+                  ⬇ {isEN ? "Down (SHORT)" : "Вниз (продажа)"}
                 </button>
               </div>
             </div>
@@ -2784,9 +2908,7 @@ const renderTrade = () => {
             {/* коэффициент */}
             <div className="trade-param-row">
               <div className="trade-input-label">
-                {isEN
-                  ? "Multiplier"
-                  : "Коэффициент (x)"}
+                {isEN ? "Multiplier" : "Коэффициент (x)"}
               </div>
               <div className="trade-multiplier-row">
                 {multipliers.map((m) => (
@@ -2808,9 +2930,7 @@ const renderTrade = () => {
             {/* время ожидания */}
             <div className="trade-param-row">
               <div className="trade-input-label">
-                {isEN
-                  ? "Waiting time"
-                  : "Время ожидания"}
+                {isEN ? "Waiting time" : "Время ожидания"}
               </div>
               <div className="trade-duration-row">
                 {durations.map((sec) => (
@@ -2830,32 +2950,26 @@ const renderTrade = () => {
             </div>
 
             {/* ошибка */}
-            {tradeError && (
-              <div className="trade-error">{tradeError}</div>
-            )}
+            {tradeError && <div className="trade-error">{tradeError}</div>}
 
-            {/* активная сделка / кнопка */}
+            {/* АКТИВНАЯ СДЕЛКА ИЛИ SWIPE BUTTON */}
             {activeTrade ? (
               <div className="trade-active-panel">
                 <div className="trade-active-title">
-                  {isEN
-                    ? "Trade in progress"
-                    : "Сделка в процессе"}
+                  {isEN ? "Trade in progress" : "Сделка в процессе"}
                 </div>
-				{activeTrade && (
-  <div className="trade-progress-bar">
-    <div
-      className="trade-progress-fill"
-      style={{
-        width: `${
-          ((activeTrade.duration - tradeCountdown) /
-            activeTrade.duration) *
-          100
-        }%`,
-      }}
-    />
-  </div>
-)}
+                <div className="trade-progress-bar">
+                  <div
+                    className="trade-progress-fill"
+                    style={{
+                      width: `${
+                        ((activeTrade.duration - tradeCountdown) /
+                          activeTrade.duration) *
+                        100
+                      }%`,
+                    }}
+                  />
+                </div>
                 <div className="trade-active-row">
                   <span>
                     {currentCoin.symbol}/USDT ·{" "}
@@ -2878,13 +2992,11 @@ const renderTrade = () => {
                 </div>
               </div>
             ) : (
-              <button
-                type="button"
-                className="trade-start-btn"
-                onClick={handleStartTrade}
-              >
-                {isEN ? "Open trade" : "Открыть сделку"}
-              </button>
+              <SwipeButton
+                onConfirm={handleStartTrade}
+                label={isEN ? "SWIPE TO INVEST" : "СВАЙП ДЛЯ СДЕЛКИ"}
+                isEN={isEN}
+              />
             )}
 
             {/* результат последней сделки */}
@@ -2892,9 +3004,7 @@ const renderTrade = () => {
               <div
                 className={
                   "trade-result " +
-                  (lastTradeResult.status === "win"
-                    ? "win"
-                    : "lose")
+                  (lastTradeResult.status === "win" ? "win" : "lose")
                 }
               >
                 {lastTradeResult.message}
@@ -3082,8 +3192,8 @@ const renderWallet = () => {
             <div className="wallet-badge">
               {isEN ? "Main balance" : "Основной баланс"}
             </div>
-            <div className="wallet-amount">
-   <AnimatedNumber value={balance} currency={settings.currency} /> {currencyCode}
+<div className="wallet-amount">
+   <TickerNumber value={balance} currency={settings.currency} /> {currencyCode}
 </div>
             <div className="wallet-actions-row">
               <button
@@ -5522,19 +5632,22 @@ return (
     )}
 
 {toast && (
-          <div className={`toast-root toast-${toast.type}`}>
-            <div className="toast-title">
-              {toast.type === "success"
-                ? isEN
-                  ? "Notification from FORBEX TRADE"
-                  : "Уведомление от FORBEX TRADE"
-                : isEN
-                ? "Operation status"
-                : "Статус операции"}
-            </div>
-            <div className="toast-text">{toast.text}</div>
-          </div>
-        )}
+  <div className={`toast-root toast-${toast.type} fade-in`}>
+    <div className="toast-icon">
+      {toast.type === "success" ? "✅" : toast.type === "error" ? "❌" : "ℹ️"}
+    </div>
+    <div className="toast-content">
+      <div className="toast-title">
+        {toast.type === "success"
+          ? isEN ? "Success" : "Успешно"
+          : isEN ? "Error" : "Ошибка"}
+      </div>
+      <div className="toast-text">{toast.text}</div>
+    </div>
+    {/* Полоска времени (опционально) */}
+    <div className="toast-progress"></div> 
+  </div>
+)}
       </Shell>
     );
 }

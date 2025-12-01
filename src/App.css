@@ -35,9 +35,13 @@ body {
   margin: 0;
   padding: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-weight: 600; /* все буквы будут жирными */
-  background-color: var(--brand-bg);
-  color: #e5e7eb;
+  font-weight: 600;
+  
+  /* Используем переменные! */
+  background: var(--bg-body); 
+  color: var(--text-main); 
+  
+  transition: background 0.3s ease, color 0.3s ease; /* Плавный переход */
 }
 
 /* ===== FIX: Глобальный скролл ===== */
@@ -2995,16 +2999,14 @@ html,
 body {
   margin: 0;
   padding: 0;
-  min-height: 100%;
-  max-width: 100%;
-  /* ВАЖНО: никакого overflow: hidden тут */
-  overflow-x: hidden;
-  overflow-y: auto;
-
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-weight: 600;
-  background-color: var(--brand-bg);
-  color: #e5e7eb;
+  
+  /* Используем переменные! */
+  background: var(--bg-body); 
+  color: var(--text-main); 
+  
+  transition: background 0.3s ease, color 0.3s ease; /* Плавный переход */
 }
 
 .settings-chip {
@@ -3327,3 +3329,198 @@ body {
   font-family: "JetBrains Mono", monospace;
 }
 /* No extra } here */
+
+/* В самом начале файла или после :root */
+
+/* Дефолтная тема (Fox / Dark) */
+:root {
+  --bg-body: #030304;
+  --text-main: #e5e7eb; /* Светлый текст */
+  --text-muted: #9ca3af;
+  --surface-main: rgba(15, 23, 42, 0.95);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+}
+
+/* Светлая тема (Day) */
+.theme-day {
+  --bg-body: #f3f4f6; /* Светло-серый фон, чтобы не резало глаза */
+  --text-main: #111827; /* Темный, почти черный текст */
+  --text-muted: #4b5563; /* Серый текст */
+  --surface-main: #ffffff; /* Белые карточки */
+  --border-subtle: rgba(0, 0, 0, 0.1); /* Темные рамки */
+  
+  /* Переопределяем цвета для графиков и кнопок */
+  --brand-bg: #ffffff; 
+}
+
+/* === SLOT TICKER STYLES === */
+.ticker-container {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 700;
+  line-height: 1;
+  overflow: hidden;
+}
+
+.slot-digit-window {
+  display: inline-block;
+  height: 1em; /* Высота одной цифры */
+  overflow: hidden;
+  position: relative;
+  vertical-align: bottom;
+}
+
+.slot-digit-tape {
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); /* Пружинистый эффект */
+}
+
+.slot-digit-val {
+  height: 1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slot-char {
+  display: inline-block;
+}
+
+/* === SWIPE BUTTON STYLES === */
+.swipe-track {
+  position: relative;
+  width: 100%;
+  height: 54px;
+  background: #111827;
+  border-radius: 999px;
+  border: 1px solid #374151;
+  overflow: hidden;
+  margin-top: 12px;
+  user-select: none;
+  cursor: pointer;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
+  transition: all 0.3s;
+}
+
+.swipe-track.confirmed {
+  background: #22c55e;
+  border-color: #22c55e;
+}
+
+.swipe-handle {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 46px;
+  height: 46px;
+  background: linear-gradient(135deg, #f97316, #fb923c);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(249, 115, 22, 0.5);
+  z-index: 2;
+  /* Убираем transition при перетаскивании, чтобы не лагало */
+}
+
+.swipe-arrow {
+  color: #000;
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.swipe-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  text-transform: uppercase;
+  z-index: 1;
+}
+
+/* Эффект блеска текста */
+.swipe-text-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  transform: skewX(-20deg) translateX(-150%);
+  animation: shimmer 2s infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@keyframes shimmer {
+  100% { transform: skewX(-20deg) translateX(150%); }
+}
+
+/* === ENHANCED TOASTS === */
+.toast-root {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  
+  min-width: 320px;
+  max-width: 90%;
+  padding: 12px 16px;
+  
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  
+  animation: toastIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.toast-success {
+  background: rgba(6, 78, 59, 0.85);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  /* Зеленое свечение */
+  box-shadow: 0 0 20px rgba(52, 211, 153, 0.2);
+}
+
+.toast-error {
+  background: rgba(127, 29, 29, 0.85);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  /* Красное свечение */
+  box-shadow: 0 0 20px rgba(248, 113, 113, 0.2);
+}
+
+.toast-icon {
+  font-size: 20px;
+}
+
+.toast-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.toast-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.toast-text {
+  font-size: 11px;
+  color: rgba(255,255,255,0.8);
+  line-height: 1.2;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, -20px) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
