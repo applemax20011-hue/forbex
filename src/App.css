@@ -3203,3 +3203,48 @@ body {
   font-size: 18px !important;
   text-align: center;
 }
+
+/* === FIX: модалка кошелька по центру даже на мобилке === */
+@media (max-width: 600px) {
+  .wallet-modal-backdrop {
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 16px !important;
+    overflow: hidden; /* фон не скроллится, скролл только внутри окна */
+  }
+
+  .wallet-modal {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    right: auto;
+
+    width: 100%;
+    max-width: 480px;           /* аккуратная ширина на телефоне */
+    max-height: 90vh;           /* чтобы не вылазила за экран */
+    overflow-y: auto !important;
+
+    border-radius: 28px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+    padding-bottom: 16px !important;
+
+    animation: centerModalIn 0.25s ease-out;
+  }
+
+  /* убираем «полоску» для шторки */
+  .wallet-modal::before {
+    display: none !important;
+  }
+}
+
+@keyframes centerModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
