@@ -3136,3 +3136,103 @@ body {
   background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(0, 0, 0, 0)) !important;
   border-color: #f97316 !important;
 }
+
+/* ===== МОДАЛЬНЫЕ ОКНА (FIXED SCROLL & CENTER) ===== */
+
+/* 1. Задний фон (затемнение) */
+.wallet-modal-backdrop {
+  position: fixed;
+  inset: 0; /* Растягиваем на весь экран */
+  background: rgba(3, 7, 18, 0.85); /* Темный фон */
+  backdrop-filter: blur(6px); /* Размытие фона */
+  z-index: 9999; /* ВАЖНО: Выше чем нижняя навигация (у нее 40) */
+  display: flex;
+  align-items: center; /* Центрируем по вертикали */
+  justify-content: center; /* Центрируем по горизонтали */
+  padding: 20px; /* Отступы от краев экрана */
+  opacity: 0;
+  animation: backdropFadeIn 0.2s forwards;
+}
+
+/* 2. Само окно */
+.wallet-modal {
+  position: relative;
+  width: 100%;
+  max-width: 420px; /* Оптимальная ширина */
+  background: #0b0f1a; /* Цвет фона окна */
+  border: 1px solid rgba(249, 115, 22, 0.3); /* Оранжевая рамка */
+  border-radius: 24px; /* Скругления */
+  box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+  
+  /* === ГЛАВНЫЙ ФИКС СКРОЛЛА === */
+  max-height: 90vh; /* Окно не может быть выше 90% экрана */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Скрываем скролл самого контейнера */
+  animation: modalPopUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Заголовок и крестик фиксируем сверху, чтобы не уезжали */
+.wallet-modal-title {
+  flex-shrink: 0;
+  padding: 16px 16px 8px;
+  background: #0b0f1a;
+  z-index: 10;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+/* Крестик */
+.wallet-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.05);
+  border: none;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 20;
+}
+
+/* === КОНТЕНТ (Скроллится только эта часть) === */
+.wallet-modal-sub,
+.wallet-methods,
+.payment-details,
+.wallet-modal-input-group {
+  padding: 0 16px; /* Отступы по бокам */
+}
+
+/* Обертка для скроллящегося контента */
+/* ВНИМАНИЕ: Если в HTML нет общего дива для контента, 
+   CSS применит скролл к самому модальному окну, если мы разрешим overflow-y */
+.wallet-modal {
+  overflow-y: auto !important; /* Разрешаем скролл внутри окна */
+  -webkit-overflow-scrolling: touch; /* Плавный скролл на iPhone */
+}
+
+/* Анимации */
+@keyframes backdropFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalPopUp {
+  from { 
+    opacity: 0; 
+    transform: scale(0.95) translateY(10px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1) translateY(0); 
+  }
+}
+
+/* Убираем перекрытие нижним меню (на всякий случай отступ снизу внутри модалки) */
+.wallet-modal-actions {
+  padding-bottom: 20px; 
+}
