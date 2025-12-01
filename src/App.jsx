@@ -5538,8 +5538,8 @@ return (
             <div className="toast-title">
               {toast.type === "success"
                 ? isEN
-                  ? "Balance updated"
-                  : "Баланс пополнен"
+                  ? "Notification from FORBEX TRADE"
+                  : "Уведомление от FORBEX TRADE"
                 : isEN
                 ? "Operation status"
                 : "Статус операции"}
