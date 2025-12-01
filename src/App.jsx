@@ -1387,18 +1387,30 @@ useEffect(() => {
 
 // ... внутри postgres_changes для topups ...
         if (row.status === "approved") {
+          // === ДОБАВЛЯЕМ САЛЮТ СЮДА ===
+          triggerNotification("success");
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ["#22c55e", "#ffffff"],
+          });
+          // ============================
+
           setToast({
             type: "success",
             text: isEN
               ? `Balance topped up by ${amountStr} ${currency}`
-              : `Ваш баланс был успешно пополнен на ${amountStr} ${currency}`, // <--- ТВОЙ ТЕКСТ
+              : `Ваш баланс был успешно пополнен на ${amountStr} ${currency}`,
           });
         } else if (row.status === "rejected") {
+          // ... тут без конфетти
+          triggerNotification("error"); // Вибрация ошибки
           setToast({
             type: "error",
             text: isEN
               ? "Deposit rejected. Contact support."
-              : "Заявка на пополнение была отклонена. Обратитесь в техническую поддержку.", // <--- ТВОЙ ТЕКСТ
+              : "Заявка на пополнение была отклонена. Обратитесь в техническую поддержку.",
           });
         }
       }
@@ -2518,14 +2530,6 @@ const handleDepositSendReceipt = async () => {
       setWalletModal(null);
       resetDepositFlow();
       
-      // 4. Опционально: Запускаем салют (если хочешь WOW эффект)
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.7 },
-        colors: ['#22c55e', '#ffffff'] // Зеленый салют
-      });
-      
     }, 1500);
 
   } catch (e) {
@@ -2537,27 +2541,30 @@ const handleDepositSendReceipt = async () => {
 
 // === ЛОГИКА ПОКУПКИ КРИПТЫ (SPOT) ===
   const handleSpotBuy = async () => {
-    if (!spotBuyAmount || parseFloat(spotBuyAmount) <= 0) return;
+    // 1. Проверка ввода
+    if (!spotBuyAmount || parseFloat(spotBuyAmount) <= 0) {
+       setToast({ type: "error", text: isEN ? "Enter amount" : "Введите сумму" });
+       return;
+    }
+    
     const amountRub = parseFloat(spotBuyAmount);
     
+    // 2. Проверка баланса
     if (amountRub > balance) {
       setToast({ type: "error", text: isEN ? "Insufficient funds" : "Недостаточно средств" });
+      triggerHaptic("error");
       return;
     }
 
-    const coin = coinModal; // Монета, которую открыли
+    const coin = coinModal; 
     const coinPriceUsd = coin.price;
-    const coinPriceRub = coinPriceUsd * USD_RATE; // Курс монеты в рублях
-    const cryptoAmount = amountRub / coinPriceRub; // Сколько купим монет
+    const coinPriceRub = coinPriceUsd * USD_RATE; 
+    const cryptoAmount = amountRub / coinPriceRub; 
 
-    setOverlayLoading(true);
+    setOverlayLoading(true); // Включаем лоадер
 
     try {
-      // 1. Списываем баланс (визуально)
-      setBalance(prev => prev - amountRub);
-
-      // 2. Обновляем/Добавляем запись в БД
-      // Сначала ищем, есть ли уже эта монета у юзера в списке userAssets
+      // 3. Обновляем активы в базе
       const existing = userAssets.find(a => a.symbol === coin.symbol);
       const newAmount = (existing ? Number(existing.amount) : 0) + cryptoAmount;
 
@@ -2565,24 +2572,28 @@ const handleDepositSendReceipt = async () => {
         user_id: user.id,
         symbol: coin.symbol,
         amount: newAmount,
-      }, { onConflict: 'user_id, symbol' }); // Важно: обновляем, если есть, создаем, если нет
+      }, { onConflict: 'user_id, symbol' });
 
       if (error) throw error;
 
-      // 3. Перезагружаем данные кошелька
+      // 4. Если всё ок: списываем баланс (визуально) и обновляем данные
+      setBalance(prev => prev - amountRub);
       await loadWalletDataFromSupabase();
 
       setCoinModal(null); // Закрываем окно
       setSpotBuyAmount("");
       
-      // Салют и уведомление
+      triggerNotification("success");
       confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
       setToast({ type: "success", text: isEN ? `Bought ${cryptoAmount.toFixed(6)} ${coin.symbol}` : `Куплено ${cryptoAmount.toFixed(6)} ${coin.symbol}` });
 
     } catch (e) {
       console.error(e);
-      setToast({ type: "error", text: "Ошибка при покупке" });
+      triggerHaptic("error");
+      // Более понятная ошибка
+      setToast({ type: "error", text: "Ошибка соединения с базой данных. Попробуйте позже." });
     } finally {
+      // 5. ВАЖНО: Всегда выключаем лоадер, чтобы не зависло
       setOverlayLoading(false);
     }
   };

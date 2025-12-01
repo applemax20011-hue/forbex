@@ -1809,36 +1809,42 @@ body {
   100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
+/* ===== FIX: УВЕДОМЛЕНИЯ (TOAST) ===== */
 .toast-root {
   position: fixed;
-  top: 12px; /* Отступ сверху */
-  left: 50%; /* Центрируем по горизонтали */
-  transform: translateX(-50%); /* Сдвиг для точного центра */
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   
-  width: auto;
-  min-width: 300px;
+  /* Максимальный слой, поверх всех модалок */
+  z-index: 2147483647 !important; 
+  
+  min-width: 280px;
   max-width: 90%;
-  
   padding: 12px 16px;
-  border-radius: 99px; /* Полностью круглые края */
-  
-  /* Стекло и тень */
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   
   display: flex;
-  flex-direction: column;
-  align-items: center; /* Текст по центру */
-  text-align: center;
+  align-items: center;
+  gap: 12px;
   
-  z-index: 9999;
-  animation: toastSlideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.98);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+  
+  animation: toastSlideDown 0.4s ease-out forwards;
+}
+
+/* Делаем текст ошибки тоньше и читабельнее */
+.toast-title {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #fff;
+  margin-bottom: 2px;
 }
 
 @keyframes toastSlideDown {
-  from { transform: translate(-50%, -150%); opacity: 0; }
+  from { transform: translate(-50%, -100%); opacity: 0; }
   to   { transform: translate(-50%, 0); opacity: 1; }
 }
 
@@ -1854,12 +1860,6 @@ body {
   border: 1px solid #f87171;
   color: #fef2f2;
   animation: slideInRight 0.4s ease, pulseRed 2s infinite; /* Пульсация */
-}
-
-.toast-title {
-  font-weight: 700;
-  margin-bottom: 4px;
-  font-size: 13px;
 }
 
 .toast-text {
@@ -3802,18 +3802,24 @@ body,
 
 /* ===== FIX: МОДАЛКА МОНЕТЫ И СПОТ ===== */
 
-/* Убираем растягивание, делаем авто-высоту */
 .coin-modal-wrapper {
   width: 100%;
   max-width: 480px;
   background: rgba(12, 12, 14, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px 24px 0 0; /* Шторка снизу на мобилках */
-  padding-bottom: 30px;
+  
+  /* Скругление только сверху для мобилок */
+  border-radius: 24px 24px 0 0; 
+  
   display: flex;
   flex-direction: column;
-  max-height: 85vh; /* Максимальная высота, но не фиксированная */
+  
+  /* ВАЖНО: Авто-высота, чтобы не тянуло пустой блок */
+  height: auto; 
+  max-height: 85vh; 
+  
   animation: slideUpModal 0.3s ease-out;
+  padding-bottom: 30px; /* Отступ снизу для удобства */
 }
 
 @media (min-width: 600px) {
