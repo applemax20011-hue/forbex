@@ -1464,29 +1464,41 @@ body {
   transform: translateY(-1px);
 }
 
-/* ===== Auth ===== */
-.auth-screen {
-  flex: 1;
-  min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* экран авторизации */
+.auth-screen{
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  min-height:100dvh;
+  /* небольшой вертикальный воздух + поддержка вырезов iOS */
+  padding: calc(env(safe-area-inset-top, 0px) + 16px) 0 24px;
 }
 
-.auth-card,
-.auth-card input,
-.auth-card button {
-  font-family: inherit;
-}
-
-.auth-card {
-  background: #020617;
+/* сама карточка */
+.auth-card{
+  /* центр и зазор по бокам */
+  margin: 0 auto;
+  width: min(560px, 100% - 32px);   /* ~16px слева/справа на любом экране */
+  /* можно сделать компактнее — поставь 100% - 40px */
   border-radius: 20px;
-  border: 1px solid #111827;
-  padding: 18px 18px 20px;
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.9);
-  width: 100%;
-  max-width: 420px;
+  padding: 20px 16px;
+  background: rgba(10,14,22,0.96);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 10px 40px rgba(0,0,0,.35);
+}
+
+/* на очень маленьких экранах чуть больше воздуха */
+@media (max-width: 360px){
+  .auth-card{ width: min(560px, 100% - 40px); } /* по 20px слева/справа */
+}
+
+/* на планшетах можно позволить шире */
+@media (min-width: 768px){
+  .auth-card{ width: min(680px, 100% - 64px); }
+}
+.auth-card{
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
 @keyframes authPop {

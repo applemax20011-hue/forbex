@@ -65,12 +65,6 @@ const STORAGE_KEYS = {
   stats: "forbex_stats",            // для активных юзеров и сделок
 };
 
-const REMEMBER_KEYS = {
-  flag: "forbex_remember",
-  login: "forbex_remember_login",
-  email: "forbex_remember_email",
-};
-
 // Курс для отображения баланса. Поставь свой.
 const USD_RATE = 100; // 1 USD = 100 RUB
 // где-то сверху файла, рядом с константами
@@ -108,10 +102,11 @@ function FoxBackground() {
   );
 }
 
-function Shell({ children, theme = "fox", uiFx = null }) {
+function Shell({ children, theme = "fox" }) {
   const isFox = theme === "fox";
+
   return (
-    <div className={`page-root theme-${theme} ${uiFx ? "ui-swap" : ""}`}>
+    <div className={`page-root theme-${theme}`}>
       {isFox && <FoxBackground />}
       <div className="app-container">{children}</div>
     </div>
@@ -295,26 +290,7 @@ function Loader({ title, subtitle }) {
 function App() {
   // auth
   const [user, setUser] = useState(null);
-const contentRef = useRef(null);
-
-const scrollToTop = () => {
-  const doScroll = () => {
-    try {
-      window.scrollTo(0, 0);
-      // Фолбэки для webview/телеграм/мобильных браузеров:
-      document.body.scrollTop = 0;
-      document.documentElement.scrollTop = 0;
-    } catch {}
-  };
-  // Скроллим несколько раз, чтобы поймать рефлоу/перерисовку
-  requestAnimationFrame(() => {
-    doScroll();
-    setTimeout(doScroll, 0);
-    setTimeout(doScroll, 100);
-  });
-};
-
-  const [showLanding, setShowLanding] = useState(true);
+  const [showLanding, setShowLanding] = useState(!localStorage.getItem("forbex_user"));
   const [authMode, setAuthMode] = useState("register"); // "login" | "register"
   const [authForm, setAuthForm] = useState({
   login: "",
@@ -326,15 +302,7 @@ const scrollToTop = () => {
 });
 
   const [navClickId, setNavClickId] = useState(null);
-const [uiFx, setUiFx] = useState(null); // 'lang' | 'currency' | 'theme' | null
 
-const applyWithFx = (patch, kind) => {
-  setUiFx(kind);
-  // применяем настройку сразу
-  updateSettings(patch);
-  // убираем эффект через 1 секунду
-  setTimeout(() => setUiFx(null), 1000);
-};
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -357,7 +325,7 @@ const applyWithFx = (patch, kind) => {
   // доп. шаг после регистрации (выбор языка/валюты)
   const [pendingUser, setPendingUser] = useState(null);
   const [postRegisterStep, setPostRegisterStep] = useState(false);
-  const [tempSettings, setTempSettings] = useState({
+const [tempSettings, setTempSettings] = useState({
   language: "ru",
   currency: "RUB",
   theme: "fox",
@@ -521,18 +489,9 @@ useEffect(() => {
   return () => clearTimeout(t);
 }, [navClickId]);
 
-useEffect(() => {
-  scrollToTop();
-}, [activeTab]);
-
-useEffect(() => {
-  if (showLanding) scrollToTop();
-}, [showLanding]);
-
 const handleTabClick = (id) => {
   setActiveTab(id);
   setNavClickId(id);
-  scrollToTop();
 };
 
 const accountStats = useMemo(() => {
@@ -669,19 +628,39 @@ useEffect(() => {
 
 useEffect(() => {
   const bootTimer = setTimeout(() => setBooting(false), 1300);
+
   try {
-  const remember = localStorage.getItem(REMEMBER_KEYS.flag) === "true";
-  if (remember) {
-    const rememberedLogin = localStorage.getItem(REMEMBER_KEYS.login) || "";
-    const rememberedEmail = localStorage.getItem(REMEMBER_KEYS.email) || "";
-    setAuthForm((prev) => ({
-      ...prev,
-      remember: true,
-      login: rememberedLogin || prev.login,
-      email: rememberedEmail || prev.email,
-    }));
+    const savedUser = localStorage.getItem(STORAGE_KEYS.user);
+    const savedRemember = localStorage.getItem(STORAGE_KEYS.remember);
+    const savedSettings = localStorage.getItem(STORAGE_KEYS.settings);
+
+    const rememberFlag = savedRemember === "true";
+
+    if (savedUser && rememberFlag) {
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
+      setShowLanding(false);
+    }
+
+    if (rememberFlag) {
+      setAuthForm((prev) => ({ ...prev, remember: true }));
+    }
+
+    if (savedSettings) {
+      try {
+        const parsedSettings = JSON.parse(savedSettings);
+        setSettings((prev) => ({
+          ...prev,
+          ...parsedSettings,
+        }));
+      } catch (e) {
+        console.warn("parse settings error:", e);
+      }
+    }
+  } catch (e) {
+    console.warn("init error:", e);
   }
-} catch {}
+
   return () => clearTimeout(bootTimer);
 }, []);
   
@@ -1208,6 +1187,12 @@ const updateSettings = (patch) => {
   setSettings((prev) => {
     const next = { ...prev, ...patch };
 
+    try {
+      localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next));
+    } catch (e) {
+      console.warn("localStorage settings update error:", e);
+    }
+
     if (user && user.id) {
       (async () => {
         try {
@@ -1359,17 +1344,6 @@ const handleRegister = async () => {
       email: inserted?.email ?? trimmedEmail,
       createdAt: createdAtTs,
     };
-	
-	
-if (authForm.remember) {
-  localStorage.setItem(REMEMBER_KEYS.flag, "true");
-  localStorage.setItem(REMEMBER_KEYS.login, (authForm.login || "").trim());
-  localStorage.setItem(REMEMBER_KEYS.email, (authForm.email || "").trim().toLowerCase());
-} else {
-  localStorage.removeItem(REMEMBER_KEYS.flag);
-  localStorage.removeItem(REMEMBER_KEYS.login);
-  localStorage.removeItem(REMEMBER_KEYS.email);
-}
 
     // шаг выбора языка/валюты — оставляем твою логику
     setPendingUser(newUser);
@@ -1378,6 +1352,18 @@ if (authForm.remember) {
       language: "ru",
       currency: "RUB",
     });
+
+    // сохраним пароль/remember и timestamp, чтобы completeRegistration мог это доиспользовать
+    try {
+localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+localStorage.setItem(
+  STORAGE_KEYS.registrationTs,
+  String(createdAtTs)
+);
+
+    } catch (e) {
+      console.warn("localStorage error (register):", e);
+    }
   } catch (e) {
     console.error("handleRegister error:", e);
     setAuthError("Неожиданная ошибка. Попробуйте ещё раз.");
@@ -1389,20 +1375,41 @@ if (authForm.remember) {
 const completeRegistration = () => {
   if (!pendingUser) return;
 
+  const { password, remember } = authForm;
   const finalSettings = { ...settings, ...tempSettings };
   const nowIso = new Date().toISOString();
   const nowTs = Date.now();
 
-  // показываем мягкую анимацию
   showOverlay(
     "FORBEX TRADE",
     "Загрузка торгового терминала…",
     () => {
-      // применяем настройки локально (в памяти)
+      // применяем настройки локально
       setSettings(finalSettings);
       setUser(pendingUser);
 
-      // локальная история (в памяти)
+      // localStorage
+      try {
+        localStorage.setItem(
+          STORAGE_KEYS.user,
+          JSON.stringify(pendingUser)
+        );
+localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+localStorage.setItem(
+  STORAGE_KEYS.settings,
+  JSON.stringify(finalSettings)
+);
+        if (!localStorage.getItem(STORAGE_KEYS.registrationTs)) {
+          localStorage.setItem(
+            STORAGE_KEYS.registrationTs,
+            String(pendingUser.createdAt || nowTs)
+          );
+        }
+      } catch (e) {
+        console.warn("localStorage error (completeRegistration):", e);
+      }
+
+      // пишем в локальную историю входов
       const entry = {
         id: nowTs,
         type: "register",
@@ -1419,19 +1426,19 @@ const completeRegistration = () => {
           if (pendingUser.id) {
             // user_settings
             await supabase.from("user_settings").upsert({
-              user_id: pendingUser.id,
-              language: finalSettings.language,
-              currency: finalSettings.currency,
-              theme: finalSettings.theme || "fox",
-            });
+  user_id: pendingUser.id,
+  language: finalSettings.language,
+  currency: finalSettings.currency,
+  theme: finalSettings.theme || "fox",
+});
 
-            // login_history
+            // login_history (подправь названия колонок, если у тебя другие)
             await supabase.from("login_history").insert({
               user_id: pendingUser.id,
-              event_type: "register",
+              event_type: "register",   // если колонка называется type – поменяй на type
               login: pendingUser.login,
               email: pendingUser.email,
-              ts: nowIso,
+              ts: nowIso,               // если колонка created_at – поставь created_at: nowIso
               device: navigator.userAgent || "",
             });
           }
@@ -1440,16 +1447,8 @@ const completeRegistration = () => {
         }
       })();
 
-      // чистим временные состояния шага регистрации
       setPendingUser(null);
       setPostRegisterStep(false);
-
-      // очистим поля паролей в форме
-      setAuthForm((prev) => ({
-        ...prev,
-        password: "",
-        confirmPassword: "",
-      }));
     }
   );
 };
@@ -1458,31 +1457,28 @@ const handleLogin = async () => {
   const { login, email, password, remember } = authForm;
   const loginOrEmail = (login || email || "").trim();
 
-  // локальные ключи для remember-me (не храним пароль!)
-  const REMEMBER_KEYS = {
-    flag: "forbex_remember",
-    login: "forbex_remember_login",
-    email: "forbex_remember_email",
-  };
-
   if (!loginOrEmail || !password.trim()) {
     setAuthError("Введите логин/email и пароль.");
     return;
   }
 
-  // минимальная длительность лоадера
+  // для контроля минимальной длительности лоадера
   const startedAt = Date.now();
+
   const finishWithDelay = (cb) => {
     const elapsed = Date.now() - startedAt;
     const rest = Math.max(0, MIN_LOGIN_OVERLAY_MS - elapsed);
     setTimeout(() => {
-      setOverlayLoading(false);
-      cb && cb();
+      setOverlayLoading(false); // прячем анимацию
+      cb && cb();               // потом уже показываем ошибку / что угодно
     }, rest);
   };
 
   setAuthError("");
-  setOverlayText({ title: "FORBEX TRADE", subtitle: "Проверяем данные…" });
+  setOverlayText({
+    title: "FORBEX TRADE",
+    subtitle: "Проверяем данные…",
+  });
   setOverlayLoading(true);
 
   try {
@@ -1497,26 +1493,32 @@ const handleLogin = async () => {
 
     if (error) {
       console.error("handleLogin select error:", error);
-      return finishWithDelay(() =>
-        setAuthError("Ошибка сервера. Попробуйте ещё раз.")
+      finishWithDelay(() =>
+        setAuthError("Ошибка при обращении к серверу. Попробуйте ещё раз.")
       );
+      return;
     }
 
     const row = rows?.[0];
     if (!row) {
-      return finishWithDelay(() =>
+      finishWithDelay(() =>
         setAuthError("Аккаунт с таким логином или email не найден.")
       );
+      return;
     }
 
     // проверяем пароль (SHA-256)
     const enc = new TextEncoder().encode(password);
     const buf = await crypto.subtle.digest("SHA-256", enc);
     const hashArray = Array.from(new Uint8Array(buf));
-    const passwordHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    const passwordHash = hashArray
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
 
     if (row.password_hash !== passwordHash) {
-      return finishWithDelay(() => setAuthError("Неверный пароль."));
+      // ❗ Лоадер крутится минимум MIN_LOGIN_OVERLAY_MS, потом Неверный пароль
+      finishWithDelay(() => setAuthError("Неверный пароль."));
+      return;
     }
 
     const createdAtTs = row.created_at
@@ -1530,37 +1532,56 @@ const handleLogin = async () => {
       createdAt: createdAtTs,
     };
 
-    // грузим настройки пользователя из user_settings (если есть)
+    // грузим настройки пользователя из user_settings
     let loadedSettings = null;
     try {
-      const { data: sRow, error: sErr } = await supabase
-        .from("user_settings")
-        .select("language, currency, theme")
-        .eq("user_id", row.id)
-        .maybeSingle();
+const { data: sRow, error: sErr } = await supabase
+  .from("user_settings")
+  .select("language, currency, theme")
+  .eq("user_id", row.id)
+  .maybeSingle();
 
-      if (!sErr && sRow) {
-        loadedSettings = {
-          language: sRow.language || "ru",
-          currency: sRow.currency || "RUB",
-          theme: sRow.theme || "fox",
-        };
+if (!sErr && sRow) {
+  loadedSettings = {
+    language: sRow.language || "ru",
+    currency: sRow.currency || "RUB",
+    theme: sRow.theme || "fox",
+  };
       }
     } catch (e) {
       console.error("load user_settings error:", e);
     }
 
-    const finalSettings = {
-      language: loadedSettings?.language || "ru",
-      currency: loadedSettings?.currency || "RUB",
-      theme: loadedSettings?.theme || "fox",
-    };
+const finalSettings = {
+  language: loadedSettings?.language || "ru",
+  currency: loadedSettings?.currency || "RUB",
+  theme: loadedSettings?.theme || "fox",
+};
 
-    // ставим в память
+    // обновляем стейты (они могут обновиться пока крутится лоадер — это ок)
     setUser(userWithCreatedAt);
     setSettings((prev) => ({ ...prev, ...finalSettings }));
 
-    // локальная история (в памяти)
+    // localStorage
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.user,
+        JSON.stringify(userWithCreatedAt)
+      );
+      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
+      localStorage.setItem(
+        STORAGE_KEYS.registrationTs,
+        String(createdAtTs)
+      );
+      localStorage.setItem(
+        STORAGE_KEYS.settings,
+        JSON.stringify(finalSettings)
+      );
+    } catch (e) {
+      console.warn("localStorage error (login):", e);
+    }
+
+    // локальная история логинов
     const nowTs = Date.now();
     const entry = {
       id: nowTs,
@@ -1572,7 +1593,7 @@ const handleLogin = async () => {
     };
     setLoginHistory((prev) => [entry, ...prev]);
 
-    // лог в Supabase (не блокируем)
+    // лог в Supabase (асинхронно, не влияет на лоадер)
     try {
       const nowIso = new Date().toISOString();
       await supabase.from("login_history").insert({
@@ -1587,25 +1608,7 @@ const handleLogin = async () => {
       console.error("supabase login_history login error:", e);
     }
 
-    // remember-me (сохраняем ТОЛЬКО логин/email по галочке)
-    try {
-      if (remember) {
-        localStorage.setItem(REMEMBER_KEYS.flag, "true");
-        localStorage.setItem(REMEMBER_KEYS.login, (row.login || "").trim());
-        localStorage.setItem(REMEMBER_KEYS.email, (row.email || "").trim().toLowerCase());
-      } else {
-        localStorage.removeItem(REMEMBER_KEYS.flag);
-        localStorage.removeItem(REMEMBER_KEYS.login);
-        localStorage.removeItem(REMEMBER_KEYS.email);
-      }
-    } catch (e) {
-      console.warn("remember-me localStorage error:", e);
-    }
-
-    // чистим пароли в форме
-    setAuthForm((prev) => ({ ...prev, password: "", confirmPassword: "" }));
-
-    // закрываем лоадер с минимальной задержкой
+    // ✅ Успешный кейс: просто скрываем лоадер с задержкой
     finishWithDelay();
   } catch (e) {
     console.error("handleLogin error:", e);
@@ -1644,6 +1647,12 @@ const handleLogout = async () => {
       console.error(e);
     }
   }
+
+  // === ВАЖНО: Очищаем localStorage, чтобы браузер "забыл" нас ===
+  localStorage.removeItem(STORAGE_KEYS.user);
+  localStorage.removeItem(STORAGE_KEYS.password);
+  localStorage.removeItem(STORAGE_KEYS.remember);
+  // Настройки (язык/валюта) можно оставить, чтобы не сбрасывались
   
   // Сбрасываем локальное состояние
   setUser(null);
@@ -1653,31 +1662,11 @@ const handleLogout = async () => {
   setTradeHistory([]);
   setBalance(0);
   
-setShowLanding(true);
-resetAuthForm();
-
-const resetAuthForm = () => {
-  setAuthForm({
-    login: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    promo: "",
-    remember: false,
-  });
-  setShowPassword(false);
-  setShowConfirmPassword(false);
-  setAuthError("");
+  // Можно вернуть на лендинг, если хотите
+  setShowLanding(true); 
 };
-
-// важный момент: сначала пусть смонтируется лендос, потом крутим вверх
-setTimeout(() => {
-  scrollToTop();
-}, 0);
-}; // <— ЭТО ЗАКРЫВАЕТ handleLogout
-
-// смена пароля
-const handlePasswordInput = (field, value) => {
+  // смена пароля
+  const handlePasswordInput = (field, value) => {
     setPasswordForm((prev) => ({ ...prev, [field]: value }));
     setPasswordError("");
     setPasswordSuccess("");
@@ -1927,6 +1916,12 @@ const handlePasswordChange = async () => {
       const updatedUser = { ...user, login: newLogin };
       setUser(updatedUser);
 
+      try {
+        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updatedUser));
+      } catch (e) {
+        console.warn("localStorage update login error:", e);
+      }
+
       setSettingsMsg(
         isEN
           ? "Login successfully changed."
@@ -1999,6 +1994,13 @@ const handlePasswordChange = async () => {
 
       const updatedUser = { ...user, email: newEmail };
       setUser(updatedUser);
+
+      try {
+        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updatedUser));
+      } catch (e) {
+        console.warn("localStorage update email error:", e);
+      }
+
       setSettingsMsg(
         isEN
           ? "Email successfully changed."
@@ -4214,23 +4216,24 @@ const renderProfile = () => {
               {isEN ? "Language" : "Язык интерфейса"}
             </div>
             <div className="settings-chips">
-<button
-  className={"settings-chip " + (settings.language === "ru" ? "active" : "")}
-  onClick={() => applyWithFx({ language: "ru" }, "lang")}
-  aria-label="Russian"
->
-  <span className="flag" aria-hidden>🇷🇺</span>
-  <span className="chip-label">RU</span>
-</button>
-
-<button
-  className={"settings-chip " + (settings.language === "en" ? "active" : "")}
-  onClick={() => applyWithFx({ language: "en" }, "lang")}
-  aria-label="English"
->
-  <span className="flag" aria-hidden>🇺🇸</span>
-  <span className="chip-label">EN</span>
-</button>
+              <button
+                className={
+                  "settings-chip " +
+                  (settings.language === "ru" ? "active" : "")
+                }
+                onClick={() => updateSettings({ language: "ru" })}
+              >
+                RU
+              </button>
+              <button
+                className={
+                  "settings-chip " +
+                  (settings.language === "en" ? "active" : "")
+                }
+                onClick={() => updateSettings({ language: "en" })}
+              >
+                EN
+              </button>
             </div>
           </div>
 
@@ -4245,7 +4248,7 @@ const renderProfile = () => {
                   "settings-chip " +
                   (settings.currency === "RUB" ? "active" : "")
                 }
-                onClick={() => applyWithFx({ currency: "RUB" }, "currency")}
+                onClick={() => updateSettings({ currency: "RUB" })}
               >
                 RUB
               </button>
@@ -4254,7 +4257,7 @@ const renderProfile = () => {
                   "settings-chip " +
                   (settings.currency === "USD" ? "active" : "")
                 }
-                onClick={() => applyWithFx({ currency: "USD" }, "currency")}
+                onClick={() => updateSettings({ currency: "USD" })}
               >
                 USD
               </button>
@@ -4271,7 +4274,7 @@ const renderProfile = () => {
                 className={
                   "settings-chip " + (settings.theme === "fox" ? "active" : "")
                 }
-                onClick={() => applyWithFx({ theme: "fox" }, "theme")}
+                onClick={() => updateSettings({ theme: "fox" })}
               >
                 🦊 Fox
               </button>
@@ -4279,7 +4282,7 @@ const renderProfile = () => {
                 className={
                   "settings-chip " + (settings.theme === "night" ? "active" : "")
                 }
-                onClick={() => applyWithFx({ theme: "night" }, "theme")}
+                onClick={() => updateSettings({ theme: "night" })}
               >
                 🌙 Night
               </button>
@@ -4287,7 +4290,7 @@ const renderProfile = () => {
                 className={
                   "settings-chip " + (settings.theme === "day" ? "active" : "")
                 }
-                onClick={() => applyWithFx({ theme: "day" }, "theme")}
+                onClick={() => updateSettings({ theme: "day" })}
               >
                 ☀ Day
               </button>
@@ -4835,10 +4838,10 @@ const renderAuth = () => {
 // ===== Основной JSX =====
 
 if (booting) {
-return (
-  <Shell theme={settings.theme || "fox"} uiFx={uiFx}>
-    <Loader />
-  </Shell>
+  return (
+    <Shell theme={settings.theme || "fox"}>
+      <Loader />
+    </Shell>
   );
 }
 
@@ -4852,36 +4855,32 @@ if (!user && showLanding) {
           subtitle={overlayText.subtitle}
         />
       )}
+
       <LandingPage
-        onLogin={() => {
+        onLogin={() =>
           showOverlay(
             "FORBEX TRADE",
-            isEN
-              ? "Opening your personal area..."
-              : "Открываем личный кабинет…",
+            isEN ? "Opening your personal area..." : "Открываем личный кабинет…",
             () => {
               setShowLanding(false);
               setAuthMode("login");
-              scrollToTop();
             },
             900
-          );
-        }}
-        onRegister={() => {
+          )
+        }
+        onRegister={() =>
           showOverlay(
             "FORBEX TRADE",
-            isEN
-              ? "Creating account..."
-              : "Создаём аккаунт трейдера…",
+            isEN ? "Creating account..." : "Создаём аккаунт трейдера…",
             () => {
               setShowLanding(false);
               setAuthMode("register");
-              scrollToTop();
             },
             900
-          );
-        }}
+          )
+        }
       />
+
       {/* Модалка с правилами / политикой для лендинга */}
       {legalModal && (
         <div
@@ -5006,7 +5005,7 @@ if (!user && showLanding) {
 
 if (!user) {
   return (
-    <Shell theme={settings.theme || "fox"} uiFx={uiFx}>
+    <Shell theme={settings.theme || "fox"}>
       {overlayLoading && (
         <div className="boot-loader">
           <div className="fox-orbit">
@@ -5023,18 +5022,16 @@ if (!user) {
         </div>
       )}
 
-<button
-  onClick={() =>
-    showOverlay(
-      "FORBEX TRADE",
-      "Возвращаем на лендинг…",
-      () => {
-        setShowLanding(true);
-        window.scrollTo({ top: 0, behavior: "auto" });
-      },
-      600
-    )
-  }
+      {/* Кнопка НАЗАД на лендинг */}
+      <button
+        onClick={() =>
+          showOverlay(
+            "FORBEX TRADE",
+            "Возвращаем на лендинг…",
+            () => setShowLanding(true),
+            600
+          )
+        }
         style={{
           position: "absolute",
           top: 16,
@@ -5174,7 +5171,7 @@ if (!user) {
   );
 }
 return (
-  <Shell theme={settings.theme || "fox"} uiFx={uiFx}>
+  <Shell theme={settings.theme || "fox"}>
     {overlayLoading && (
       <div className="boot-loader">
         {/* сюда можешь вставить свой fox-loader, как в других местах */}
@@ -5196,15 +5193,15 @@ return (
       </div>
     </header>
 
-<main className="content">
-  <div key={activeTab} className="tab-content">
-    {activeTab === 1 && renderHome()}
-    {activeTab === 2 && renderTrade()}
-    {activeTab === 3 && renderWallet()}
-    {activeTab === 4 && renderHistory()}
-    {activeTab === 5 && renderProfile()}
-  </div>
-</main>
+    <main className="content">
+      <div key={activeTab} className="tab-content">
+        {activeTab === 1 && renderHome()}
+        {activeTab === 2 && renderTrade()}
+        {activeTab === 3 && renderWallet()}
+        {activeTab === 4 && renderHistory()}
+        {activeTab === 5 && renderProfile()}
+      </div>
+    </main>
 
 <footer className="footer-legal">
   <div className="footer-legal-card">
@@ -5240,15 +5237,15 @@ return (
 </footer>
 
     {/* Нижняя навигация */}
-<nav className="bottom-nav">
-  {TABS.map((tab) => (
-    <button
-      key={tab.id}
-      className={
-        "nav-tab " + (activeTab === tab.id ? "nav-tab-active" : "")
-      }
-      onClick={() => handleTabClick(tab.id)}
-    >
+    <nav className="bottom-nav">
+      {TABS.map((tab) => (
+        <button
+          key={tab.id}
+          className={
+            "nav-tab " + (activeTab === tab.id ? "nav-tab-active" : "")
+          }
+          onClick={() => setActiveTab(tab.id)}
+        >
           <span className="nav-tab-icon">{tab.icon}</span>
           <span className="nav-tab-label">
             {isEN ? tab.labelEn : tab.labelRu}
