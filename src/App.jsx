@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import LandingPage from "./LandingPage";
+import confetti from 'canvas-confetti';
 import "./App.css";
 
 // ===== Константы =====
@@ -402,17 +403,29 @@ const [settings, setSettings] = useState({
   const [lastOpenedTrade, setLastOpenedTrade] = useState(null);
   const [tradeToastVisible, setTradeToastVisible] = useState(false);
   
-  // отдельная функция, которую вызывает useEffect с таймером
-// отдельная функция, которую вызывает useEffect с таймером
+// Не забудь добавить импорт в самом верху файла App.jsx:
+// import confetti from 'canvas-confetti';
+
 const finishTrade = (trade) => {
   const win = trade.resultDirection === trade.direction; // up / down / flat
   const profit = win
     ? trade.amount * (trade.multiplier - 1)
     : -trade.amount;
 
+  // === ИСПРАВЛЕННЫЙ БЛОК ===
   if (win) {
+    // 1. Запускаем салют
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#f97316', '#fbbf24', '#ffffff'] // Твои брендовые цвета
+    }); // <--- ВАЖНО: закрыли скобки функции confetti
+
+    // 2. Начисляем баланс
     setBalance((prev) => prev + trade.amount * trade.multiplier);
   }
+  // ==========================
 
   const finishedAt = Date.now();
 
@@ -425,6 +438,7 @@ const finishTrade = (trade) => {
 
   setTradeHistory((prev) => [finished, ...prev]);
   setActiveTrade(null);
+  
   setLastTradeResult({
     status: win ? "win" : "lose",
     chartDirection: trade.resultDirection,

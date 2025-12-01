@@ -3001,3 +3001,54 @@ body {
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
+
+@media (max-width: 600px) {
+  .wallet-modal {
+    position: absolute;
+    bottom: 0;
+    top: auto;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 24px 24px 0 0 !important; /* Круглим только верх */
+    border-bottom: none;
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    max-height: 85vh; /* Не на весь экран */
+    padding-bottom: 30px; /* Учет safe-area айфонов */
+  }
+
+  .wallet-modal-backdrop {
+    align-items: flex-end; /* Прижимаем к низу */
+    padding: 0;
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  
+  /* Полосочка-индикатор сверху шторки */
+  .wallet-modal::before {
+    content: "";
+    display: block;
+    width: 40px;
+    height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    margin: -8px auto 12px; /* Чуть выше контента */
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: skeletonLoad 1.5s infinite;
+  border-radius: 8px;
+  color: transparent !important;
+}
+
+@keyframes skeletonLoad {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
