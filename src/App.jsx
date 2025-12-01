@@ -4277,16 +4277,26 @@ const renderHistory = () => {
 const renderProfile = () => {
   if (!user) return null;
 
-  // 1. Форматирование даты
+  // 1. Форматирование даты и времени (ИСПРАВЛЕНО)
   const getRegDateString = () => {
     try {
       const date = new Date(user.createdAt || Date.now());
+      
       const dateStr = date.toLocaleDateString("ru-RU", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
       });
-      return isEN ? `With us since ${dateStr}` : `С нами с ${dateStr}`;
+      
+      const timeStr = date.toLocaleTimeString("ru-RU", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      // Вернули формат с запятой и временем
+      return isEN 
+        ? `On Forbex since ${dateStr}, ${timeStr}` 
+        : `На Forbex с ${dateStr}, ${timeStr}`;
     } catch {
       return "...";
     }
@@ -4333,13 +4343,29 @@ const renderProfile = () => {
               <span>🦊</span>
             )}
           </div>
+          
           <div className="profile-main">
             <div className="profile-login">{user.login}</div>
             <div className="profile-email">{user.email}</div>
             <div className="profile-created">{getRegDateString()}</div>
           </div>
-          <div style={{ position: "absolute", top: 12, right: 14, opacity: 0.5, fontSize: 10 }}>
-            ID: {telegramId || user.id.toString().slice(0,6)}
+
+          {/* ИСПРАВЛЕНО: Вернули Username и ID */}
+          <div style={{ 
+            position: "absolute", 
+            top: 12, 
+            right: 14, 
+            textAlign: "right",
+            lineHeight: 1.3
+          }}>
+            {telegramUsername && (
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", marginBottom: 2 }}>
+                @{telegramUsername}
+              </div>
+            )}
+            <div style={{ fontSize: 10, opacity: 0.5 }}>
+              ID: {telegramId || user.id.toString().slice(0,6)}
+            </div>
           </div>
         </div>
       </section>
@@ -4480,7 +4506,6 @@ const renderProfile = () => {
             href="https://t.me/ForbexSupport" 
             target="_blank" 
             rel="noreferrer"
-            // Вернули класс greenPulse и убрали button внутри
             className="greenPulse support-cta" 
             style={{ width: '100%', textDecoration: 'none', margin: 0 }}
         >
