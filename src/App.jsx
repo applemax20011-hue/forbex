@@ -389,12 +389,17 @@ const TickerNumber = ({ value, currency }) => {
   );
 };
 
-// === КОМПОНЕНТ SWIPE BUTTON ===
+// === КОМПОНЕНТ SWIPE BUTTON (ИСПРАВЛЕННЫЙ) ===
 const SwipeButton = ({ onConfirm, label, disabled, isEN }) => {
   const [dragWidth, setDragWidth] = useState(0);
   const trackRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+
+  const resetState = () => {
+    setConfirmed(false);
+    setDragWidth(0);
+  };
 
   const handleStart = (clientX) => {
     if (disabled || confirmed) return;
@@ -413,24 +418,34 @@ const SwipeButton = ({ onConfirm, label, disabled, isEN }) => {
 
     // Если дотянули до конца (90%)
     if (width > maxDrag * 0.9) {
-      setConfirmed(true);
       setIsDragging(false);
-      setDragWidth(maxDrag); // Фиксируем в конце
-      triggerHaptic("success"); // Вибрация
-      onConfirm();
+      setDragWidth(maxDrag); // Визуально фиксируем в конце
       
-      // Сброс через 1 сек
-      setTimeout(() => {
-        setConfirmed(false);
-        setDragWidth(0);
-      }, 1000);
+      // Вызываем функцию проверки (handleStartTrade)
+      const success = onConfirm();
+      
+      if (success === false) {
+        // Если проверка не прошла (нет суммы и т.д.) — сразу возвращаем назад
+        triggerHaptic("error"); // Вибрация ошибки
+        setDragWidth(0); // Откат ползунка
+      } else {
+        // Если всё ок — ставим галочку и вибрируем
+        setConfirmed(true);
+        triggerHaptic("success");
+        
+        // Сбрасываем кнопку через 1 секунду, чтобы можно было торговать снова
+        setTimeout(() => {
+          resetState();
+        }, 1000);
+      }
     }
   };
 
   const handleEnd = () => {
     if (confirmed) return;
     setIsDragging(false);
-    setDragWidth(0); // Возвращаем назад если не дотянули
+    // Если не дотянули до конца — возвращаем назад
+    setDragWidth(0); 
   };
 
   // Touch Events
@@ -475,7 +490,10 @@ const SwipeButton = ({ onConfirm, label, disabled, isEN }) => {
       
       <div 
         className="swipe-handle" 
-        style={{ transform: `translateX(${dragWidth}px)` }}
+        style={{ 
+          transform: `translateX(${dragWidth}px)`,
+          transition: isDragging ? 'none' : 'transform 0.3s ease' // Плавный возврат
+        }}
       >
         <div className="swipe-arrow">➜</div>
       </div>
@@ -1945,13 +1963,14 @@ const handleStartTrade = () => {
   const amountNum = parseFloat(raw);
   const minInvest = settings.currency === "RUB" ? 100 : 5;
 
+  // 1. ПРОВЕРКИ НА ОШИБКИ
   if (Number.isNaN(amountNum) || amountNum <= 0) {
     setTradeError(
       isEN
         ? "Enter the amount you want to invest."
         : "Введите сумму, которую хотите инвестировать."
     );
-    return;
+    return false; // <--- ВЕРНУТЬ FALSE (ОТМЕНА СВАЙПА)
   }
 
   if (amountNum < minInvest) {
@@ -1962,7 +1981,7 @@ const handleStartTrade = () => {
           }.`
         : `Минимальная сумма инвестиций — ${minInvest} ${currencyCode}.`
     );
-    return;
+    return false; // <--- ВЕРНУТЬ FALSE
   }
 
   // баланс хранится в RUB, ввод — в выбранной валюте
@@ -1975,16 +1994,14 @@ const handleStartTrade = () => {
         ? "Not enough funds on balance."
         : "Недостаточно средств на балансе."
     );
-    return;
+    return false; // <--- ВЕРНУТЬ FALSE
   }
 
-  if (activeTrade) return; 
+  if (activeTrade) return false; 
 
-  triggerHaptic('heavy'); // <--- ВСТАВИТЬ СЮДА (Вибрация при нажатии кнопки)
+  // 2. ЕСЛИ ВСЁ ОК — ЗАПУСКАЕМ СДЕЛКУ
+  triggerHaptic('heavy'); 
 
-  setIsTradeProcessing(true);
-
-  // 🔥 запускаем анимацию «создаём сделку»
   setIsTradeProcessing(true);
   setTradeToastVisible(false);
 
@@ -2000,7 +2017,7 @@ const handleStartTrade = () => {
   const trade = {
     id: tradeId,
     symbol: selectedSymbol,
-    amount: amountRub, // храним в RUB (базовая)
+    amount: amountRub, 
     direction: tradeForm.direction,
     resultDirection,
     multiplier: tradeForm.multiplier,
@@ -2008,11 +2025,10 @@ const handleStartTrade = () => {
     startedAt: Date.now(),
   };
 
-  // сохраняем данные для маленького тоста «Сделка открыта»
   setLastOpenedTrade({
     symbol: selectedSymbol,
     direction: tradeForm.direction,
-    amountDisplay: amountNum, // показываем в выбранной валюте
+    amountDisplay: amountNum, 
   });
 
   const willWin = resultDirection === tradeForm.direction;
@@ -2040,7 +2056,6 @@ const handleStartTrade = () => {
   setChartProgress(0);
   setActiveTrade(trade);
 
-  // ⏱ через 0.7с убираем оверлей и показываем тост на пару секунд
   setTimeout(() => {
     setIsTradeProcessing(false);
     setTradeToastVisible(true);
@@ -2049,80 +2064,8 @@ const handleStartTrade = () => {
       setTradeToastVisible(false);
     }, 2200);
   }, 700);
-};
 
-const handlePasswordChange = async () => {
-  const { oldPassword, newPassword, confirmPassword } = passwordForm;
-
-  if (!user) {
-    setPasswordError("Пользователь не найден.");
-    return;
-  }
-
-  if (!oldPassword || !newPassword || !confirmPassword) {
-    setPasswordError("Заполните все поля.");
-    return;
-  }
-  if (newPassword.length < 4) {
-    setPasswordError("Новый пароль должен быть от 4 символов.");
-    return;
-  }
-  if (newPassword !== confirmPassword) {
-    setPasswordError("Пароли не совпадают.");
-    return;
-  }
-
-  try {
-    // 1. Берём текущий хэш из Supabase
-    const { data, error } = await supabase
-      .from("app_users")
-      .select("password_hash")
-      .eq("id", user.id)
-      .single();
-
-    if (error || !data) {
-      console.error("password select error:", error);
-      setPasswordError("Не удалось проверить текущий пароль.");
-      return;
-    }
-
-    // 2. Хэшируем oldPassword и сравниваем
-    const encOld = new TextEncoder().encode(oldPassword);
-    const bufOld = await crypto.subtle.digest("SHA-256", encOld);
-    const oldHash = Array.from(new Uint8Array(bufOld))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    if (oldHash !== data.password_hash) {
-      setPasswordError("Старый пароль указан неверно.");
-      return;
-    }
-
-    // 3. Хэшируем новый пароль
-    const encNew = new TextEncoder().encode(newPassword);
-    const bufNew = await crypto.subtle.digest("SHA-256", encNew);
-    const newHash = Array.from(new Uint8Array(bufNew))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    // 4. Обновляем Supabase
-    const { error: updateError } = await supabase
-      .from("app_users")
-      .update({ password_hash: newHash })
-      .eq("id", user.id);
-
-    if (updateError) {
-      console.error("password update error:", updateError);
-      setPasswordError("Не удалось изменить пароль.");
-      return;
-    }
-
-    setPasswordSuccess("Пароль успешно изменён.");
-    setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
-  } catch (e) {
-    console.error("handlePasswordChange error:", e);
-    setPasswordError("Не удалось изменить пароль.");
-  }
+  return true; // <--- ВЕРНУТЬ TRUE (УСПЕХ)
 };
 
   const handleLoginChange = async () => {
@@ -3473,10 +3416,10 @@ const renderWallet = () => {
                         <div className="wallet-method-title">
                           {isEN
                             ? "Top up via support"
-                            : "Пополнение через техподдержку"}
+                            : "Пополнение через техюподдержку"}
                         </div>
                         <div className="wallet-method-sub">
-                          {isEN ? "Manager help" : "Менеджер поможет"}
+                          {isEN ? "Manager help" : "Агент поддержки поможет"}
                         </div>
                       </button>
 
@@ -3860,10 +3803,10 @@ const renderWallet = () => {
                         }
                       >
                         <div className="wallet-method-title">
-                          {isEN ? "Via support" : "Через техподдержку"}
+                          {isEN ? "Via support" : "Через тех.поддержку"}
                         </div>
                         <div className="wallet-method-sub">
-                          {isEN ? "Manager help" : "Менеджер поможет"}
+                          {isEN ? "Manager help" : "Агент поддержки поможет"}
                         </div>
                       </button>
 
