@@ -2306,6 +2306,7 @@ const handleDepositSendReceipt = async () => {
       return;
     }
 
+// ... (код сохранения в базу) ...
     const topupId = inserted?.id;
 
     // 8. Локальная история
@@ -2320,30 +2321,40 @@ const handleDepositSendReceipt = async () => {
     };
     setWalletHistory((prev) => [entry, ...prev]);
 
-    // 9. Оверлей
-    showOverlay(
-      "FORBEX TRADE",
-      isEN ? "Payment sent for review…" : "Платёж отправлен на проверку…",
-      () => {
-        setWalletModal(null);
-        resetDepositFlow();
-      }
-    );
+    // === НОВАЯ ЛОГИКА УСПЕХА ===
+    
+    // 1. Показываем красивый зеленый тост
+    setToast({
+      type: "success",
+      text: isEN ? "Receipt sent! Checking..." : "Чек отправлен! Проверяем...",
+    });
+
+    // 2. Ждем 1.5 секунды, чтобы юзер увидел галочку/успех
+    setTimeout(() => {
+      // 3. Закрываем модалку
+      setWalletModal(null);
+      resetDepositFlow();
+      
+      // 4. Опционально: Запускаем салют (если хочешь WOW эффект)
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.7 },
+        colors: ['#22c55e', '#ffffff'] // Зеленый салют
+      });
+      
+    }, 1500);
+
   } catch (e) {
-    console.error("handleDepositSendReceipt error:", e);
-    setDepositError(
-      isEN
-        ? "Unexpected error. Try again."
-        : "Неожиданная ошибка. Попробуйте ещё раз."
-    );
-  } finally {
-    setIsSendingReceipt(false);
-  }
-};
+    // ... ошибки ...
+} finally {
+      setIsSendingReceipt(false);
+    }
+  }; // <--- ДОБАВИТЬ ЭТУ СТРОКУ (закрывающая скобка функции)
 
   // ===== Рендеры вкладок =====
 
-const renderHome = () => (
+  const renderHome = () => (
   <>
     <section className="section-block fade-in delay-1">
       <div className="home-hero">
@@ -3407,12 +3418,6 @@ const renderWallet = () => {
 
                         {isUSDT && (
                           <>
-                             {/* QR CODE (Опционально, если есть библиотека) */}
-                             {/* <div style={{ background: '#fff', padding: '10px', borderRadius: '12px', width: 'fit-content', margin: '0 auto 16px' }}>
-                                <QRCode value="TRxA1bCDeFGhijkLmNoPqRS2tuvWXyZ123" size={140} style={{ height: "auto", maxWidth: "100%", width: "100%" }} viewBox={`0 0 256 256`} />
-                             </div>
-                             */}
-
                             <div className="payment-row">
                               <div className="payment-label">Network</div>
                               <div className="payment-value">TRON (TRC-20)</div>
@@ -3581,14 +3586,16 @@ const renderWallet = () => {
                             className="wallet-modal-btn primary"
                             onClick={handleDepositSendReceipt}
                             disabled={!receiptFile || isSendingReceipt}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                           >
-                            {isSendingReceipt
-                              ? isEN
-                                ? "Sending..."
-                                : "Отправка..."
-                              : isEN
-                              ? "I paid"
-                              : "Я оплатил"}
+                            {isSendingReceipt ? (
+                              <>
+                                <span className="spinner"></span>
+                                <span>{isEN ? "Sending..." : "Отправка..."}</span>
+                              </>
+                            ) : (
+                              isEN ? "I paid" : "Я оплатил"
+                            )}
                           </button>
                         )}
                       </div>
@@ -3844,7 +3851,6 @@ const renderWallet = () => {
       </>
     );
   };
-  
 const renderHistory = () => {
   const methodLabel = (m) => {
     if (m === "card") return isEN ? "Bank card" : "Банковская карта";
@@ -5449,23 +5455,22 @@ return (
       </div>
     )}
 
-    {/* Тост */}
-    {toast && (
-      <div className={`toast-root toast-${toast.type}`}>
-        <div className="toast-title">
-          {toast.type === "success"
-            ? isEN
-              ? "Balance updated"
-              : "Баланс пополнен"
-            : isEN
-            ? "Operation status"
-            : "Статус операции"}
-        </div>
-        <div className="toast-text">{toast.text}</div>
-      </div>
-    )}
-  </Shell>
-);
+{toast && (
+          <div className={`toast-root toast-${toast.type}`}>
+            <div className="toast-title">
+              {toast.type === "success"
+                ? isEN
+                  ? "Balance updated"
+                  : "Баланс пополнен"
+                : isEN
+                ? "Operation status"
+                : "Статус операции"}
+            </div>
+            <div className="toast-text">{toast.text}</div>
+          </div>
+        )}
+      </Shell>
+    );
 }
 
 export default App;

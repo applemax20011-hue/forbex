@@ -3105,14 +3105,51 @@ body {
   background: rgba(34, 197, 94, 0.05) !important;
 }
 
-/* ===== Улучшенные карточки методов (с фоновыми иконками) ===== */
-.wallet-method-card {
-  position: relative;
-  overflow: hidden;
-  transition: all 0.2s ease;
+//* ==============================================
+   FIX: КАРТОЧКИ, АНИМАЦИИ И МОДАЛКА (FORBEX)
+   ============================================== */
+
+/* 1. Окно модалки - делаем его стеклянным и круглым */
+.wallet-modal {
+  background: rgba(12, 12, 14, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 32px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+  padding-bottom: 24px !important; 
 }
 
-/* Добавляем иконку на фон */
+/* 2. Карточки методов (Карта, USDT...) */
+.wallet-method-card {
+  position: relative;
+  border-radius: 20px !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  margin-bottom: 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.wallet-method-card:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  transform: translateY(-2px);
+}
+
+.wallet-method-card.active {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(249, 115, 22, 0.05)) !important;
+  border-color: #f97316 !important;
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.15);
+}
+
+.wallet-method-title {
+  color: #fff !important;
+  font-size: 14px !important;
+  margin-bottom: 2px;
+}
+.wallet-method-sub {
+  color: #9ca3af !important;
+}
+
+/* Иконки на фоне карточек */
 .wallet-method-card::after {
   content: "";
   position: absolute;
@@ -3123,116 +3160,46 @@ body {
   pointer-events: none;
   transform: rotate(-15deg);
 }
-
-/* Автоматически подставляем иконки: 
-   2-я кнопка - карта, 4-я - USDT, 5-я - PayPal, 6-я - Саппорт */
 .wallet-methods > button:nth-child(2)::after { content: "💳"; }
 .wallet-methods > button:nth-child(4)::after { content: "💎"; }
 .wallet-methods > button:nth-child(5)::after { content: "🅿️"; }
 .wallet-methods > button:nth-child(6)::after { content: "👨‍💻"; }
 
-/* Активное состояние более яркое */
-.wallet-method-card.active {
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(0, 0, 0, 0)) !important;
-  border-color: #f97316 !important;
+/* 3. Кнопка "Далее" / "Я оплатил" */
+.wallet-modal-btn.primary {
+  border-radius: 16px !important;
+  padding: 14px 0 !important;
+  font-size: 15px !important;
+  background: linear-gradient(90deg, #f97316, #fb923c) !important;
+  box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4);
+  transition: transform 0.1s;
+}
+.wallet-modal-btn.primary:active {
+  transform: scale(0.96);
 }
 
-/* ===== МОДАЛЬНЫЕ ОКНА (FIXED SCROLL & CENTER) ===== */
-
-/* 1. Задний фон (затемнение) */
-.wallet-modal-backdrop {
-  position: fixed;
-  inset: 0; /* Растягиваем на весь экран */
-  background: rgba(3, 7, 18, 0.85); /* Темный фон */
-  backdrop-filter: blur(6px); /* Размытие фона */
-  z-index: 9999; /* ВАЖНО: Выше чем нижняя навигация (у нее 40) */
-  display: flex;
-  align-items: center; /* Центрируем по вертикали */
-  justify-content: center; /* Центрируем по горизонтали */
-  padding: 20px; /* Отступы от краев экрана */
-  opacity: 0;
-  animation: backdropFadeIn 0.2s forwards;
+/* 4. Спиннер (Крутилка) */
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(0,0,0,0.1);
+  border-left-color: #000; 
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
-/* 2. Само окно */
-.wallet-modal {
-  position: relative;
-  width: 100%;
-  max-width: 420px; /* Оптимальная ширина */
-  background: #0b0f1a; /* Цвет фона окна */
-  border: 1px solid rgba(249, 115, 22, 0.3); /* Оранжевая рамка */
-  border-radius: 24px; /* Скругления */
-  box-shadow: 0 20px 50px rgba(0,0,0,0.8);
-  
-  /* === ГЛАВНЫЙ ФИКС СКРОЛЛА === */
-  max-height: 90vh; /* Окно не может быть выше 90% экрана */
-  display: flex;
-  flex-direction: column;
-  overflow: hidden; /* Скрываем скролл самого контейнера */
-  animation: modalPopUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Заголовок и крестик фиксируем сверху, чтобы не уезжали */
-.wallet-modal-title {
-  flex-shrink: 0;
-  padding: 16px 16px 8px;
-  background: #0b0f1a;
-  z-index: 10;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-
-/* Крестик */
-.wallet-modal-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: rgba(255,255,255,0.05);
-  border: none;
-  color: #9ca3af;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 20;
-}
-
-/* === КОНТЕНТ (Скроллится только эта часть) === */
-.wallet-modal-sub,
-.wallet-methods,
-.payment-details,
-.wallet-modal-input-group {
-  padding: 0 16px; /* Отступы по бокам */
-}
-
-/* Обертка для скроллящегося контента */
-/* ВНИМАНИЕ: Если в HTML нет общего дива для контента, 
-   CSS применит скролл к самому модальному окну, если мы разрешим overflow-y */
-.wallet-modal {
-  overflow-y: auto !important; /* Разрешаем скролл внутри окна */
-  -webkit-overflow-scrolling: touch; /* Плавный скролл на iPhone */
-}
-
-/* Анимации */
-@keyframes backdropFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes modalPopUp {
-  from { 
-    opacity: 0; 
-    transform: scale(0.95) translateY(10px); 
-  }
-  to { 
-    opacity: 1; 
-    transform: scale(1) translateY(0); 
-  }
-}
-
-/* Убираем перекрытие нижним меню (на всякий случай отступ снизу внутри модалки) */
-.wallet-modal-actions {
-  padding-bottom: 20px; 
+/* 5. Поле ввода суммы */
+.wallet-modal-input-group input {
+  border-radius: 16px !important;
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  padding: 14px !important;
+  font-size: 18px !important;
+  text-align: center;
 }
