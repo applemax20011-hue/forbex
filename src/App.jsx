@@ -2598,7 +2598,7 @@ const handleDepositSendReceipt = async () => {
     }
   };
 
-  const renderHome = () => (
+const renderHome = () => (
   <>
     <section className="section-block fade-in delay-1">
       <div className="home-hero">
@@ -2646,7 +2646,11 @@ const handleDepositSendReceipt = async () => {
           <div
             key={c.symbol}
             className="coin-row hover-glow"
-            onClick={() => setCoinModal(c)}
+            // ВЕРНУЛИ КАК БЫЛО: просто выбираем символ
+            onClick={() => {
+               setSelectedSymbol(c.symbol);
+               handleTabClick(2); // Перекидываем на вкладку торговли (по желанию)
+            }}
           >
             <div className="coin-left">
               <div className="coin-logo">
@@ -3059,10 +3063,6 @@ const renderWallet = () => {
       : [50, 100, 500, 1000];
 
     const displayBalance = toDisplayCurrency(balance, settings.currency);
-    const formatBalance = displayBalance.toLocaleString("ru-RU", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
 
     const currentMethod = walletForm.method || null;
     const isCard = currentMethod === "card";
@@ -3085,7 +3085,7 @@ const renderWallet = () => {
       }
     };
 
-    // Локальный helper для перевода методов
+    // Helper для перевода методов
     const methodLabel = (m) => {
       if (m === "card") return isEN ? "Bank card" : "Банковская карта";
       if (m === "usdt") return "USDT TRC-20";
@@ -3094,7 +3094,7 @@ const renderWallet = () => {
       return m;
     };
 
-    // Логика переходов по шагам депозита
+    // Логика переходов (без изменений)
     const handleDepositStep = () => {
       if (depositStep === 1) {
         if (!walletForm.method) return;
@@ -3106,9 +3106,7 @@ const renderWallet = () => {
         const raw = depositAmount?.toString().replace(",", ".") ?? "";
         const amountNum = parseFloat(raw);
         if (!amountNum || amountNum < minAmount) {
-          setDepositError(
-            isEN ? `Min amount ${minAmount}` : `Минимум ${minAmount}`
-          );
+          setDepositError(isEN ? `Min amount ${minAmount}` : `Минимум ${minAmount}`);
           return;
         }
         setDepositError("");
@@ -3118,59 +3116,20 @@ const renderWallet = () => {
     };
 
     const handleWithdrawSubmit = async () => {
+      // ... (оставляем логику вывода как была, она не менялась) ...
       if (!telegramId) return;
-
       const raw = walletForm.amount?.toString().replace(",", ".") || "";
       const amountNum = parseFloat(raw);
+      if (!amountNum || amountNum <= 0) { setDepositError(isEN ? "Enter amount" : "Введите сумму"); return; }
+      if (amountNum > toDisplayCurrency(balance, settings.currency)) { setDepositError(isEN ? "Not enough funds" : "Недостаточно средств"); return; }
+      if (!walletForm.method) { setDepositError(isEN ? "Choose method" : "Выберите метод"); return; }
+      if (!withdrawDetails.trim()) { setDepositError(isEN ? "Enter details" : "Введите реквизиты"); return; }
 
-      if (!amountNum || amountNum <= 0) {
-        setDepositError(
-          isEN ? "Enter withdrawal amount." : "Введите сумму вывода."
-        );
-        return;
-      }
-
-      const maxDisplay = toDisplayCurrency(balance, settings.currency);
-      if (amountNum > maxDisplay) {
-        setDepositError(
-          isEN
-            ? "Not enough funds on balance."
-            : "Недостаточно средств на балансе."
-        );
-        return;
-      }
-
-      if (!walletForm.method) {
-        setDepositError(
-          isEN ? "Choose withdrawal method." : "Выберите способ вывода."
-        );
-        return;
-      }
-
-      if (!withdrawDetails.trim()) {
-        setDepositError(
-          isEN
-            ? "Enter payout details (card / wallet / email)."
-            : "Введите реквизиты для вывода (карта / кошелёк / email)."
-        );
-        return;
-      }
-
-      const amountRub =
-        settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
-
+      const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
       try {
         let approverTgId = MAIN_ADMIN_TG_ID;
-
-        const { data: userRow, error: userErr } = await supabase
-          .from("users")
-          .select("referred_by")
-          .eq("tg_id", telegramId)
-          .maybeSingle();
-
-        if (!userErr && userRow?.referred_by) {
-          approverTgId = userRow.referred_by;
-        }
+        const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", telegramId).maybeSingle();
+        if (userRow?.referred_by) approverTgId = userRow.referred_by;
 
         const { error } = await supabase.from("wallet_withdrawals").insert({
           user_tg_id: telegramId,
@@ -3182,41 +3141,21 @@ const renderWallet = () => {
           ts: new Date().toISOString(),
         });
 
-        if (error) {
-          console.error("wallet_withdrawals insert error:", error);
-          setDepositError(
-            isEN
-              ? "Failed to create withdrawal request."
-              : "Не удалось создать заявку на вывод."
-          );
-          return;
-        }
-
+        if (error) throw error;
         await loadWalletDataFromSupabase();
-
         setWalletModal(null);
         setWithdrawStep(1);
         setWithdrawDetails("");
         setWalletForm({ amount: "", method: "card" });
         setDepositError("");
-
-        setToast({
-          type: "success",
-          text: isEN
-            ? "Withdrawal request successfully created."
-            : "Заявка на вывод средств успешно создана.",
-        });
+        setToast({ type: "success", text: isEN ? "Request created" : "Заявка создана" });
       } catch (e) {
-        console.error("handleWithdrawSubmit error:", e);
-        setDepositError(
-          isEN
-            ? "Unexpected error. Try again."
-            : "Неожиданная ошибка. Попробуйте ещё раз."
-        );
+        console.error(e);
+        setDepositError("Ошибка создания заявки");
       }
     };
 
-return (
+    return (
       <>
         {/* Баланс */}
         <section className="section-block fade-in delay-1">
@@ -3259,76 +3198,85 @@ return (
           </div>
         </section>
         
-        {/* === МОЙ ПОРТФЕЛЬ (Теперь выше истории) === */}
-        <section className="section-block fade-in delay-2" style={{ marginBottom: 16 }}>
-          <div className="section-title">
-            <h2>{isEN ? "My Assets" : "Мой крипто-портфель"}</h2>
-          </div>
-          
-          {userAssets.length === 0 ? (
-             <div className="wallet-empty">{isEN ? "No assets yet" : "Активов пока нет"}</div>
-          ) : (
-            <div className="assets-list">
-              {userAssets.map((asset) => {
-                 const liveCoin = coins.find(c => c.symbol === asset.symbol);
-                 const priceUsd = liveCoin ? liveCoin.price : 0;
-                 const priceRub = priceUsd * USD_RATE;
-                 const valueRub = asset.amount * priceRub;
-
-                 return (
-                   <div key={asset.id} className="asset-item">
-                      <div className="asset-left">
-                        <div className="asset-icon">{COIN_ICONS[asset.symbol] || "🪙"}</div>
-                        <div className="asset-info">
-                           <div className="asset-symbol">{asset.symbol}</div>
-                           <div className="asset-amount">{Number(asset.amount).toFixed(6)}</div>
-                        </div>
-                      </div>
-                      <div className="asset-right">
-                         <div className="asset-value">
-                           {valueRub.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} {currencyCode}
-                         </div>
-                         <div className="asset-value-sub">
-                           ~{priceUsd.toFixed(2)} $
-                         </div>
-                      </div>
-                   </div>
-                 );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* История (короткий список) */}
-        <section className="section-block fade-in delay-2">
+        {/* ИСТОРИЯ (Вернул как было: Сразу после баланса) */}
+        <section className="section-block fade-in delay-2" style={{ marginTop: 16 }}>
           <div className="section-title">
             <h2>{isEN ? "Recent operations" : "Последние операции"}</h2>
           </div>
-          {/* ... (код отрисовки списка истории оставляем без изменений) ... */}
+
            <div className="history-block">
             {walletHistory.slice(0, 3).map((e) => {
-               // ... тут твой старый код маппинга истории ...
                const displayAmount = toDisplayCurrency(e.amount, settings.currency);
+               
                const isWithdraw = e.type === "withdraw";
-               // ... и так далее ...
+               const isPending = e.status === "pending";
+               const isRejected = e.status === "rejected";
+               const isDone = e.status === "done" || e.status === "approved";
+
+               // Классы для цвета
+               const rowClass = "history-row " + 
+                  (isPending ? "is-pending " : "") + 
+                  (isRejected ? "is-rejected " : "") +
+                  (isDone ? "is-approved" : "");
+
+               let sign = isWithdraw ? "-" : "+";
+               let amountClass = "history-amount ";
+
+               // ЛОГИКА ЦВЕТОВ (Исправлено)
+               if (isWithdraw) {
+                  amountClass += "negative"; // Красный
+               } else {
+                  // Это депозит
+                  if (isRejected) {
+                      sign = "×";
+                      amountClass += "rejected";
+                  } else if (isPending) {
+                      amountClass += "pending"; // Желтый
+                  } else {
+                      amountClass += "positive"; // ЗЕЛЕНЫЙ
+                  }
+               }
+
                return (
-                 <div key={e.id} className="history-row">
-                   {/* ... контент строки истории ... */}
+                 <div key={e.id} className={rowClass}>
                    <div className="history-main">
                      <div className="history-type">
-                        {isWithdraw ? (isEN ? "Withdrawal" : "Вывод") : (isEN ? "Deposit" : "Пополнение")}
+                        {/* Тип операции */}
+                        {isWithdraw 
+                          ? (isEN ? "Withdrawal" : "Вывод средств") 
+                          : (isEN ? "Deposit" : "Пополнение")}
+                        
+                        {/* Статус текстом */}
+                        {isWithdraw && isDone && <span style={{color:'#ef4444', fontSize:10, marginLeft:4}}>(ok)</span>}
+                        {isPending && <span style={{color:'#fbbf24', fontSize:10, marginLeft:4}}>(...)</span>}
                      </div>
-                     <div className="history-sub">{e.method}</div>
+                     {/* Метод оплаты (Банковская карта) */}
+                     <div className="history-sub">{methodLabel(e.method)}</div>
                    </div>
+
                    <div className="history-right">
-                      <div className="history-amount">
-                         {displayAmount.toLocaleString("ru-RU")} {currencyCode}
+                      <div className={amountClass}>
+                         {sign} {displayAmount.toLocaleString("ru-RU", {minimumFractionDigits: 2})} {currencyCode}
                       </div>
+                      
+                      {isPending && (
+                        <button className="cancel-btn" onClick={(evt) => {
+                           evt.stopPropagation();
+                           /* логика отмены */
+                           const idStr = String(e.id);
+                           if (isWithdraw) handleCancelWithdrawal(e.id, idStr.replace("wd-", ""));
+                           else handleCancelDeposit(e.id, e.topupId || idStr.replace("topup-", ""));
+                        }}>
+                          {isEN ? "Cancel" : "Отменить"}
+                        </button>
+                      )}
+                      
                       <div className="history-time">{formatDateTime(e.ts)}</div>
                    </div>
                  </div>
                );
             })}
+            
             {walletHistory.length === 0 && (
                <div className="wallet-empty" style={{ padding: 8 }}>
                  {isEN ? "No operations" : "Нет операций"}
@@ -5535,71 +5483,6 @@ return (
               </>
             )}
        {/* ... (тут код legalModal) ... */}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 👇👇👇 ВСТАВЛЯЙ СЮДА 👇👇👇 */}
-
-{/* === МОДАЛКА МОНЕТЫ (ИСПРАВЛЕННАЯ) === */}
-{/* === МОДАЛКА МОНЕТЫ (ИСПРАВЛЕННАЯ) === */}
-      {coinModal && (
-        <div className="wallet-modal-backdrop" onClick={() => setCoinModal(null)}>
-          <div 
-            className="coin-modal-wrapper" 
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Шапка модалки */}
-            <div className="coin-modal-header">
-              <div className="coin-modal-title">
-                {coinModal.name} <span style={{opacity: 0.5}}>({coinModal.symbol})</span>
-              </div>
-              <button 
-                className="wallet-modal-close" 
-                style={{position: 'static'}}
-                onClick={() => setCoinModal(null)}
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="coin-modal-body">
-              {/* График TradingView (фиксированная высота) */}
-              <div className="coin-chart-container">
-                 <iframe 
-                    src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=BINANCE:${coinModal.symbol}USDT&interval=60&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=f1f3f6&studies=[]&theme=dark&style=1&timezone=Etc%2FUTC`}
-                    style={{ width: '100%', height: '100%', border: 'none' }}
-                 ></iframe>
-              </div>
-
-              {/* Блок покупки */}
-              <div className="spot-buy-box">
-                 <span className="spot-label">
-                    {isEN ? "Amount to buy" : "Сумма покупки"}
-                 </span>
-                 
-                 <div className="spot-input-group">
-                    <input 
-                      type="number" 
-                      className="spot-input" 
-                      placeholder="1000" 
-                      value={spotBuyAmount}
-                      onChange={(e) => setSpotBuyAmount(e.target.value)}
-                    />
-                    <span className="spot-currency">RUB</span>
-                 </div>
-
-                 <button className="spot-btn" onClick={handleSpotBuy}>
-                   {isEN ? "Buy" : "Купить"} {coinModal.symbol}
-                 </button>
-                 
-                 <div className="spot-info">
-                    {isEN 
-                      ? "Funds will be deducted from your main RUB balance." 
-                      : "Спишется с основного баланса. Активы появятся в кошельке."}
-                 </div>
-              </div>
             </div>
           </div>
         </div>
