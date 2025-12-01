@@ -529,7 +529,10 @@ const [profileToggles, setProfileToggles] = useState({
   sounds: true,
   biometry: false,
 });
-
+// ... твои старые стейты ...
+  const [userAssets, setUserAssets] = useState([]); // Храним купленные монеты
+  const [coinModal, setCoinModal] = useState(null); // Какую монету открыли
+  const [spotBuyAmount, setSpotBuyAmount] = useState(""); // Сумма покупки
 const toggleProfileSetting = (key) => {
   setProfileToggles(prev => ({ ...prev, [key]: !prev[key] }));
   triggerHaptic("light");
@@ -1267,6 +1270,18 @@ const loadWalletDataFromSupabase = useCallback(async () => {
         .eq("user_tg_id", telegramId)
         .order("ts", { ascending: false }),
     ]);
+	
+	// --- ДОБАВИТЬ ЭТО ---
+    // Грузим активы пользователя
+    if (user) {
+      const { data: assets } = await supabase
+        .from("user_assets")
+        .select("*")
+        .eq("user_id", user.id);
+      
+      if (assets) setUserAssets(assets);
+    }
+    // --------------------
 
     if (topupsRes.error) {
       console.error("loadWalletData topups error:", topupsRes.error);
@@ -2520,7 +2535,57 @@ const handleDepositSendReceipt = async () => {
     }
   }; // <--- ДОБАВИТЬ ЭТУ СТРОКУ (закрывающая скобка функции)
 
-  // ===== Рендеры вкладок =====
+// === ЛОГИКА ПОКУПКИ КРИПТЫ (SPOT) ===
+  const handleSpotBuy = async () => {
+    if (!spotBuyAmount || parseFloat(spotBuyAmount) <= 0) return;
+    const amountRub = parseFloat(spotBuyAmount);
+    
+    if (amountRub > balance) {
+      setToast({ type: "error", text: isEN ? "Insufficient funds" : "Недостаточно средств" });
+      return;
+    }
+
+    const coin = coinModal; // Монета, которую открыли
+    const coinPriceUsd = coin.price;
+    const coinPriceRub = coinPriceUsd * USD_RATE; // Курс монеты в рублях
+    const cryptoAmount = amountRub / coinPriceRub; // Сколько купим монет
+
+    setOverlayLoading(true);
+
+    try {
+      // 1. Списываем баланс (визуально)
+      setBalance(prev => prev - amountRub);
+
+      // 2. Обновляем/Добавляем запись в БД
+      // Сначала ищем, есть ли уже эта монета у юзера в списке userAssets
+      const existing = userAssets.find(a => a.symbol === coin.symbol);
+      const newAmount = (existing ? Number(existing.amount) : 0) + cryptoAmount;
+
+      const { error } = await supabase.from("user_assets").upsert({
+        user_id: user.id,
+        symbol: coin.symbol,
+        amount: newAmount,
+      }, { onConflict: 'user_id, symbol' }); // Важно: обновляем, если есть, создаем, если нет
+
+      if (error) throw error;
+
+      // 3. Перезагружаем данные кошелька
+      await loadWalletDataFromSupabase();
+
+      setCoinModal(null); // Закрываем окно
+      setSpotBuyAmount("");
+      
+      // Салют и уведомление
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      setToast({ type: "success", text: isEN ? `Bought ${cryptoAmount.toFixed(6)} ${coin.symbol}` : `Куплено ${cryptoAmount.toFixed(6)} ${coin.symbol}` });
+
+    } catch (e) {
+      console.error(e);
+      setToast({ type: "error", text: "Ошибка при покупке" });
+    } finally {
+      setOverlayLoading(false);
+    }
+  };
 
   const renderHome = () => (
   <>
@@ -2570,7 +2635,7 @@ const handleDepositSendReceipt = async () => {
           <div
             key={c.symbol}
             className="coin-row hover-glow"
-            onClick={() => setSelectedSymbol(c.symbol)}
+            onClick={() => setCoinModal(c)}
           >
             <div className="coin-left">
               <div className="coin-logo">
@@ -3182,6 +3247,47 @@ const renderWallet = () => {
             </div>
           </div>
         </section>
+		
+		{/* === НОВЫЙ БЛОК: МОЙ ПОРТФЕЛЬ === */}
+        <section className="section-block fade-in delay-2" style={{ marginBottom: 16 }}>
+          <div className="section-title">
+            <h2>{isEN ? "My Assets" : "Мой крипто-портфель"}</h2>
+          </div>
+          
+          {userAssets.length === 0 ? (
+             <div className="wallet-empty">{isEN ? "No assets yet" : "Активов пока нет"}</div>
+          ) : (
+            <div className="assets-list">
+              {userAssets.map((asset) => {
+                 // Ищем текущую цену этой монеты в стейте coins
+                 const liveCoin = coins.find(c => c.symbol === asset.symbol);
+                 const priceUsd = liveCoin ? liveCoin.price : 0;
+                 const priceRub = priceUsd * USD_RATE;
+                 const valueRub = asset.amount * priceRub;
+
+                 return (
+                   <div key={asset.id} className="asset-item">
+                      <div className="asset-left">
+                        <div className="asset-icon">{COIN_ICONS[asset.symbol] || "🪙"}</div>
+                        <div className="asset-info">
+                           <div className="asset-symbol">{asset.symbol}</div>
+                           <div className="asset-amount">{Number(asset.amount).toFixed(6)}</div>
+                        </div>
+                      </div>
+                      <div className="asset-right">
+                         <div className="asset-value">
+                           {valueRub.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} {currencyCode}
+                         </div>
+                         <div className="asset-value-sub">
+                           ~{priceUsd.toFixed(2)} $
+                         </div>
+                      </div>
+                   </div>
+                 );
+              })}
+            </div>
+          )}
+        </section>
 
         {/* История (короткий список) */}
         <section className="section-block fade-in delay-2">
@@ -3334,6 +3440,7 @@ const renderWallet = () => {
                           : "Пополнение через техническую поддержку")}
                     </div>
                   )}
+				  
 
                   {/* Шаг 1: выбор способа */}
                   {depositStep === 1 && (
@@ -4558,10 +4665,11 @@ const renderProfile = () => {
         </div>
       )}
 
-      {passwordModalOpen && (
+{passwordModalOpen && (
         <div className="wallet-modal-backdrop" onClick={() => setPasswordModalOpen(false)}>
           <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
             <div className="wallet-modal-title">{isEN ? "Change password" : "Смена пароля"}</div>
+            
             <div className="wallet-modal-input-group">
               <label>{isEN ? "Current password" : "Текущий пароль"}</label>
               <input type="password" value={passwordForm.oldPassword} onChange={(e) => handlePasswordInput("oldPassword", e.target.value)} />
@@ -4574,8 +4682,12 @@ const renderProfile = () => {
               <label>{isEN ? "Repeat" : "Повтор нового пароля"}</label>
               <input type="password" value={passwordForm.confirmPassword} onChange={(e) => handlePasswordInput("confirmPassword", e.target.value)} />
             </div>
+
+            {/* ОТОБРАЖЕНИЕ ОШИБОК И УСПЕХА (БЕЗОПАСНО) */}
             {passwordError && <div className="wallet-modal-note error">{passwordError}</div>}
+            {/* Проверка на существование success сообщения */}
             {passwordSuccess && <div className="wallet-modal-note success">{passwordSuccess}</div>}
+
             <div className="wallet-modal-actions">
               <button className="wallet-modal-btn secondary" onClick={() => setPasswordModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
               <button className="wallet-modal-btn primary" onClick={handlePasswordChange}>{isEN ? "Save" : "Сохранить"}</button>
@@ -5481,30 +5593,95 @@ return (
                 </p>
               </>
             )}
+       {/* ... (тут код legalModal) ... */}
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
 
-{toast && (
-  <div className={`toast-root toast-${toast.type} fade-in`}>
-    <div className="toast-icon">
-      {toast.type === "success" ? "✅" : toast.type === "error" ? "❌" : "ℹ️"}
-    </div>
-    <div className="toast-content">
-      <div className="toast-title">
-        {toast.type === "success"
-          ? isEN ? "Success" : "Успешно"
-          : isEN ? "Error" : "Ошибка"}
-      </div>
-      <div className="toast-text">{toast.text}</div>
-    </div>
-    {/* Полоска времени (опционально) */}
-    <div className="toast-progress"></div> 
-  </div>
-)}
-      </Shell>
-    );
+      {/* 👇👇👇 ВСТАВЛЯЙ СЮДА 👇👇👇 */}
+
+{/* === МОДАЛКА МОНЕТЫ (ИСПРАВЛЕННАЯ) === */}
+      {coinModal && (
+        <div className="wallet-modal-backdrop" onClick={() => setCoinModal(null)}>
+          <div 
+            className="coin-modal-wrapper" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Шапка модалки */}
+            <div className="coin-modal-header">
+              <div className="coin-modal-title">
+                {coinModal.name} <span style={{opacity: 0.5}}>({coinModal.symbol})</span>
+              </div>
+              <button 
+                className="wallet-modal-close" 
+                style={{position: 'static'}} /* статик, т.к. мы во флексе */
+                onClick={() => setCoinModal(null)}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="coin-modal-body">
+              {/* График TradingView (фиксированная высота) */}
+              <div className="coin-chart-container">
+                 <iframe 
+                    src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=BINANCE:${coinModal.symbol}USDT&interval=60&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=f1f3f6&studies=[]&theme=dark&style=1&timezone=Etc%2FUTC`}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                 ></iframe>
+              </div>
+
+              {/* Блок покупки */}
+              <div className="spot-buy-box">
+                 <span className="spot-label">
+                    {isEN ? "Amount to buy" : "Сумма покупки"}
+                 </span>
+                 
+                 <div className="spot-input-group">
+                    <input 
+                      type="number" 
+                      className="spot-input" 
+                      placeholder="1000" 
+                      value={spotBuyAmount}
+                      onChange={(e) => setSpotBuyAmount(e.target.value)}
+                    />
+                    <span className="spot-currency">RUB</span>
+                 </div>
+
+                 <button className="spot-btn" onClick={handleSpotBuy}>
+                   {isEN ? "Buy" : "Купить"} {coinModal.symbol}
+                 </button>
+                 
+                 <div className="spot-info">
+                    {isEN 
+                      ? "Funds will be deducted from your main RUB balance." 
+                      : "Спишется с основного баланса. Активы появятся в кошельке."}
+                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`toast-root toast-${toast.type} fade-in`}>
+          <div className="toast-icon">
+            {toast.type === "success" ? "✅" : toast.type === "error" ? "❌" : "ℹ️"}
+          </div>
+          <div className="toast-content">
+            <div className="toast-title">
+              {toast.type === "success"
+                ? isEN ? "Success" : "Успешно"
+                : isEN ? "Error" : "Ошибка"}
+            </div>
+            <div className="toast-text">{toast.text}</div>
+          </div>
+          <div className="toast-progress"></div> 
+        </div>
+      )}
+
+    </Shell>
+  );
 }
 
 export default App;

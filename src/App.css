@@ -3799,3 +3799,138 @@ body,
 .settings-chip {
   transition: all 0.3s ease !important;
 }
+
+/* ===== FIX: МОДАЛКА МОНЕТЫ И СПОТ ===== */
+
+/* Убираем растягивание, делаем авто-высоту */
+.coin-modal-wrapper {
+  width: 100%;
+  max-width: 480px;
+  background: rgba(12, 12, 14, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px 24px 0 0; /* Шторка снизу на мобилках */
+  padding-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh; /* Максимальная высота, но не фиксированная */
+  animation: slideUpModal 0.3s ease-out;
+}
+
+@media (min-width: 600px) {
+  .coin-modal-wrapper {
+    border-radius: 24px; /* На пк круглая со всех сторон */
+    margin: 20px;
+  }
+}
+
+@keyframes slideUpModal {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Заголовок модалки */
+.coin-modal-header {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.coin-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Контейнер контента */
+.coin-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto; /* Скролл только если не влезает */
+}
+
+/* График фиксированной высоты, чтобы не тянулся */
+.coin-chart-container {
+  width: 100%;
+  height: 280px; /* Фиксированная высота! */
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 16px;
+}
+
+/* Блок покупки */
+.spot-buy-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.spot-label {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-bottom: 8px;
+  display: block;
+}
+
+/* Поле ввода - крупное и красивое */
+.spot-input-group {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.spot-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 18px;
+  color: #fff;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.spot-input:focus {
+  border-color: #f97316;
+}
+
+.spot-currency {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Кнопка покупки */
+.spot-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.2s;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.spot-btn:active {
+  transform: scale(0.98);
+}
+
+.spot-info {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #6b7280;
+  text-align: center;
+  line-height: 1.4;
+}
