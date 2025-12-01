@@ -22,7 +22,7 @@ const LIVE_ACTIONS = [
 // --- КОМПОНЕНТЫ ЛЕНДИНГА ---
 
 const Ticker = () => (
-  <div className="w-full bg-brand-card/80 border-b border-white/5 overflow-hidden py-2 backdrop-blur-sm relative z-40">
+  <div className="w-full bg-black/60 border-b border-orange-500/20 overflow-hidden py-2 backdrop-blur-md relative z-40">
     <div className="flex animate-marquee whitespace-nowrap">
       {[...COINS, ...COINS, ...COINS].map((coin, i) => (
         <div
@@ -30,8 +30,8 @@ const Ticker = () => (
           className="flex items-center mx-4 sm:mx-6 text-xs sm:text-sm font-mono"
         >
           <span className="font-bold text-white mr-2">{coin.name}</span>
-          <span className="text-gray-400 mr-2">${coin.price}</span>
-          <span className={coin.up ? "text-brand-accent" : "text-red-500"}>
+          <span className="text-orange-100/80 mr-2">${coin.price}</span>
+          <span className={coin.up ? "text-orange-500" : "text-red-500"}>
             {coin.change}
           </span>
         </div>
@@ -65,8 +65,8 @@ const LiveNotification = () => {
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
       }`}
     >
-      <div className="bg-white/5 backdrop-blur-xl px-4 py-3 rounded-lg flex items-center gap-3 border-l-4 border-brand-accent">
-        <div className="w-2 h-2 bg-brand-accent rounded-full animate-pulse" />
+      <div className="bg-black/80 backdrop-blur-xl px-4 py-3 rounded-lg flex items-center gap-3 border-l-4 border-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.2)]">
+        <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
         <span className="text-xs font-mono text-gray-200">{notification}</span>
       </div>
     </div>
@@ -74,7 +74,7 @@ const LiveNotification = () => {
 };
 
 const LiveChart = () => (
-  <div className="w-full h-40 sm:h-48 relative overflow-hidden rounded-xl bg-brand-card/50 border border-white/5 p-3 sm:p-4">
+  <div className="w-full h-40 sm:h-48 relative overflow-hidden rounded-xl bg-black/50 border border-orange-500/20 p-3 sm:p-4">
     <div className="absolute top-2 left-3 sm:left-4 text-xs text-gray-500 font-mono">
       BTC/USD LIVE
     </div>
@@ -94,6 +94,7 @@ const LiveChart = () => (
         fill="none"
         stroke="#f97316"
         strokeWidth="2"
+        className="drop-shadow-[0_0_6px_rgba(249,115,22,0.5)]"
       />
     </svg>
   </div>
@@ -107,7 +108,8 @@ const ThreeBackground = () => {
     const THREE = window.THREE;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x030304, 0.02);
+    // Легкий оранжевый туман
+    scene.fog = new THREE.FogExp2(0x050200, 0.02);
 
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -115,7 +117,7 @@ const ThreeBackground = () => {
       0.1,
       1000
     );
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false });
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
     if (mountRef.current) {
@@ -135,10 +137,11 @@ const ThreeBackground = () => {
     );
 
     const material = new THREE.PointsMaterial({
-      size: 0.05,
-      color: 0xf97316,
+      size: 0.06,
+      color: 0xff8800, // Яркий оранжевый
       transparent: true,
       opacity: 0.8,
+      blending: THREE.AdditiveBlending,
     });
 
     const particlesMesh = new THREE.Points(particlesGeometry, material);
@@ -150,10 +153,10 @@ const ThreeBackground = () => {
 
     const animate = () => {
       requestAnimationFrame(animate);
-      particlesMesh.rotation.y += 0.0005;
-      particlesMesh.rotation.x += 0.0002;
-      camera.position.x += (mouseX * 2 - camera.position.x) * 0.05;
-      camera.position.y += (-mouseY * 2 - camera.position.y) * 0.05;
+      particlesMesh.rotation.y += 0.0008;
+      particlesMesh.rotation.x += 0.0004;
+      camera.position.x += (mouseX * 1.5 - camera.position.x) * 0.05;
+      camera.position.y += (-mouseY * 1.5 - camera.position.y) * 0.05;
       camera.lookAt(scene.position);
       renderer.render(scene, camera);
     };
@@ -193,15 +196,15 @@ const Modal = ({ open, onClose, title, children }) => {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur">
-      <div className="bg-brand-card/90 border border-white/10 rounded-2xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <div className="bg-[#0b0b0b] border border-white/10 rounded-2xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-          <h2 className="text-sm font-bold">{title}</h2>
+          <h2 className="text-sm font-bold text-white">{title}</h2>
           <button
             onClick={onClose}
             className="p-1 rounded hover:bg-white/5 transition-colors"
           >
-            <i data-lucide="x" className="w-4 h-4" />
+            <i data-lucide="x" className="w-4 h-4 text-gray-400" />
           </button>
         </div>
         <div className="px-5 py-4 overflow-y-auto text-xs text-gray-300 space-y-3">
@@ -210,15 +213,61 @@ const Modal = ({ open, onClose, title, children }) => {
         <div className="px-5 py-3 border-t border-white/10 text-right">
           <button
             onClick={onClose}
-            className="text-xs text-gray-400 hover:text-white transition-colors"
+            className="text-xs text-orange-500 hover:text-orange-400 font-bold transition-colors"
           >
-            Закрыть
+            ZAKRYT
           </button>
         </div>
       </div>
     </div>
   );
 };
+
+// === COSMIC ORANGE BACKGROUND EFFECT ===
+// Заменяет стандартный серый фон на глубокий космос с оранжевым свечением
+const BackgroundEffects = () => (
+  <>
+    {/* Основной черный фон */}
+    <div className="fixed inset-0 bg-[#020100] -z-50" />
+    
+    {/* Шум для текстуры */}
+    <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.04] pointer-events-none -z-40 mix-blend-overlay" />
+    
+    {/* Верхнее оранжевое свечение (Cosmic Flare) */}
+    <div className="fixed top-[-20%] left-[-10%] w-[70%] h-[70%] bg-orange-600/15 rounded-full blur-[130px] -z-30 animate-pulse" style={{ animationDuration: '8s' }} />
+    
+    {/* Нижнее холодное свечение для контраста (Cyber deep) */}
+    <div className="fixed bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-blue-900/10 rounded-full blur-[130px] -z-30" />
+
+    {/* Оранжевая кибер-сетка */}
+    <div className="fixed inset-0 bg-[linear-gradient(rgba(249,115,22,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(249,115,22,0.05)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,#000_70%,transparent_100%)] -z-20 pointer-events-none" />
+  </>
+);
+
+const PaymentPartners = () => (
+  <div className="py-8 border-t border-white/5 bg-black/30 backdrop-blur-sm text-center relative z-20 mt-auto">
+    <p className="text-[10px] text-gray-500 mb-6 uppercase tracking-[0.2em] font-mono">Trusted Payment Systems</p>
+    <div className="flex flex-wrap justify-center items-center gap-8 sm:gap-12 opacity-70 hover:opacity-100 transition-all duration-500">
+       <div className="flex items-center gap-1 font-bold text-2xl italic text-white group">
+          <span className="text-blue-500 group-hover:drop-shadow-[0_0_10px_rgba(59,130,246,0.8)] transition-all">Visa</span>
+       </div>
+       <div className="flex items-center gap-1 font-bold text-2xl text-white group">
+          <span className="text-red-500 group-hover:drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">Master</span>
+          <span className="text-yellow-500 group-hover:drop-shadow-[0_0_10px_rgba(234,179,8,0.8)]">Card</span>
+       </div>
+       <div className="flex items-center gap-2 font-bold text-xl text-green-500 group hover:text-green-400 transition-colors">
+          USDT 
+          <span className="text-[10px] border border-green-500 px-1.5 py-0.5 rounded text-white group-hover:bg-green-500/20 transition-all">TRC20</span>
+       </div>
+       <div className="font-bold text-2xl text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 hover:brightness-125 transition-all">
+          СБП
+       </div>
+       <div className="font-bold text-2xl text-white hover:text-green-400 transition-colors">
+          MIR
+       </div>
+    </div>
+  </div>
+);
 
 // --- ОСНОВНОЙ КОМПОНЕНТ СТРАНИЦЫ ---
 
@@ -240,57 +289,52 @@ export default function LandingPage({ onLogin, onRegister }) {
   };
 
   return (
-    <div className="relative min-h-screen text-white font-sans selection:bg-brand-accent selection:text-black pb-20">
-      {/* Фон */}
-      <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none -z-10" />
+    <div className="relative min-h-screen text-white font-sans selection:bg-orange-500 selection:text-black pb-0 flex flex-col">
+      
+      {/* 1. ФОН: Cyber/Cosmic Orange Effects */}
+      <BackgroundEffects />
       <ThreeBackground />
+      
+      {/* Тикер */}
       <Ticker />
 
       {/* Навигация */}
-      <nav className="w-full z-50 bg-brand-bg/80 backdrop-blur border-b border-white/5 py-4 sticky top-0">
+      <nav className="w-full z-50 bg-black/20 backdrop-blur-md border-b border-white/5 py-4 sticky top-0">
         <div className="container mx-auto px-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-brand-accent to-brand-blue rounded-lg flex items-center justify-center border border-brand-accent">
+          <div className="flex items-center gap-2 group cursor-pointer">
+            <div className="w-9 h-9 bg-gradient-to-br from-orange-500 to-orange-700 rounded-xl flex items-center justify-center border border-orange-400/50 shadow-[0_0_15px_rgba(249,115,22,0.3)] group-hover:scale-105 transition-transform">
               <span className="text-xl">🦊</span>
             </div>
-            <span className="text-xl font-bold tracking-wider">
-              FORBEX <span className="text-brand-accent">TRADE</span>
-            </span>
+            <div className="flex flex-col leading-none">
+              <span className="text-lg font-bold tracking-wider">FORBEX</span>
+              <span className="text-[9px] text-orange-500 tracking-[0.25em] font-bold">TRADE</span>
+            </div>
           </div>
 
           {/* Линки по секциям (десктоп) */}
-          <div className="hidden md:flex items-center gap-6 text-xs font-medium text-gray-400">
-            <button
-              onClick={() => scrollToSection("how-it-works")}
-              className="hover:text-white transition-colors"
-            >
-              Как начать
+          <div className="hidden md:flex items-center gap-8 text-xs font-bold uppercase tracking-wider text-gray-400">
+            <button onClick={() => scrollToSection("how-it-works")} className="hover:text-orange-400 hover:drop-shadow-[0_0_5px_rgba(249,115,22,0.8)] transition-all">
+              Start
             </button>
-            <button
-              onClick={() => scrollToSection("features")}
-              className="hover:text-white transition-colors"
-            >
-              Возможности
+            <button onClick={() => scrollToSection("features")} className="hover:text-orange-400 hover:drop-shadow-[0_0_5px_rgba(249,115,22,0.8)] transition-all">
+              Features
             </button>
-            <button
-              onClick={() => scrollToSection("faq")}
-              className="hover:text-white transition-colors"
-            >
+            <button onClick={() => scrollToSection("faq")} className="hover:text-orange-400 hover:drop-shadow-[0_0_5px_rgba(249,115,22,0.8)] transition-all">
               FAQ
             </button>
           </div>
 
           {/* Правый блок: кнопки + бургер */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <button
               onClick={onLogin}
-              className="hidden sm:inline-block text-sm font-medium hover:text-brand-accent transition-colors"
+              className="hidden sm:inline-block text-sm font-bold hover:text-orange-400 transition-colors"
             >
               Вход
             </button>
             <button
               onClick={onRegister}
-              className="hidden sm:inline-block bg-white text-black px-5 py-2 rounded-full font-bold text-sm hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all"
+              className="hidden sm:inline-block bg-orange-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-orange-500 hover:shadow-[0_0_20px_rgba(249,115,22,0.4)] transition-all transform hover:-translate-y-0.5"
             >
               Регистрация
             </button>
@@ -299,161 +343,115 @@ export default function LandingPage({ onLogin, onRegister }) {
             <button
               type="button"
               onClick={() => setMobileMenuOpen((v) => !v)}
-              className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
             >
-              <i
-                data-lucide={mobileMenuOpen ? "x" : "menu"}
-                className="w-5 h-5"
-              />
+              <i data-lucide={mobileMenuOpen ? "x" : "menu"} className="w-5 h-5 text-orange-400" />
             </button>
           </div>
         </div>
 
         {/* Мобильное меню */}
         {mobileMenuOpen && (
-          <div className="md:hidden mt-3 border-t border-white/10 pt-3">
-            <div className="container mx-auto px-6 flex flex-col gap-3 text-sm text-gray-200">
-              <button
-                onClick={() => scrollToSection("how-it-works")}
-                className="flex justify-between items-center py-2"
-              >
-                <span>Как начать</span>
-                <i
-                  data-lucide="chevron-right"
-                  className="w-4 h-4 text-gray-500"
-                />
+          <div className="md:hidden mt-3 border-t border-white/10 pt-3 bg-black/95 backdrop-blur-xl absolute w-full left-0 shadow-2xl">
+            <div className="container mx-auto px-6 flex flex-col gap-4 py-4 text-sm text-gray-200 font-medium">
+              <button onClick={() => scrollToSection("how-it-works")} className="flex justify-between items-center py-2 border-b border-white/5">
+                <span>Как начать</span> <i data-lucide="chevron-right" className="w-4 h-4 text-orange-500" />
               </button>
-              <button
-                onClick={() => scrollToSection("features")}
-                className="flex justify-between items-center py-2"
-              >
-                <span>Возможности</span>
-                <i
-                  data-lucide="chevron-right"
-                  className="w-4 h-4 text-gray-500"
-                />
+              <button onClick={() => scrollToSection("features")} className="flex justify-between items-center py-2 border-b border-white/5">
+                <span>Возможности</span> <i data-lucide="chevron-right" className="w-4 h-4 text-orange-500" />
               </button>
-              <button
-                onClick={() => scrollToSection("faq")}
-                className="flex justify-between items-center py-2"
-              >
-                <span>FAQ</span>
-                <i
-                  data-lucide="chevron-right"
-                  className="w-4 h-4 text-gray-500"
-                />
+              <button onClick={() => scrollToSection("faq")} className="flex justify-between items-center py-2 border-b border-white/5">
+                <span>FAQ</span> <i data-lucide="chevron-right" className="w-4 h-4 text-orange-500" />
               </button>
 
-              <div className="h-px bg-white/5 my-1" />
-
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onLogin && onLogin();
-                }}
-                className="w-full py-2 text-left text-gray-300"
-              >
-                Вход
-              </button>
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onRegister && onRegister();
-                }}
-                className="w-full py-2 text-left text-brand-accent font-semibold"
-              >
-                Регистрация
-              </button>
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <button onClick={() => { setMobileMenuOpen(false); onLogin && onLogin(); }} className="w-full py-3 rounded-xl border border-white/10 hover:bg-white/5 text-center">
+                  Вход
+                </button>
+                <button onClick={() => { setMobileMenuOpen(false); onRegister && onRegister(); }} className="w-full py-3 rounded-xl bg-orange-600 text-white font-bold text-center">
+                  Регистрация
+                </button>
+              </div>
             </div>
           </div>
         )}
       </nav>
 
       {/* HERO Секция */}
-      <section className="pt-12 pb-16 md:pt-20 md:pb-0 relative overflow-hidden">
-        <div className="absolute top-1/4 right-0 w-64 h-64 md:w-96 md:h-96 bg-brand-blue/20 rounded-full blur-[120px] animate-pulse" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 md:w-96 md:h-96 bg-brand-accent/10 rounded-full blur-[120px] animate-pulse" />
-
-        <div className="container mx-auto px-4 sm:px-6 grid md:grid-cols-2 gap-8 items-center relative z-10">
-          <div className="space-y-6 text-center md:text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-brand-accent/30 bg-brand-accent/5 mx-auto md:mx-0">
-              <span className="w-2 h-2 bg-brand-accent rounded-full animate-pulse" />
-              <span className="text-xs font-mono text-brand-accent uppercase tracking-widest">
+      <section className="pt-16 pb-20 relative overflow-visible">
+        <div className="container mx-auto px-4 sm:px-6 grid md:grid-cols-2 gap-12 items-center relative z-10">
+          <div className="space-y-8 text-center md:text-left">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-orange-500/30 bg-orange-500/10 mx-auto md:mx-0 backdrop-blur-md">
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_#4ade80]" />
+              <span className="text-[10px] font-mono text-orange-300 uppercase tracking-widest">
                 Работает в РФ 24/7
               </span>
             </div>
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold leading-tight">
-              Торгуй без <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-accent to-brand-blue">
-                Границ.
+            
+            <h1 className="text-5xl sm:text-6xl md:text-7xl font-black leading-[0.9]">
+              Торгуй <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-orange-500 to-red-500 drop-shadow-[0_0_25px_rgba(249,115,22,0.4)]">
+                БЕЗ ГРАНИЦ.
               </span>
             </h1>
+            
             <p className="text-gray-400 text-base sm:text-lg max-w-lg mx-auto md:mx-0 leading-relaxed">
               Единая экосистема для акций, крипты и форекса. Пополнение через
               СБП, P2P и криптовалюты. Никаких блокировок.
             </p>
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
               <button
                 onClick={onRegister}
-                className="px-8 py-4 bg-brand-accent text-black font-bold rounded-lg hover:bg-white hover:scale-105 transition-all duration-300 shadow-[0_0_20px_rgба(249,115,22,0.4)] flex items-center justify-center gap-2 group"
+                className="px-10 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold rounded-xl hover:scale-105 transition-all duration-300 shadow-[0_0_30px_rgba(249,115,22,0.4)] flex items-center justify-center gap-2 group"
               >
                 Открыть счет
-                <i
-                  data-lucide="arrow-right"
-                  className="w-4 h-4 group-hover:translate-x-1 transition-transform"
-                />
+                <i data-lucide="arrow-right" className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
               <button
                 onClick={onLogin}
-                className="px-8 py-4 bg-white/5 backdrop-blur rounded-lg font-medium hover:bg-white/10 transition-all border border-white/10 flex items-center justify-center gap-2"
+                className="px-10 py-4 bg-white/5 backdrop-blur border border-white/10 rounded-xl font-bold hover:bg-white/10 transition-all flex items-center justify-center gap-2"
               >
-                <i data-lucide="log-in" className="w-4 h-4" />
+                <i data-lucide="log-in" className="w-5 h-5" />
                 Войти
               </button>
             </div>
-            <div className="flex justify-center md:justify-start gap-6 text-xs sm:text-sm text-gray-500 font-mono pt-4">
+
+            <div className="flex flex-wrap justify-center md:justify-start gap-6 text-xs text-gray-500 font-mono pt-2 opacity-80">
               <div className="flex items-center gap-2">
-                <i
-                  data-lucide="shield-check"
-                  className="text-brand-accent w-4 h-4"
-                />
+                <i data-lucide="shield-check" className="text-green-400 w-4 h-4" />
                 <span>No KYC до $15k</span>
               </div>
               <div className="flex items-center gap-2">
-                <i data-lucide="zap" className="text-brand-blue w-4 h-4" />
+                <i data-lucide="zap" className="text-yellow-400 w-4 h-4" />
                 <span>Моментальный вывод</span>
               </div>
             </div>
           </div>
 
           {/* Интерактивная карточка */}
-          <div className="relative mt-8 md:mt-0 mx-auto max-w-sm w-full">
-            <div className="bg-brand-card/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 md:transform md:rotate-2 md:hover:rotate-0 transition-all duration-500 shadow-2xl">
+          <div className="relative mt-8 md:mt-0 mx-auto max-w-sm w-full perspective-1000">
+            <div className="bg-[#0a0a0a]/80 backdrop-blur-xl p-6 rounded-3xl border border-white/10 md:transform md:rotate-2 md:hover:rotate-0 transition-all duration-500 shadow-[0_0_50px_rgba(0,0,0,0.5)] relative group">
+              {/* Блик на карточке */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent rounded-3xl pointer-events-none" />
+              
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <p className="text-gray-400 text-xs font-mono mb-1">
-                    TOTAL BALANCE
-                  </p>
-                  <h3 className="text-3xl font-bold font-mono text-white">
-                    $124,592.40
-                  </h3>
+                  <p className="text-gray-500 text-[10px] font-mono mb-1 tracking-widest">TOTAL BALANCE</p>
+                  <h3 className="text-3xl font-bold font-mono text-white tracking-tight">$124,592.40</h3>
                 </div>
-                <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded text-xs font-bold">
+                <div className="px-3 py-1 bg-green-500/10 border border-green-500/20 text-green-400 rounded-full text-xs font-bold shadow-[0_0_10px_rgba(74,222,128,0.2)]">
                   +12.5%
                 </div>
               </div>
+              
               <LiveChart />
+              
               <div className="grid grid-cols-2 gap-4 mt-6">
-                <button
-                  onClick={onRegister}
-                  className="bg-green-500/10 text-green-400 py-3 rounded-lg font-bold hover:bg-green-500 hover:text-black transition-colors text-sm"
-                >
+                <button onClick={onRegister} className="bg-green-500/10 text-green-400 py-3 rounded-xl font-bold hover:bg-green-500 hover:text-black transition-all text-sm border border-green-500/20">
                   Купить
                 </button>
-                <button
-                  onClick={onRegister}
-                  className="bg-red-500/10 text-red-400 py-3 rounded-lg font-bold hover:bg-red-500 hover:text-black transition-colors text-sm"
-                >
+                <button onClick={onRegister} className="bg-red-500/10 text-red-400 py-3 rounded-xl font-bold hover:bg-red-500 hover:text-black transition-all text-sm border border-red-500/20">
                   Продать
                 </button>
               </div>
@@ -463,9 +461,9 @@ export default function LandingPage({ onLogin, onRegister }) {
       </section>
 
       {/* Как начать */}
-      <section id="how-it-works" className="py-12 md:py-16 relative z-10">
+      <section id="how-it-works" className="py-20 relative z-10">
         <div className="container mx-auto px-6">
-          <h2 className="text-2xl sm:text-3xl font-bold mb-6 text-center md:text-left">
+          <h2 className="text-3xl font-bold mb-10 text-center md:text-left">
             Как начать за 10 минут
           </h2>
           <div className="grid md:grid-cols-3 gap-6">
@@ -474,32 +472,32 @@ export default function LandingPage({ onLogin, onRegister }) {
                 icon: "user-plus",
                 title: "1. Регистрация",
                 desc: "Создай аккаунт по номеру телефона или email. Без сложных анкет.",
+                color: "text-orange-400",
+                bg: "bg-orange-500/10"
               },
               {
                 icon: "wallet-cards",
                 title: "2. Пополнение",
                 desc: "Пополняй баланс через СБП, карту РФ или криптовалюту.",
+                color: "text-blue-400",
+                 bg: "bg-blue-500/10"
               },
               {
                 icon: "activity",
                 title: "3. Торговля",
                 desc: "Открывай сделки на акциях, крипте и форексе в один клик.",
+                color: "text-green-400",
+                 bg: "bg-green-500/10"
               },
             ].map((step, idx) => (
-              <div
-                key={idx}
-                className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-5 flex flex-col gap-3"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-brand-accent/10 flex items-center justify-center">
-                    <i
-                      data-lucide={step.icon}
-                      className="w-4 h-4 text-brand-accent"
-                    />
+              <div key={idx} className="bg-[#0c0c0c] hover:bg-[#151515] border border-white/5 rounded-2xl p-6 flex flex-col gap-4 transition-colors group">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl ${step.bg} flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                    <i data-lucide={step.icon} className={`w-6 h-6 ${step.color}`} />
                   </div>
-                  <h3 className="text-sm font-semibold">{step.title}</h3>
+                  <h3 className="text-lg font-bold">{step.title}</h3>
                 </div>
-                <p className="text-xs text-gray-400">{step.desc}</p>
+                <p className="text-sm text-gray-400 leading-relaxed">{step.desc}</p>
               </div>
             ))}
           </div>
@@ -507,63 +505,31 @@ export default function LandingPage({ onLogin, onRegister }) {
       </section>
 
       {/* Карточки преимуществ */}
-      <section
-        id="features"
-        className="py-16 relative z-10 container mx-auto px-6"
-      >
+      <section id="features" className="py-10 relative z-10 container mx-auto px-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            {
-              icon: "globe-2",
-              title: "Все рынки",
-              desc: "NASDAQ, MOEX, Crypto.",
-              color: "text-brand-blue",
-            },
-            {
-              icon: "credit-card",
-              title: "Рубли",
-              desc: "Ввод/вывод на карты РФ.",
-              color: "text-brand-accent",
-            },
-            {
-              icon: "lock",
-              title: "Безопасность",
-              desc: "Холодное хранение.",
-              color: "text-purple-400",
-            },
-            {
-              icon: "smartphone",
-              title: "WebApp",
-              desc: "Торгуй прямо в Telegram.",
-              color: "text-yellow-400",
-            },
+            { icon: "globe-2", title: "Все рынки", desc: "NASDAQ, MOEX, Crypto.", color: "text-blue-400" },
+            { icon: "credit-card", title: "Рубли", desc: "Ввод/вывод на карты РФ.", color: "text-orange-400" },
+            { icon: "lock", title: "Безопасность", desc: "Холодное хранение.", color: "text-purple-400" },
+            { icon: "smartphone", title: "WebApp", desc: "Торгуй прямо в Telegram.", color: "text-yellow-400" },
           ].map((card, idx) => (
-            <div
-              key={idx}
-              className="bg-white/5 backdrop-blur border border-white/10 p-6 rounded-xl hover:-translate-y-2 transition-transform"
-            >
+            <div key={idx} className="bg-white/5 backdrop-blur border border-white/10 p-6 rounded-2xl hover:-translate-y-1 hover:border-orange-500/30 transition-all group">
               <div className="mb-4">
-                <i
-                  data-lucide={card.icon}
-                  className={`w-6 h-6 ${card.color}`}
-                />
+                <i data-lucide={card.icon} className={`w-8 h-8 ${card.color} group-hover:animate-pulse`} />
               </div>
-              <h3 className="font-bold mb-2">{card.title}</h3>
-              <p className="text-xs text-gray-400">{card.desc}</p>
+              <h3 className="font-bold text-lg mb-2">{card.title}</h3>
+              <p className="text-sm text-gray-400">{card.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* FAQ */}
-      <section
-        id="faq"
-        className="py-12 md:py-16 relative z-10 container mx-auto px-6"
-      >
-        <h2 className="text-2xl sm:text-3xl font-bold mb-6 text-center md:text-left">
+      <section id="faq" className="py-20 relative z-10 container mx-auto px-6">
+        <h2 className="text-3xl font-bold mb-8 text-center md:text-left">
           Частые вопросы
         </h2>
-        <div className="space-y-3 max-w-2xl">
+        <div className="space-y-4 max-w-3xl">
           {[
             {
               q: "Нужен ли KYC для торговли?",
@@ -582,43 +548,33 @@ export default function LandingPage({ onLogin, onRegister }) {
               a: "Комиссия зависит от способа вывода и указывается в интерфейсе перед подтверждением операции.",
             },
           ].map((item, idx) => (
-            <details
-              key={idx}
-              className="group bg-white/5 border border-white/10 rounded-lg px-4 py-3"
-            >
+            <details key={idx} className="group bg-[#0a0a0a] border border-white/5 rounded-xl px-6 py-4 open:border-orange-500/30 transition-all">
               <summary className="flex items-center justify-between cursor-pointer list-none">
-                <span className="text-sm font-medium text-white">
-                  {item.q}
-                </span>
+                <span className="text-base font-semibold text-white group-hover:text-orange-400 transition-colors">{item.q}</span>
                 <span className="ml-4 text-gray-500 group-open:rotate-180 transition-transform">
-                  <i data-lucide="chevron-down" className="w-4 h-4" />
+                  <i data-lucide="chevron-down" className="w-5 h-5" />
                 </span>
               </summary>
-              <p className="text-xs text-gray-400 mt-2">{item.a}</p>
+              <p className="text-sm text-gray-400 mt-3 leading-relaxed pl-2 border-l-2 border-orange-500/50">{item.a}</p>
             </details>
           ))}
         </div>
       </section>
 
-      {/* Футер + ссылки на документы */}
-      <footer className="bg-black/80 backdrop-blur py-8 border-t border-white/10 text-sm text-gray-500 text-center">
-        <p>© 2025 Forbex Trade. All rights reserved.</p>
-        <div className="mt-4 flex flex-wrap justify-center gap-4 text-xs">
-          <button
-            onClick={() => setShowTerms(true)}
-            className="hover:text-brand-accent transition-colors"
-          >
+      {/* 2. ПАРТНЕРЫ: Вставлены перед футером */}
+      <PaymentPartners />
+
+      {/* Футер */}
+      <footer className="bg-black py-8 border-t border-white/10 text-sm text-gray-600 text-center relative z-20">
+        <p className="mb-4">© 2025 Forbex Trade. Smart Trading Platform.</p>
+        <div className="flex flex-wrap justify-center gap-6 text-xs font-medium">
+          <button onClick={() => setShowTerms(true)} className="hover:text-orange-500 transition-colors">
             Правила пользователя
           </button>
-          <span className="text-gray-600 hidden sm:inline">•</span>
-          <button
-            onClick={() => setShowPrivacy(true)}
-            className="hover:text-brand-accent transition-colors"
-          >
+          <button onClick={() => setShowPrivacy(true)} className="hover:text-orange-500 transition-colors">
             Политика конфиденциальности
           </button>
-          <span className="text-gray-600 hidden sm:inline">•</span>
-          <span className="text-gray-500">
+          <span className="text-gray-700">
             Торговля связана с риском потери капитала
           </span>
         </div>

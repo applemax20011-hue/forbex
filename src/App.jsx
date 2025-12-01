@@ -1167,7 +1167,33 @@ useEffect(() => {
   return () => supabase.removeChannel(channel);
 }, [telegramId, isEN, settings.currency, loadWalletDataFromSupabase]);
 
-  // ===== helpers =====
+// === ЗАМЕНИТЬ ПРОШЛЫЙ БЛОК НА ЭТОТ ===
+  useEffect(() => {
+    // 1. Принудительно отключаем "память" браузера на позицию скролла
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+
+    // 2. Скроллим само окно и основные контейнеры
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+    
+    // 3. Если скролл "застрял" внутри корневого элемента (из-за index.css)
+    const root = document.getElementById("root");
+    if (root) root.scrollTop = 0;
+
+    // 4. "Контрольный выстрел" через мгновение после отрисовки
+    const timer = setTimeout(() => {
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      if (root) root.scrollTop = 0;
+    }, 10); // 10мс задержка
+
+    return () => clearTimeout(timer);
+  }, [activeTab, showLanding, authMode, user]);
+  // ======================================
   const showOverlay = (title, subtitle, callback, delay = 1100) => {
     setOverlayText({
       title: title || "FORBEX TRADE",
