@@ -1020,17 +1020,57 @@ body {
   padding: 16px;
 }
 
-.wallet-modal {
-  position: relative;
-  width: 100%;
-  max-width: 480px;
-  background: #020617;
-  border-radius: 20px;
-  border: 1px solid #111827;
-  padding: 16px 18px 18px;
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.9);
-  max-height: 90vh;
-  overflow-y: auto;
+/* ===== МОБИЛЬНАЯ АДАПТАЦИЯ (ШТОРКА + СКРОЛЛ) ===== */
+@media (max-width: 600px) {
+  .wallet-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+    /* Важно: чтобы бекдроп не блокировал скролл контента, если он вылезает */
+    overflow: hidden; 
+  }
+
+  .wallet-modal {
+    position: relative; 
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 24px 24px 0 0 !important;
+    border-bottom: none;
+    
+    /* --- ФИКС СКРОЛЛА --- */
+    max-height: 85vh; /* Высота шторки 85% от экрана */
+    overflow-y: auto !important; /* Включаем вертикальный скролл */
+    overscroll-behavior: contain; /* Чтобы не скроллился сайт на фоне */
+    padding-bottom: 40px; /* Чтобы нижняя кнопка не прилипала */
+    /* -------------------- */
+    
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /* Полоска сверху для красоты */
+
+  .wallet-modal::before {
+
+    content: "";
+
+    display: block;
+
+    width: 40px;
+
+    height: 4px;
+
+    background: rgba(255,255,255,0.2);
+
+    border-radius: 10px;
+
+    margin: 0 auto 12px;
+
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
 }
 
 .wallet-modal-title {
@@ -1055,17 +1095,34 @@ body {
 }
 
 .wallet-method-card {
-  border-radius: 14px;
-  border: 1px solid #111827;
-  padding: 10px 12px;
-  background: radial-gradient(circle at 10% -10%, #0b1223, #020617 65%);
-  font-size: 12px;
-  display: grid;
-  gap: 4px;
+  /* ...старые стили оставь... */
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
 }
+
+/* Добавляем иконку на фон */
+.wallet-method-card::after {
+  content: "";
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  font-size: 60px;
+  opacity: 0.1;
+  pointer-events: none;
+  transform: rotate(-15deg);
+}
+
+/* Иконки для разных типов */
+/* Тебе нужно будет добавить классы в JSX: className="wallet-method-card method-card" */
+.wallet-method-card:nth-child(2)::after { content: "💳"; } /* Карта */
+.wallet-method-card:nth-child(4)::after { content: "💎"; } /* USDT */
+.wallet-method-card:nth-child(5)::after { content: "🅿️"; } /* Paypal */
+
+/* Активное состояние более яркое */
 .wallet-method-card.active {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(0, 0, 0, 0));
   border-color: #f97316;
-  box-shadow: 0 14px 28px rgba(248, 113, 22, 0.45);
 }
 
 .wallet-method-title {
@@ -3002,44 +3059,6 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
 
-@media (max-width: 600px) {
-  .wallet-modal {
-    position: absolute;
-    bottom: 0;
-    top: auto;
-    left: 0;
-    right: 0;
-    width: 100%;
-    max-width: 100%;
-    border-radius: 24px 24px 0 0 !important; /* Круглим только верх */
-    border-bottom: none;
-    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    max-height: 85vh; /* Не на весь экран */
-    padding-bottom: 30px; /* Учет safe-area айфонов */
-  }
-
-  .wallet-modal-backdrop {
-    align-items: flex-end; /* Прижимаем к низу */
-    padding: 0;
-  }
-
-  @keyframes slideUp {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
-  }
-  
-  /* Полосочка-индикатор сверху шторки */
-  .wallet-modal::before {
-    content: "";
-    display: block;
-    width: 40px;
-    height: 4px;
-    background: rgba(255,255,255,0.2);
-    border-radius: 10px;
-    margin: -8px auto 12px; /* Чуть выше контента */
-  }
-}
-
 .skeleton {
   background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
   background-size: 200% 100%;
@@ -3051,4 +3070,69 @@ body {
 @keyframes skeletonLoad {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+.quick-amounts-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.quick-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #9ca3af;
+  padding: 8px 0;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quick-chip:hover {
+  background: rgba(249, 115, 22, 0.1);
+  border-color: #f97316;
+  color: #fff;
+}
+
+.upload-zone:hover {
+  border-color: #f97316 !important;
+  background: rgba(249, 115, 22, 0.05) !important;
+}
+.upload-zone.has-file {
+  border-style: solid !important;
+  border-color: rgba(34, 197, 94, 0.3) !important;
+  background: rgba(34, 197, 94, 0.05) !important;
+}
+
+/* ===== Улучшенные карточки методов (с фоновыми иконками) ===== */
+.wallet-method-card {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+/* Добавляем иконку на фон */
+.wallet-method-card::after {
+  content: "";
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  font-size: 60px;
+  opacity: 0.1;
+  pointer-events: none;
+  transform: rotate(-15deg);
+}
+
+/* Автоматически подставляем иконки: 
+   2-я кнопка - карта, 4-я - USDT, 5-я - PayPal, 6-я - Саппорт */
+.wallet-methods > button:nth-child(2)::after { content: "💳"; }
+.wallet-methods > button:nth-child(4)::after { content: "💎"; }
+.wallet-methods > button:nth-child(5)::after { content: "🅿️"; }
+.wallet-methods > button:nth-child(6)::after { content: "👨‍💻"; }
+
+/* Активное состояние более яркое */
+.wallet-method-card.active {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(0, 0, 0, 0)) !important;
+  border-color: #f97316 !important;
 }
