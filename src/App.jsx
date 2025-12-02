@@ -1279,18 +1279,20 @@ const loadWalletDataFromSupabase = useCallback(async () => {
         .eq("user_tg_id", telegramId)
         .order("ts", { ascending: false }),
       supabase
-        .from("users") // Таблица, где хранятся настройки мамонта
-        .select("luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw")
+        .from("users") // Читаем настройки И БАЛАНС из таблицы users
+        .select("luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw, is_verified, balance")
         .eq("tg_id", telegramId)
         .maybeSingle()
     ]);
 
-    // 2. Сохраняем настройки (если есть)
+    // 2. Сохраняем настройки и БАЛАНС
     if (settingsRes.data) {
       setUserFlags(settingsRes.data);
+      // === ВАЖНО: Берем баланс из базы, а не считаем сами ===
+      setBalance(settingsRes.data.balance || 0);
     }
 
-    // 3. Грузим активы (крипту на балансе)
+    // 3. Грузим активы (если есть)
     if (user) {
       const { data: assets } = await supabase
         .from("user_assets")
@@ -1303,7 +1305,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
     if (topupsRes.error) console.error("loadWalletData topups error:", topupsRes.error);
     if (withdrawsRes.error) console.error("loadWalletData withdrawals error:", withdrawsRes.error);
 
-    // === ФИЛЬТРАЦИЯ: скрываем старые операции для текущего аккаунта ===
+    // === ФИЛЬТРАЦИЯ ИСТОРИИ ===
     const userRegTime = user?.createdAt || 0;
     const rawTopups = topupsRes.data || [];
     const rawWithdrawals = withdrawsRes.data || [];
@@ -1320,23 +1322,9 @@ const loadWalletDataFromSupabase = useCallback(async () => {
 
     const normalizeStatus = (s) => (s || "").toLowerCase();
 
-    // Считаем баланс
-    const approvedDepositSum = topups
-      .filter((t) => normalizeStatus(t.status) === "approved")
-      .reduce((acc, t) => acc + Number(t.amount || 0), 0);
-
-    const withdrawSum = withdrawals
-      .filter((w) => {
-        const st = normalizeStatus(w.status);
-        return st === "pending" || st === "done";
-      })
-      .reduce((acc, w) => acc + Number(w.amount || 0), 0);
-
-    setBalance(Math.max(0, approvedDepositSum - withdrawSum));
-
+    // Формируем единый список истории
     const history = [];
 
-    // Формируем историю
     topups.forEach((row) => {
       const status = normalizeStatus(row.status) || "pending";
       history.push({
@@ -1363,6 +1351,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
 
     history.sort((a, b) => b.ts - a.ts);
     setWalletHistory(history);
+
   } catch (e) {
     console.error("loadWalletDataFromSupabase exception", e);
   } finally {
@@ -1422,18 +1411,36 @@ useEffect(() => {
         }
       }
     )
-    // 3. === НОВОЕ: СЛУШАЕМ ИЗМЕНЕНИЯ БАЛАНСА В USERS ===
+    // 3. === ОБНОВЛЕНИЕ БАЛАНСА В РЕАЛЬНОМ ВРЕМЕНИ + КОНФЕТТИ ===
     .on(
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "users", filter: `tg_id=eq.${telegramId}` },
       (payload) => {
         const row = payload.new;
-        if (row && typeof row.balance === "number") {
-          // Мгновенно обновляем цифру на экране
-          setBalance(row.balance);
+        if (row) {
+          // Если баланс изменился и это число
+          if (typeof row.balance === "number") {
+             setBalance((prev) => {
+                 // Если баланс вырос — пускаем салют
+                 if (row.balance > prev) {
+                     triggerNotification("success");
+                     confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ["#22c55e", "#ffffff", "#f97316"] });
+                     setToast({ type: "success", text: isEN ? "Balance updated!" : "Баланс пополнен!" });
+                 }
+                 return row.balance;
+             });
+          }
           
-          // Визуальный эффект (по желанию)
-          triggerHaptic("light");
+          // Обновляем флаги (блокировки, вериф) на лету
+          setUserFlags(prev => ({
+              ...prev,
+              luck_mode: row.luck_mode,
+              is_blocked_trade: row.is_blocked_trade,
+              is_blocked_withdraw: row.is_blocked_withdraw,
+              is_verified: row.is_verified,
+              min_deposit: row.min_deposit,
+              min_withdraw: row.min_withdraw
+          }));
         }
       }
     )
@@ -4391,8 +4398,24 @@ const renderProfile = () => {
      }
   };
 
-  return (
+// Внутри renderProfile...
+return (
     <>
+      <section className="section-block fade-in delay-1">
+        <div className="profile-card">
+          {/* Аватар */}
+          <div className="profile-avatar">
+            {userAvatarUrl ? <img src={userAvatarUrl} className="profile-avatar-img" /> : <span>🦊</span>}
+          </div>
+          
+          <div className="profile-main">
+            <div className="profile-login">
+              {user.login} 
+              {/* === ЗНАЧОК ВЕРИФИКАЦИИ === */}
+              {userFlags.is_verified && (
+                <span style={{ marginLeft: 6, fontSize: 14 }} title="Verified">✅</span>
+              )}
+            </div>
       {/* 1. КАРТОЧКА ПРОФИЛЯ */}
       <section className="section-block fade-in delay-1">
         <div className="profile-card">
