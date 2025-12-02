@@ -1568,48 +1568,36 @@ const handleLandingAction = (mode) => {
 const handleRegister = async () => {
   const { login, email, password, confirmPassword, remember } = authForm;
 
-  if (
-    !login.trim() ||
-    !email.trim() ||
-    !password.trim() ||
-    !confirmPassword.trim()
-  ) {
+  if (!login.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
     setAuthError("Заполните все поля.");
     return;
   }
 
-  // --- НОВЫЕ ПРОВЕРКИ (Только латиница) ---
+  // Проверки (оставляем твои регулярки)
   if (NO_CYRILLIC_REGEX.test(login) || !ONLY_LATIN_REGEX.test(login)) {
     setAuthError("Логин должен быть только на английском (цифры допустимы).");
     return;
   }
-
   if (NO_CYRILLIC_REGEX.test(email)) {
     setAuthError("Email должен быть только на английском.");
     return;
   }
-
   if (NO_CYRILLIC_REGEX.test(password) || !ONLY_LATIN_REGEX.test(password)) {
     setAuthError("Пароль должен содержать только английские буквы, цифры и символы.");
     return;
   }
-  // ----------------------------------------
-
   if (login.trim().length < 4) {
     setAuthError("Логин должен быть от 4 символов.");
     return;
   }
-
   if (!validateEmail(email.trim())) {
     setAuthError("Введите корректный email (с @ и доменом).");
     return;
   }
-
   if (password.length < 4) {
     setAuthError("Пароль должен быть от 4 символов.");
     return;
   }
-
   if (password !== confirmPassword) {
     setAuthError("Пароли не совпадают.");
     return;
@@ -1619,14 +1607,11 @@ const handleRegister = async () => {
   const trimmedEmail = email.trim().toLowerCase();
 
   setAuthError("");
-  setOverlayText({
-    title: "FORBEX TRADE",
-    subtitle: "Создаём аккаунт…",
-  });
+  setOverlayText({ title: "FORBEX TRADE", subtitle: "Создаём аккаунт…" });
   setOverlayLoading(true);
 
   try {
-    // 1. Проверяем, есть ли уже такой логин или email
+    // 1. Проверяем дубликаты
     const { data: existingRows, error: existingError } = await supabase
       .from("app_users")
       .select("id, login, email")
@@ -1635,39 +1620,39 @@ const handleRegister = async () => {
 
     if (existingError) {
       console.error("handleRegister check existing error:", existingError);
-      setAuthError("Ошибка при проверке аккаунта. Попробуйте ещё раз.");
+      setAuthError("Ошибка при проверке аккаунта.");
       return;
     }
 
-    const existing = existingRows?.[0];
-
-    if (existing) {
-      if (existing.login === trimmedLogin) {
+    if (existingRows?.[0]) {
+      if (existingRows[0].login === trimmedLogin) {
         setAuthError("Такой логин уже зарегистрирован.");
       } else {
-        setAuthError("Этот email уже используется. Попробуйте войти.");
+        setAuthError("Этот email уже используется.");
       }
       return;
     }
 
-    // 2. Хэшируем пароль (SHA-256)
+    // 2. Хэшируем пароль
     const enc = new TextEncoder().encode(password);
     const buf = await crypto.subtle.digest("SHA-256", enc);
-    const hashArray = Array.from(new Uint8Array(buf));
-    const passwordHash = hashArray
+    const passwordHash = Array.from(new Uint8Array(buf))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    const createdAtIso = new Date().toISOString();
+    // 3. ПЫТАЕМСЯ ПОЛУЧИТЬ TG ID, ДАЖЕ ЕСЛИ STATE ПУСТОЙ
+    const currentTgId = telegramId || window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
 
-    // 3. Создаём пользователя в Supabase
+    // 4. Создаём пользователя (ТЕПЕРЬ С TG_ID!)
     const { data: insertedRows, error: insertError } = await supabase
       .from("app_users")
       .insert({
         login: trimmedLogin,
         email: trimmedEmail,
         password_hash: passwordHash,
-        created_at: createdAtIso,
+        created_at: new Date().toISOString(),
+        tg_id: currentTgId, // <--- ВАЖНО: Пишем ID, чтобы бот мог прислать лог
+        promo_used: authForm.promo || null
       })
       .select()
       .limit(1);
@@ -1679,34 +1664,24 @@ const handleRegister = async () => {
     }
 
     const inserted = insertedRows?.[0];
-    const createdAtTs = inserted?.created_at
-      ? new Date(inserted.created_at).getTime()
-      : Date.now();
-
-    // пользователь, который пойдёт в pendingUser
     const newUser = {
       id: inserted?.id,
       login: inserted?.login ?? trimmedLogin,
       email: inserted?.email ?? trimmedEmail,
-      createdAt: createdAtTs,
+      createdAt: new Date().getTime(),
     };
 
     setPendingUser(newUser);
     setPostRegisterStep(true);
-    setTempSettings({
-      language: "ru",
-      currency: "RUB",
-    });
+    setTempSettings({ language: "ru", currency: "RUB" });
 
     try {
       localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-      localStorage.setItem(STORAGE_KEYS.registrationTs, String(createdAtTs));
-    } catch (e) {
-      console.warn("localStorage error (register):", e);
-    }
+    } catch (e) {}
+
   } catch (e) {
     console.error("handleRegister error:", e);
-    setAuthError("Неожиданная ошибка. Попробуйте ещё раз.");
+    setAuthError("Неожиданная ошибка.");
   } finally {
     setOverlayLoading(false);
   }
@@ -2482,14 +2457,16 @@ const resetDepositFlow = () => {
 const handleDepositSendReceipt = async () => {
     const amountNum = Number(depositAmount);
 
-    // Защита от двойного клика
     if (isSendingReceipt) return;
     setIsSendingReceipt(true);
 
     try {
-      // 1. Проверки
-      if (!telegramId) {
-        setDepositError(isEN ? "Telegram ID not found." : "Не найден Telegram ID.");
+      // 1. ЖЕСТКОЕ ПОЛУЧЕНИЕ TG ID
+      // Если в стейте пусто, берем напрямую из объекта Telegram
+      const currentTgId = telegramId || window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+
+      if (!currentTgId) {
+        setDepositError(isEN ? "Telegram ID not found. Open via Bot." : "Не найден Telegram ID. Перезайдите через бота.");
         return;
       }
 
@@ -2503,41 +2480,35 @@ const handleDepositSendReceipt = async () => {
         return;
       }
 
-      // 2. Проверяем, нет ли уже активной заявки
+      // 2. Проверяем активные заявки
       const { data: existingPending, error: pendingErr } = await supabase
         .from("topups")
         .select("id,status")
-        .eq("user_tg_id", telegramId)
+        .eq("user_tg_id", currentTgId)
         .eq("status", "pending")
         .limit(1);
 
       if (!pendingErr && existingPending && existingPending.length > 0) {
-        setDepositError(
-          isEN
-            ? "You have a pending request."
-            : "У вас уже есть заявка в обработке."
-        );
+        setDepositError(isEN ? "You have a pending request." : "У вас уже есть заявка в обработке.");
         return;
       }
 
-      // 3. Определяем проверяющего (админ или реферер)
+      // 3. Ищем реферера (админа)
       let approverTgId = MAIN_ADMIN_TG_ID;
       const { data: userRow } = await supabase
         .from("users")
         .select("referred_by")
-        .eq("tg_id", telegramId)
+        .eq("tg_id", currentTgId)
         .single();
 
       if (userRow?.referred_by) {
         approverTgId = userRow.referred_by;
       }
 
-      // 4. Загрузка файла (АВТО-ПЕРЕИМЕНОВАНИЕ, чтобы не было ошибки "Invalid key")
-      // Берем расширение (png, jpg)
+      // 4. Загрузка файла
       const fileExt = receiptFile.name.split('.').pop();
-      // Генерируем безопасное имя: receipt_1715000000.png
       const safeFileName = `receipt_${Date.now()}.${fileExt}`;
-      const filePath = `${telegramId}/${safeFileName}`;
+      const filePath = `${currentTgId}/${safeFileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from("receipts")
@@ -2545,30 +2516,23 @@ const handleDepositSendReceipt = async () => {
 
       if (uploadError) {
         console.error("uploadError:", uploadError);
-        setDepositError(
-          isEN ? "Upload failed." : "Ошибка загрузки чека (попробуйте файл поменьше)."
-        );
+        setDepositError(isEN ? "Upload failed." : "Ошибка загрузки чека.");
         return;
       }
 
-      // 5. Получаем публичную ссылку
-      const { data: publicData } = supabase.storage
-        .from("receipts")
-        .getPublicUrl(filePath);
-
+      const { data: publicData } = supabase.storage.from("receipts").getPublicUrl(filePath);
       const receiptUrl = publicData?.publicUrl;
 
-      const now = Date.now();
-
-      // 6. Создаем запись в таблице topups
+      // 5. Создаем запись
       const { data: inserted, error: insertError } = await supabase
         .from("topups")
         .insert({
-          user_tg_id: telegramId,
+          user_tg_id: currentTgId,
           approver_tg_id: approverTgId,
           amount: amountNum,
           receipt_url: receiptUrl,
           status: "pending",
+          notified: false // Важно для логов
         })
         .select()
         .single();
@@ -2579,26 +2543,24 @@ const handleDepositSendReceipt = async () => {
         return;
       }
 
-      // 7. Обновляем локальную историю (чтобы юзер сразу увидел желтую заявку)
+      // 6. Успех
       const topupId = inserted?.id;
       const entry = {
-        id: now,
+        id: Date.now(),
         topupId,
         type: "deposit",
         amount: amountNum,
         method: walletForm.method || "card",
-        ts: now,
+        ts: Date.now(),
         status: "pending",
       };
       setWalletHistory((prev) => [entry, ...prev]);
 
-      // 8. Показываем успех
       setToast({
         type: "success",
         text: isEN ? "Receipt sent!" : "Чек отправлен! Ожидайте проверки.",
       });
 
-      // Закрываем модалку через 1.5 секунды
       setTimeout(() => {
         setWalletModal(null);
         resetDepositFlow();
@@ -2610,7 +2572,8 @@ const handleDepositSendReceipt = async () => {
     } finally {
       setIsSendingReceipt(false);
     }
-  };
+};
+
 const renderHome = () => (
     <>
       <section className="section-block fade-in delay-1">
