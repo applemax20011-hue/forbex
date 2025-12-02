@@ -1266,8 +1266,8 @@ const loadWalletDataFromSupabase = useCallback(async () => {
   if (!telegramId) return;
 
   try {
-    // 1. Параллельная загрузка: Пополнения, Выводы, Настройки юзера
-    const [topupsRes, withdrawsRes, settingsRes] = await Promise.all([
+    // 1. Параллельная загрузка: Пополнения, Выводы, Настройки юзера (ВКЛЮЧАЯ БАЛАНС)
+    const [topupsRes, withdrawsRes, userRes] = await Promise.all([
       supabase
         .from("topups")
         .select("id, amount, status, created_at")
@@ -1279,20 +1279,20 @@ const loadWalletDataFromSupabase = useCallback(async () => {
         .eq("user_tg_id", telegramId)
         .order("ts", { ascending: false }),
       supabase
-        .from("users") // Читаем настройки И БАЛАНС из таблицы users
+        .from("users") // Таблица настроек мамонта
         .select("luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw, is_verified, balance")
         .eq("tg_id", telegramId)
         .maybeSingle()
     ]);
 
     // 2. Сохраняем настройки и БАЛАНС
-    if (settingsRes.data) {
-      setUserFlags(settingsRes.data);
-      // === ВАЖНО: Берем баланс из базы, а не считаем сами ===
-      setBalance(settingsRes.data.balance || 0);
+    if (userRes.data) {
+      setUserFlags(userRes.data);
+      // === ВАЖНО: Баланс берем жестко из базы ===
+      setBalance(userRes.data.balance || 0);
     }
 
-    // 3. Грузим активы (если есть)
+    // 3. Грузим активы (крипту на балансе), если есть
     if (user) {
       const { data: assets } = await supabase
         .from("user_assets")
@@ -1365,19 +1365,22 @@ useEffect(() => {
 
   const channel = supabase
     .channel("wallet-updates")
-    // 1. Слушаем пополнения (Topups)
+    // 1. Слушаем пополнения (Topups) - для уведомлений и истории
     .on(
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "topups" },
       async (payload) => {
         const row = payload.new;
         if (!row || row.user_tg_id !== telegramId) return;
+        
+        // Перезагружаем историю
         await loadWalletDataFromSupabase();
 
         const currency = settings.currency === "RUB" ? "RUB" : "USD";
         const amountStr = Number(row.amount).toLocaleString("ru-RU");
 
         if (row.status === "approved") {
+          // Салют и тост
           triggerNotification("success");
           confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ["#22c55e", "#ffffff"] });
           setToast({
@@ -1411,17 +1414,17 @@ useEffect(() => {
         }
       }
     )
-    // 3. === ОБНОВЛЕНИЕ БАЛАНСА В РЕАЛЬНОМ ВРЕМЕНИ + КОНФЕТТИ ===
+    // 3. === СЛУШАЕМ ИЗМЕНЕНИЯ БАЛАНСА В ТАБЛИЦЕ USERS ===
     .on(
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "users", filter: `tg_id=eq.${telegramId}` },
       (payload) => {
         const row = payload.new;
         if (row) {
-          // Если баланс изменился и это число
+          // Если баланс изменился
           if (typeof row.balance === "number") {
              setBalance((prev) => {
-                 // Если баланс вырос — пускаем салют
+                 // Если баланс стал больше, чем был — это пополнение, пускаем салют
                  if (row.balance > prev) {
                      triggerNotification("success");
                      confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ["#22c55e", "#ffffff", "#f97316"] });
@@ -1431,7 +1434,7 @@ useEffect(() => {
              });
           }
           
-          // Обновляем флаги (блокировки, вериф) на лету
+          // Обновляем настройки (блокировки, вериф) на лету
           setUserFlags(prev => ({
               ...prev,
               luck_mode: row.luck_mode,
@@ -4398,24 +4401,8 @@ const renderProfile = () => {
      }
   };
 
-// Внутри renderProfile...
 return (
     <>
-      <section className="section-block fade-in delay-1">
-        <div className="profile-card">
-          {/* Аватар */}
-          <div className="profile-avatar">
-            {userAvatarUrl ? <img src={userAvatarUrl} className="profile-avatar-img" /> : <span>🦊</span>}
-          </div>
-          
-          <div className="profile-main">
-            <div className="profile-login">
-              {user.login} 
-              {/* === ЗНАЧОК ВЕРИФИКАЦИИ === */}
-              {userFlags.is_verified && (
-                <span style={{ marginLeft: 6, fontSize: 14 }} title="Verified">✅</span>
-              )}
-            </div>
       {/* 1. КАРТОЧКА ПРОФИЛЯ */}
       <section className="section-block fade-in delay-1">
         <div className="profile-card">
@@ -4428,18 +4415,18 @@ return (
           </div>
           
           <div className="profile-main">
-            <div className="profile-login">{user.login}</div>
+            <div className="profile-login">
+              {user.login}
+              {/* === ЗНАЧОК ВЕРИФИКАЦИИ === */}
+              {userFlags.is_verified && (
+                <span style={{ marginLeft: 6, fontSize: 14 }} title="Verified">✅</span>
+              )}
+            </div>
             <div className="profile-email">{user.email}</div>
             <div className="profile-created">{getRegDateString()}</div>
           </div>
 
-          <div style={{ 
-            position: "absolute", 
-            top: 12, 
-            right: 14, 
-            textAlign: "right",
-            lineHeight: 1.3
-          }}>
+          <div style={{ position: "absolute", top: 12, right: 14, textAlign: "right", lineHeight: 1.3 }}>
             {telegramUsername && (
               <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", marginBottom: 2 }}>
                 @{telegramUsername}
