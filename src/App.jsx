@@ -1265,7 +1265,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
         .eq("user_tg_id", telegramId)
         .order("ts", { ascending: false }),
       supabase
-        .from("app_users") // Таблица, где хранятся настройки мамонта
+        .from("users") // Таблица, где хранятся настройки мамонта
         .select("luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw")
         .eq("tg_id", telegramId)
         .maybeSingle()
@@ -1640,10 +1640,13 @@ const handleRegister = async () => {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    // 3. ПЫТАЕМСЯ ПОЛУЧИТЬ TG ID, ДАЖЕ ЕСЛИ STATE ПУСТОЙ
-    const currentTgId = telegramId || window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+// 3. ПОЛУЧАЕМ ДАННЫЕ ТЕЛЕГРАМА
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    const currentTgId = telegramId || tgUser?.id;
+    const currentUsername = tgUser?.username || "";
+    const currentFirstName = tgUser?.first_name || "";
 
-    // 4. Создаём пользователя (ТЕПЕРЬ С TG_ID!)
+    // 4. Создаём пользователя WEB (app_users)
     const { data: insertedRows, error: insertError } = await supabase
       .from("app_users")
       .insert({
@@ -1651,7 +1654,7 @@ const handleRegister = async () => {
         email: trimmedEmail,
         password_hash: passwordHash,
         created_at: new Date().toISOString(),
-        tg_id: currentTgId, // <--- ВАЖНО: Пишем ID, чтобы бот мог прислать лог
+        tg_id: currentTgId, 
         promo_used: authForm.promo || null
       })
       .select()
@@ -1662,6 +1665,26 @@ const handleRegister = async () => {
       setAuthError("Не удалось создать аккаунт. Попробуйте ещё раз.");
       return;
     }
+
+    // === НОВОЕ: Создаем запись в таблице USERS (для настроек мамонта) ===
+    if (currentTgId) {
+        const { error: usersError } = await supabase
+            .from("users")
+            .upsert({
+                tg_id: currentTgId,
+                username: currentUsername,
+                first_name: currentFirstName,
+                balance: 0,
+                luck_mode: 'random',      // Дефолтное значение
+                is_blocked_trade: false,  // Дефолтное значение
+                is_blocked_withdraw: false,
+                is_verified: false,
+                created_at: new Date().toISOString()
+            }, { onConflict: 'tg_id' }); // Если уже есть - обновит
+
+        if (usersError) console.error("Ошибка создания записи в users:", usersError);
+    }
+    // ===================================================================
 
     const inserted = insertedRows?.[0];
     const newUser = {
