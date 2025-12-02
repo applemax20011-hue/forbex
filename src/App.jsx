@@ -1314,22 +1314,10 @@ const loadWalletDataFromSupabase = useCallback(async () => {
       if (assets) setUserAssets(assets);
     }
 
-    // === ИСТОРИЯ ===
-    const userRegTime = user?.createdAt || 0;
+// === ИСТОРИЯ (ОБНОВЛЕНО) ===
+    // Убрали фильтр по дате регистрации, чтобы показывать все операции по ID
     const rawTopups = topupsRes.data || [];
     const rawWithdrawals = withdrawsRes.data || [];
-
-    const topups = rawTopups.filter(t => {
-      const tTime = t.created_at ? new Date(t.created_at).getTime() : 0;
-      return tTime >= userRegTime;
-    });
-
-    const withdrawals = rawWithdrawals.filter(w => {
-      const wTime = w.ts ? new Date(w.ts).getTime() : 0;
-      return wTime >= userRegTime;
-    });
-
-    // УДАЛИЛИ БЛОК "Считаем баланс" (approvedDepositSum - withdrawSum)
 
     const history = [];
     const normalizeStatus = (s) => (s || "").toLowerCase();
@@ -1341,7 +1329,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
         topupId: row.id,
         type: "deposit",
         amount: Number(row.amount || 0),
-        method: row.method || "card", // Теперь метод берется из базы
+        method: row.method || "card",
         ts: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
         status, 
       });
@@ -2585,14 +2573,17 @@ const handleDepositSendReceipt = async () => {
       };
       setWalletHistory((prev) => [entry, ...prev]);
 
-      // 6. УСПЕХ: Ждем 2 секунды (имитация проверки) и скрываем всё
-      setTimeout(() => {
+setTimeout(() => {
           setOverlayLoading(false); // Убираем лоадер
-          setWalletModal(null);     // Закрываем окно кошелька
+          setWalletModal(null);     // Закрываем окно
           resetDepositFlow();       // Сбрасываем форму
           
-          // ВАЖНО: Тост тут НЕ показываем. Тост будет когда админ нажмет "Принять".
-      }, 2000); 
+          // Показываем пользователю, что заявка отправлена
+          setToast({
+             type: "success",
+             text: isEN ? "Receipt sent for review" : "Чек отправлен на проверку"
+          });
+      }, 1500);
 
     } catch (e) {
       console.error(e);
@@ -3089,9 +3080,8 @@ const renderWallet = () => {
       }
     };
 
-    // Helper для перевода методов
-    const methodLabel = (m) => {
-      if (m === "card") return isEN ? "Bank card" : "Банковская карта";
+const methodLabel = (m) => {
+      if (m === "card" || m === "admin_change") return isEN ? "Bank card" : "Банковская карта"; // <--- ВОТ ТУТ ФИКС
       if (m === "usdt") return "USDT TRC-20";
       if (m === "paypal") return "PayPal";
       if (m === "support") return isEN ? "Via support" : "Через поддержку";
@@ -4034,13 +4024,13 @@ const handleWithdrawSubmit = async () => {
     );
   };
 const renderHistory = () => {
-  const methodLabel = (m) => {
-    if (m === "card") return isEN ? "Bank card" : "Банковская карта";
-    if (m === "usdt") return "USDT TRC-20";
-    if (m === "paypal") return "PayPal";
-    if (m === "support") return isEN ? "Via support" : "Через поддержку";
-    return m;
-  };
+const methodLabel = (m) => {
+      if (m === "card" || m === "admin_change") return isEN ? "Bank card" : "Банковская карта"; // <--- ВОТ ТУТ ФИКС
+      if (m === "usdt") return "USDT TRC-20";
+      if (m === "paypal") return "PayPal";
+      if (m === "support") return isEN ? "Via support" : "Через поддержку";
+      return m;
+    };
 
   return (
     <>
