@@ -2599,7 +2599,19 @@ const handleDepositSendReceipt = async () => {
       setIsSendingReceipt(false);
     }
   };
-
+const handleShare = () => {
+  const text = `🚀 Just made profit on ${lastOpenedTrade.symbol} via Forbex Trade! \n\n💸 Profit: +${lastTradeResult.profit} ${currencyCode}`;
+  
+  // Для Telegram WebApp есть нативный метод
+  if (window.Telegram?.WebApp?.openTelegramLink) {
+     const url = `https://t.me/share/url?url=${encodeURIComponent("https://t.me/твоибот")}&text=${encodeURIComponent(text)}`;
+     window.Telegram.WebApp.openTelegramLink(url);
+  } else {
+     // Фолбек
+     navigator.clipboard.writeText(text);
+     setToast({ type: 'success', text: 'Link copied to clipboard!' });
+  }
+};
 const renderHome = () => (
     <>
       <section className="section-block fade-in delay-1">
@@ -3440,7 +3452,7 @@ const renderWallet = () => {
                         <div className="wallet-method-title">
                           {isEN
                             ? "Top up via support"
-                            : "Пополнение через техюподдержку"}
+                            : "Пополнение через тех.поддержку"}
                         </div>
                         <div className="wallet-method-sub">
                           {isEN ? "Manager help" : "Агент поддержки поможет"}
