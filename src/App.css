@@ -3990,3 +3990,154 @@ body,
   from { transform: translate(-50%, -150%); opacity: 0; }
   to   { transform: translate(-50%, 0); opacity: 1; }
 }
+
+/* ===== 1. ЧИНИМ ТОСТЫ (Делаем их тонкими и аккуратными) ===== */
+.toast-root {
+  position: fixed;
+  top: 16px;          /* Сверху */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;     /* Поверх всего */
+  
+  width: auto;        /* Ширина по контенту */
+  min-width: auto;    /* Убираем min-width 280px */
+  max-width: 90%;
+  
+  /* Уменьшаем паддинги, чтобы не был жирным */
+  padding: 8px 16px;  
+  
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  
+  border-radius: 99px; /* Полная капсула */
+  background: rgba(10, 10, 12, 0.95);
+  border: 1px solid rgba(255,255,255,0.1);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+  
+  animation: toastSlideDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.toast-icon {
+  font-size: 16px; /* Чуть меньше иконка */
+}
+
+.toast-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Заголовки в одну строку */
+.toast-title {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.toast-text {
+  font-size: 11px !important;
+  color: #9ca3af;
+  line-height: 1.1;
+  margin-top: 1px;
+}
+
+/* Цветовые акценты тостов */
+.toast-success { border-color: rgba(34, 197, 94, 0.4); box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15); }
+.toast-error   { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15); }
+
+
+/* ===== 2. ЧИНИМ "СДЕЛКА ОТКРЫТА" (TRADE TOAST) ===== */
+/* Переносим наверх */
+.trade-toast {
+  position: fixed;
+  top: 70px;         /* <--- Сверху, сразу под шапкой */
+  bottom: auto;      /* <--- Убираем привязку к низу */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+  
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(249, 115, 22, 0.3); /* Оранжевая рамка */
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  
+  padding: 8px 16px; /* Тоже делаем покомпактнее */
+  border-radius: 99px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  
+  min-width: 200px;
+}
+
+/* Анимация появления сверху */
+.slide-in-top {
+  animation: slideInTop 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+@keyframes slideInTop {
+  0% {
+    transform: translateX(-50%) translateY(-20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+.trade-toast-icon {
+  font-size: 18px;
+}
+.trade-toast-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+.trade-toast-subtitle {
+  font-size: 10px;
+  color: #f97316; /* Оранжевый текст */
+}
+
+
+/* ===== 3. КНОПКА SHARE ===== */
+.share-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.share-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Результат сделки */
+.trade-result {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+.trade-result.win {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #86efac;
+}
+.trade-result.lose {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
