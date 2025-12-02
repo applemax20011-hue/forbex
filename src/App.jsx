@@ -4322,137 +4322,111 @@ const renderHistory = () => {
 
 const renderProfile = () => {
     if (!user) return null;
-    
-    // ОТЛАДКА: Посмотри в консоль браузера, что лежит в userFlags
-    console.log("User Flags Debug:", userFlags); 
 
-    // 1. Форматирование даты и времени
+    // 1. Форматирование даты
     const getRegDateString = () => {
       try {
         const date = new Date(user.createdAt || Date.now());
-        
-        const dateStr = date.toLocaleDateString("ru-RU", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
+        return date.toLocaleDateString("ru-RU", {
+          day: "2-digit", month: "2-digit", year: "numeric",
+          hour: "2-digit", minute: "2-digit"
         });
-        
-        const timeStr = date.toLocaleTimeString("ru-RU", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-
-        return isEN 
-          ? `On Forbex since ${dateStr}, ${timeStr}` 
-          : `На Forbex с ${dateStr}, ${timeStr}`;
-      } catch {
-        return "...";
-      }
+      } catch { return "..."; }
     };
 
-    // 2. Расчет статистики
+    // 2. Статистика
     const safeHistory = Array.isArray(tradeHistory) ? tradeHistory : [];
-    
     const totalTrades = safeHistory.length;
     const netProfit = safeHistory.reduce((acc, t) => acc + (Number(t.profit) || 0), 0);
     const wins = safeHistory.filter(t => t.status === 'win').length;
     const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
-      
-    let bestSeries = 0;
-    let currentSeries = 0;
+    
+    // Лучшая серия
+    let bestSeries = 0, currentSeries = 0;
     safeHistory.forEach(t => {
-        if (t.status === 'win') {
-            currentSeries++;
-            if (currentSeries > bestSeries) bestSeries = currentSeries;
-        } else {
-            currentSeries = 0;
-        }
+       if (t.status === 'win') {
+           currentSeries++;
+           if (currentSeries > bestSeries) bestSeries = currentSeries;
+       } else { currentSeries = 0; }
     });
-
-    const displayProfit = toDisplayCurrency(netProfit, settings.currency);
-
-    const safeToggles = typeof profileToggles !== 'undefined' ? profileToggles : { notifications: true, sounds: true };
-    const safeToggleHandler = (key) => {
-       if (typeof toggleProfileSetting === 'function') {
-           toggleProfileSetting(key);
-       }
-    };
 
     return (
       <>
-        {/* 1. КАРТОЧКА ПРОФИЛЯ */}
+        {/* КАРТОЧКА ПРОФИЛЯ */}
         <section className="section-block fade-in delay-1">
           <div className="profile-card">
             <div className="profile-avatar">
-              {userAvatarUrl ? (
-                <img src={userAvatarUrl} alt="Avatar" className="profile-avatar-img" />
-              ) : (
-                <span>🦊</span>
-              )}
+              {userAvatarUrl ? <img src={userAvatarUrl} alt="Ava" className="profile-avatar-img"/> : <span>🦊</span>}
             </div>
             
             <div className="profile-main">
-              {/* ДОБАВЛЕН FLEX ДЛЯ РОВНОГО ОТОБРАЖЕНИЯ ГАЛОЧКИ */}
-              <div className="profile-login" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                {user.login}
-                {/* === ЗНАЧОК ВЕРИФИКАЦИИ === */}
-                {/* Используем ?. для безопасности */}
-                {userFlags?.is_verified === true && (
-                  <span style={{ fontSize: 14, color: "#22c55e" }} title="Verified">✅ Verified</span>
+              {/* БЛОК С ЛОГИНОМ И ВЕРИФИКАЦИЕЙ */}
+              <div className="profile-header-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div className="profile-login" style={{ margin: 0, lineHeight: 1 }}>
+                  {user.login}
+                </div>
+
+                {/* ЛОГИКА ОТОБРАЖЕНИЯ СТАТУСА */}
+                {userFlags?.is_verified ? (
+                  <div style={{ 
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    padding: '2px 6px', borderRadius: '6px', 
+                    background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)'
+                  }}>
+                    <span style={{ fontSize: '12px' }}>✅</span>
+                    <span style={{ fontSize: '10px', color: '#4ade80', fontWeight: 700, textTransform: 'uppercase' }}>
+                      {isEN ? "Verified" : "Вериф."}
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ 
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    padding: '2px 6px', borderRadius: '6px', 
+                    background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)'
+                  }}>
+                    <span style={{ fontSize: '12px' }}>❌</span>
+                    <span style={{ fontSize: '10px', color: '#f87171', fontWeight: 700, textTransform: 'uppercase' }}>
+                      {isEN ? "No KYC" : "Нет вериф."}
+                    </span>
+                  </div>
                 )}
               </div>
-              <div className="profile-email">{user.email}</div>
-              <div className="profile-created">{getRegDateString()}</div>
+
+              <div className="profile-email" style={{ marginTop: 4 }}>{user.email}</div>
+              <div className="profile-created" style={{ marginTop: 2 }}>Reg: {getRegDateString()}</div>
             </div>
 
-            <div style={{ position: "absolute", top: 12, right: 14, textAlign: "right", lineHeight: 1.3 }}>
+            {/* ID справа сверху */}
+            <div style={{ position: "absolute", top: 12, right: 14, textAlign: "right" }}>
               {telegramUsername && (
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", marginBottom: 2 }}>
-                  @{telegramUsername}
-                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", marginBottom: 2 }}>@{telegramUsername}</div>
               )}
-              <div style={{ fontSize: 10, opacity: 0.5 }}>
-                ID: {telegramId || user.id.toString().slice(0,6)}
-              </div>
+              <div style={{ fontSize: 10, opacity: 0.5 }}>ID: {telegramId || user.id}</div>
             </div>
           </div>
         </section>
 
-        {/* 2. ЛИЧНАЯ СТАТИСТИКА */}
+        {/* СТАТИСТИКА */}
         <section className="section-block fade-in delay-2">
-          <div className="section-title">
-            <h2>{isEN ? "My Statistics" : "Моя Статистика"}</h2>
-          </div>
+          <div className="section-title"><h2>{isEN ? "Statistics" : "Статистика"}</h2></div>
           <div className="stats-grid">
             <div className="stat-card">
-              <div className="stat-label">
-                {isEN ? "Total Profit" : "Общая прибыль"}
-              </div>
+              <div className="stat-label">{isEN ? "Net Profit" : "Прибыль"}</div>
               <div className={`stat-value ${netProfit >= 0 ? "positive" : "negative"}`}>
-                {netProfit > 0 ? "+" : ""}
-                {displayProfit.toLocaleString("ru-RU", {
-                  maximumFractionDigits: 2,
-                })}{" "}
-                {currencyCode}
+                {netProfit > 0 ? "+" : ""}{netProfit.toLocaleString()} {currencyCode}
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">
-                {isEN ? "Success Rate" : "Процент успешных сделок"}
-              </div>
-              <div className="stat-value text-brand-accent">{winRate}%</div>
+              <div className="stat-label">{isEN ? "Win Rate" : "Винрейт"}</div>
+              <div className="stat-value" style={{ color: winRate > 50 ? '#4ade80' : '#fbbf24' }}>{winRate}%</div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">
-                {isEN ? "Total Trades" : "Кол-во сделок"}
-              </div>
+              <div className="stat-label">{isEN ? "Trades" : "Сделок"}</div>
               <div className="stat-value">{totalTrades}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">
-                {isEN ? "Best Series" : "Лучшая серия"}
-              </div>
-              <div className="stat-value positive">{bestSeries}</div>
+              <div className="stat-label">{isEN ? "Best Streak" : "Лучшая серия"}</div>
+              <div className="stat-value positive">🔥 {bestSeries}</div>
             </div>
           </div>
         </section>
