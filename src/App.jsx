@@ -3200,104 +3200,96 @@ const renderWallet = () => {
           </div>
         </section>
         
-        {/* ИСТОРИЯ (Вернул как было: Сразу после баланса) */}
+{/* ИСТОРИЯ (Вернул как было: Сразу после баланса) */}
         <section className="section-block fade-in delay-2" style={{ marginTop: 16 }}>
           <div className="section-title">
             <h2>{isEN ? "Recent operations" : "Последние операции"}</h2>
           </div>
 
-// Внутри renderWallet -> section "Recent operations"
+          <div className="history-block">
+            {walletHistory.slice(0, 3).map((e) => {
+              const displayAmount = toDisplayCurrency(e.amount, settings.currency);
 
-<div className="history-block">
-  {walletHistory.slice(0, 3).map((e) => {
-    const displayAmount = toDisplayCurrency(e.amount, settings.currency);
+              const isWithdraw = e.type === "withdraw";
+              const isPending = e.status === "pending";
+              const isRejected = e.status === "rejected";
+              const isDone = e.status === "done" || e.status === "approved";
 
-    const isWithdraw = e.type === "withdraw";
-    const isPending = e.status === "pending";
-    const isRejected = e.status === "rejected"; // Отклонено или отменено
-    const isDone = e.status === "done" || e.status === "approved";
+              const rowClass =
+                "history-row " +
+                (isPending ? "is-pending " : "") +
+                (isRejected ? "is-rejected " : "") +
+                (isDone ? "is-approved" : "");
 
-    // 1. Класс для самой строки (точка слева)
-    const rowClass =
-      "history-row " +
-      (isPending ? "is-pending " : "") +
-      (isRejected ? "is-rejected " : "") +
-      (isDone ? "is-approved" : "");
+              let sign = isWithdraw ? "-" : "+";
+              let amountClass = "history-amount ";
 
-    // 2. Логика знака и цвета суммы (как в Истории)
-    let sign = isWithdraw ? "-" : "+";
-    let amountClass = "history-amount ";
+              if (isWithdraw) {
+                amountClass += "negative";
+              } else {
+                if (isRejected) {
+                  sign = "×";
+                  amountClass += "rejected";
+                } else if (isPending) {
+                  amountClass += "pending";
+                } else {
+                  amountClass += "positive";
+                }
+              }
 
-    if (isWithdraw) {
-      amountClass += "negative"; // Вывод всегда оранжевый/красный
-    } else {
-      // Это депозит
-      if (isRejected) {
-        sign = "×"; // Крестик, если отклонено
-        amountClass += "rejected"; // Зачеркнутый красный
-      } else if (isPending) {
-        amountClass += "pending"; // Желтый
-      } else {
-        amountClass += "positive"; // Зеленый
-      }
-    }
+              return (
+                <div key={e.id} className={rowClass}>
+                  <div className="history-main">
+                    <div className="history-type">
+                      {isWithdraw
+                        ? isEN
+                          ? "Withdrawal"
+                          : "Вывод средств"
+                        : isEN
+                        ? "Deposit"
+                        : "Пополнение"}
+                    </div>
+                    <div className="history-sub">{methodLabel(e.method)}</div>
+                  </div>
 
-    return (
-      <div key={e.id} className={rowClass}>
-        <div className="history-main">
-          <div className="history-type">
-            {/* Тип операции */}
-            {isWithdraw
-              ? isEN
-                ? "Withdrawal"
-                : "Вывод средств"
-              : isEN
-              ? "Deposit"
-              : "Пополнение"}
+                  <div className="history-right">
+                    <div className={amountClass}>
+                      {sign} {displayAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 })}{" "}
+                      {currencyCode}
+                    </div>
+
+                    {isPending && (
+                      <button
+                        className="cancel-btn"
+                        onClick={(evt) => {
+                          evt.stopPropagation();
+                          const idStr = String(e.id);
+                          if (isWithdraw)
+                            handleCancelWithdrawal(e.id, idStr.replace("wd-", ""));
+                          else
+                            handleCancelDeposit(
+                              e.id,
+                              e.topupId || idStr.replace("topup-", "")
+                            );
+                        }}
+                      >
+                        {isEN ? "Cancel" : "Отменить"}
+                      </button>
+                    )}
+
+                    <div className="history-time">{formatDateTime(e.ts)}</div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {walletHistory.length === 0 && (
+              <div className="wallet-empty" style={{ padding: 16 }}>
+                {isEN ? "No operations" : "Нет операций"}
+              </div>
+            )}
           </div>
-          {/* Метод оплаты */}
-          <div className="history-sub">{methodLabel(e.method)}</div>
-        </div>
-
-        <div className="history-right">
-          <div className={amountClass}>
-            {sign} {displayAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 })}{" "}
-            {currencyCode}
-          </div>
-
-          {/* Кнопка отмены (только для Pending) */}
-          {isPending && (
-            <button
-              className="cancel-btn"
-              onClick={(evt) => {
-                evt.stopPropagation();
-                const idStr = String(e.id);
-                if (isWithdraw)
-                  handleCancelWithdrawal(e.id, idStr.replace("wd-", ""));
-                else
-                  handleCancelDeposit(
-                    e.id,
-                    e.topupId || idStr.replace("topup-", "")
-                  );
-              }}
-            >
-              {isEN ? "Cancel" : "Отменить"}
-            </button>
-          )}
-
-          <div className="history-time">{formatDateTime(e.ts)}</div>
-        </div>
-      </div>
-    );
-  })}
-
-  {walletHistory.length === 0 && (
-    <div className="wallet-empty" style={{ padding: 16 }}>
-      {isEN ? "No operations" : "Нет операций"}
-    </div>
-  )}
-</div>
-
+        </section> {/* <--- ВОТ ЭТОТ ТЕГ БЫЛ ПРОПУЩЕН */}
         {/* Модалки */}
         {walletModal && (
           <div
@@ -4286,7 +4278,7 @@ const renderHistory = () => {
 const renderProfile = () => {
   if (!user) return null;
 
-  // 1. Форматирование даты и времени (ИСПРАВЛЕНО)
+  // 1. Форматирование даты и времени
   const getRegDateString = () => {
     try {
       const date = new Date(user.createdAt || Date.now());
@@ -4302,7 +4294,6 @@ const renderProfile = () => {
         minute: "2-digit",
       });
 
-      // Вернули формат с запятой и временем
       return isEN 
         ? `On Forbex since ${dateStr}, ${timeStr}` 
         : `На Forbex с ${dateStr}, ${timeStr}`;
@@ -4311,7 +4302,7 @@ const renderProfile = () => {
     }
   };
 
-  // 2. Расчет статистики (Безопасный метод)
+  // 2. Расчет статистики
   const safeHistory = Array.isArray(tradeHistory) ? tradeHistory : [];
   
   const totalTrades = safeHistory.length;
@@ -4332,7 +4323,6 @@ const renderProfile = () => {
 
   const displayProfit = toDisplayCurrency(netProfit, settings.currency);
 
-  // Безопасный доступ к переключателям
   const safeToggles = typeof profileToggles !== 'undefined' ? profileToggles : { notifications: true, sounds: true };
   const safeToggleHandler = (key) => {
      if (typeof toggleProfileSetting === 'function') {
@@ -4359,7 +4349,6 @@ const renderProfile = () => {
             <div className="profile-created">{getRegDateString()}</div>
           </div>
 
-          {/* ИСПРАВЛЕНО: Вернули Username и ID */}
           <div style={{ 
             position: "absolute", 
             top: 12, 
@@ -4384,45 +4373,39 @@ const renderProfile = () => {
         <div className="section-title">
           <h2>{isEN ? "My Statistics" : "Моя Статистика"}</h2>
         </div>
-// Внутри renderProfile
-
-<div className="stats-grid">
-  <div className="stat-card">
-    <div className="stat-label">
-      {isEN ? "Total Profit" : "Общая прибыль"}
-    </div>
-    <div
-      className={`stat-value ${netProfit >= 0 ? "positive" : "negative"}`}
-    >
-      {netProfit > 0 ? "+" : ""}
-      {displayProfit.toLocaleString("ru-RU", {
-        maximumFractionDigits: 2,
-      })}{" "}
-      {currencyCode}
-    </div>
-  </div>
-  <div className="stat-card">
-    {/* ИЗМЕНЕНИЕ: Официальное название */}
-    <div className="stat-label">
-      {isEN ? "Success Rate" : "Процент успешных сделок"}
-    </div>
-    <div className="stat-value text-brand-accent">{winRate}%</div>
-  </div>
-  <div className="stat-card">
-    <div className="stat-label">
-      {isEN ? "Total Trades" : "Кол-во сделок"}
-    </div>
-    <div className="stat-value">{totalTrades}</div>
-  </div>
-  <div className="stat-card">
-    <div className="stat-label">
-      {isEN ? "Best Series" : "Лучшая серия"}
-    </div>
-    {/* ИЗМЕНЕНИЕ: Убрали смайлик 🔥 */}
-    <div className="stat-value positive">{bestSeries}</div>
-  </div>
-</div>
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-label">
+              {isEN ? "Total Profit" : "Общая прибыль"}
+            </div>
+            <div className={`stat-value ${netProfit >= 0 ? "positive" : "negative"}`}>
+              {netProfit > 0 ? "+" : ""}
+              {displayProfit.toLocaleString("ru-RU", {
+                maximumFractionDigits: 2,
+              })}{" "}
+              {currencyCode}
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">
+              {isEN ? "Success Rate" : "Процент успешных сделок"}
+            </div>
+            <div className="stat-value text-brand-accent">{winRate}%</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">
+              {isEN ? "Total Trades" : "Кол-во сделок"}
+            </div>
+            <div className="stat-value">{totalTrades}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">
+              {isEN ? "Best Series" : "Лучшая серия"}
+            </div>
+            <div className="stat-value positive">{bestSeries}</div>
+          </div>
         </div>
+        {/* Здесь был лишний закрывающий div, я его убрал */}
       </section>
 
       {/* 3. НАСТРОЙКИ */}
@@ -4468,7 +4451,7 @@ const renderProfile = () => {
             </div>
           </div>
 
-          {/* Переключатели (Без FaceID) */}
+          {/* Переключатели */}
           <div style={{ marginTop: 16, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 8 }}>
             <div className="toggle-row" onClick={() => safeToggleHandler('notifications')}>
               <div className="toggle-label">{isEN ? "Push Notifications" : "Уведомления"}</div>
@@ -4525,7 +4508,7 @@ const renderProfile = () => {
         )}
       </section>
 
-      {/* 5. ТЕХПОДДЕРЖКА (ЗЕЛЕНАЯ + PULSE) */}
+      {/* 5. ТЕХПОДДЕРЖКА */}
       <section className="section-block fade-in delay-5">
         <a 
             href="https://t.me/ForbexSupport" 
@@ -4541,7 +4524,7 @@ const renderProfile = () => {
         </a>
       </section>
 
-      {/* 6. ВЫХОД (В самом низу, в отдельной карточке) */}
+      {/* 6. ВЫХОД */}
       <section className="section-block fade-in delay-5" style={{ marginBottom: 24 }}>
         <button className="profile-btn logout" onClick={handleLogout}>
           {isEN ? "Log Out" : "Выйти из аккаунта"}
@@ -4583,7 +4566,7 @@ const renderProfile = () => {
         </div>
       )}
 
-{passwordModalOpen && (
+      {passwordModalOpen && (
         <div className="wallet-modal-backdrop" onClick={() => setPasswordModalOpen(false)}>
           <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
             <div className="wallet-modal-title">{isEN ? "Change password" : "Смена пароля"}</div>
@@ -4601,9 +4584,7 @@ const renderProfile = () => {
               <input type="password" value={passwordForm.confirmPassword} onChange={(e) => handlePasswordInput("confirmPassword", e.target.value)} />
             </div>
 
-            {/* ОТОБРАЖЕНИЕ ОШИБОК И УСПЕХА (БЕЗОПАСНО) */}
             {passwordError && <div className="wallet-modal-note error">{passwordError}</div>}
-            {/* Проверка на существование success сообщения */}
             {passwordSuccess && <div className="wallet-modal-note success">{passwordSuccess}</div>}
 
             <div className="wallet-modal-actions">
