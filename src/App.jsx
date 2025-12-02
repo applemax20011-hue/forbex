@@ -1414,40 +1414,45 @@ useEffect(() => {
         }
       }
     )
-    // 3. === СЛУШАЕМ ИЗМЕНЕНИЯ БАЛАНСА В ТАБЛИЦЕ USERS ===
-    .on(
-      "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "users", filter: `tg_id=eq.${telegramId}` },
-      (payload) => {
-        const row = payload.new;
-        if (row) {
-          // Если баланс изменился
+// 3. === ДОБАВИТЬ ЭТО: Слушаем изменения ЮЗЕРА (Баланс, Блокировки, Вериф) ===
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "users", filter: `tg_id=eq.${telegramId}` },
+        (payload) => {
+          const row = payload.new;
+          if (!row) return;
+
+          // Обновляем баланс в реальном времени
           if (typeof row.balance === "number") {
-             setBalance((prev) => {
-                 // Если баланс стал больше, чем был — это пополнение, пускаем салют
-                 if (row.balance > prev) {
-                     triggerNotification("success");
-                     confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ["#22c55e", "#ffffff", "#f97316"] });
-                     setToast({ type: "success", text: isEN ? "Balance updated!" : "Баланс пополнен!" });
-                 }
-                 return row.balance;
+             setBalance(prev => {
+                // Если баланс вырос — значит пополнили через админку
+                if (row.balance > prev) {
+                    triggerNotification("success");
+                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                    setToast({ type: "success", text: isEN ? "Balance updated" : "Баланс пополнен!" });
+                }
+                return row.balance;
              });
           }
           
-          // Обновляем настройки (блокировки, вериф) на лету
+// Обновляем флаги (верификация, блокировки, удача)
           setUserFlags(prev => ({
-              ...prev,
-              luck_mode: row.luck_mode,
-              is_blocked_trade: row.is_blocked_trade,
-              is_blocked_withdraw: row.is_blocked_withdraw,
-              is_verified: row.is_verified,
-              min_deposit: row.min_deposit,
-              min_withdraw: row.min_withdraw
+            ...prev,
+            luck_mode: row.luck_mode,
+            is_verified: row.is_verified,
+            is_blocked_trade: row.is_blocked_trade,
+            is_blocked_withdraw: row.is_blocked_withdraw,
+            min_deposit: row.min_deposit,
+            min_withdraw: row.min_withdraw
           }));
+          
+          // Если дали верификацию — уведомляем
+          if (row.is_verified && !userFlags.is_verified) {
+             setToast({ type: "success", text: isEN ? "Account Verified!" : "Аккаунт верифицирован!" });
+          }
         }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe();
 
   return () => supabase.removeChannel(channel);
 }, [telegramId, isEN, settings.currency, loadWalletDataFromSupabase]);
@@ -4316,326 +4321,331 @@ const renderHistory = () => {
 };
 
 const renderProfile = () => {
-  if (!user) return null;
-
-  // 1. Форматирование даты и времени
-  const getRegDateString = () => {
-    try {
-      const date = new Date(user.createdAt || Date.now());
-      
-      const dateStr = date.toLocaleDateString("ru-RU", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
-      
-      const timeStr = date.toLocaleTimeString("ru-RU", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-
-      return isEN 
-        ? `On Forbex since ${dateStr}, ${timeStr}` 
-        : `На Forbex с ${dateStr}, ${timeStr}`;
-    } catch {
-      return "...";
-    }
-  };
-
-  // 2. Расчет статистики
-  const safeHistory = Array.isArray(tradeHistory) ? tradeHistory : [];
-  
-  const totalTrades = safeHistory.length;
-  const netProfit = safeHistory.reduce((acc, t) => acc + (Number(t.profit) || 0), 0);
-  const wins = safeHistory.filter(t => t.status === 'win').length;
-  const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
+    if (!user) return null;
     
-  let bestSeries = 0;
-  let currentSeries = 0;
-  safeHistory.forEach(t => {
-      if (t.status === 'win') {
-          currentSeries++;
-          if (currentSeries > bestSeries) bestSeries = currentSeries;
-      } else {
-          currentSeries = 0;
+    // ОТЛАДКА: Посмотри в консоль браузера, что лежит в userFlags
+    console.log("User Flags Debug:", userFlags); 
+
+    // 1. Форматирование даты и времени
+    const getRegDateString = () => {
+      try {
+        const date = new Date(user.createdAt || Date.now());
+        
+        const dateStr = date.toLocaleDateString("ru-RU", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+        
+        const timeStr = date.toLocaleTimeString("ru-RU", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+        return isEN 
+          ? `On Forbex since ${dateStr}, ${timeStr}` 
+          : `На Forbex с ${dateStr}, ${timeStr}`;
+      } catch {
+        return "...";
       }
-  });
+    };
 
-  const displayProfit = toDisplayCurrency(netProfit, settings.currency);
+    // 2. Расчет статистики
+    const safeHistory = Array.isArray(tradeHistory) ? tradeHistory : [];
+    
+    const totalTrades = safeHistory.length;
+    const netProfit = safeHistory.reduce((acc, t) => acc + (Number(t.profit) || 0), 0);
+    const wins = safeHistory.filter(t => t.status === 'win').length;
+    const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
+      
+    let bestSeries = 0;
+    let currentSeries = 0;
+    safeHistory.forEach(t => {
+        if (t.status === 'win') {
+            currentSeries++;
+            if (currentSeries > bestSeries) bestSeries = currentSeries;
+        } else {
+            currentSeries = 0;
+        }
+    });
 
-  const safeToggles = typeof profileToggles !== 'undefined' ? profileToggles : { notifications: true, sounds: true };
-  const safeToggleHandler = (key) => {
-     if (typeof toggleProfileSetting === 'function') {
-         toggleProfileSetting(key);
-     }
-  };
+    const displayProfit = toDisplayCurrency(netProfit, settings.currency);
 
-  return (
-    <>
-      {/* 1. КАРТОЧКА ПРОФИЛЯ */}
-      <section className="section-block fade-in delay-1">
-        <div className="profile-card">
-          <div className="profile-avatar">
-            {userAvatarUrl ? (
-              <img src={userAvatarUrl} alt="Avatar" className="profile-avatar-img" />
-            ) : (
-              <span>🦊</span>
-            )}
-          </div>
-          
-          <div className="profile-main">
-            <div className="profile-login">
-              {user.login}
-              {/* === ЗНАЧОК ВЕРИФИКАЦИИ === */}
-              {userFlags.is_verified && (
-                <span style={{ marginLeft: 6, fontSize: 14, color: "#22c55e" }} title="Verified">✅ Verified</span>
+    const safeToggles = typeof profileToggles !== 'undefined' ? profileToggles : { notifications: true, sounds: true };
+    const safeToggleHandler = (key) => {
+       if (typeof toggleProfileSetting === 'function') {
+           toggleProfileSetting(key);
+       }
+    };
+
+    return (
+      <>
+        {/* 1. КАРТОЧКА ПРОФИЛЯ */}
+        <section className="section-block fade-in delay-1">
+          <div className="profile-card">
+            <div className="profile-avatar">
+              {userAvatarUrl ? (
+                <img src={userAvatarUrl} alt="Avatar" className="profile-avatar-img" />
+              ) : (
+                <span>🦊</span>
               )}
             </div>
-            <div className="profile-email">{user.email}</div>
-            <div className="profile-created">{getRegDateString()}</div>
-          </div>
-
-          <div style={{ position: "absolute", top: 12, right: 14, textAlign: "right", lineHeight: 1.3 }}>
-            {telegramUsername && (
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", marginBottom: 2 }}>
-                @{telegramUsername}
+            
+            <div className="profile-main">
+              {/* ДОБАВЛЕН FLEX ДЛЯ РОВНОГО ОТОБРАЖЕНИЯ ГАЛОЧКИ */}
+              <div className="profile-login" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {user.login}
+                {/* === ЗНАЧОК ВЕРИФИКАЦИИ === */}
+                {/* Используем ?. для безопасности */}
+                {userFlags?.is_verified === true && (
+                  <span style={{ fontSize: 14, color: "#22c55e" }} title="Verified">✅ Verified</span>
+                )}
               </div>
-            )}
-            <div style={{ fontSize: 10, opacity: 0.5 }}>
-              ID: {telegramId || user.id.toString().slice(0,6)}
+              <div className="profile-email">{user.email}</div>
+              <div className="profile-created">{getRegDateString()}</div>
             </div>
-          </div>
-        </div>
-      </section>
 
-      {/* 2. ЛИЧНАЯ СТАТИСТИКА */}
-      <section className="section-block fade-in delay-2">
-        <div className="section-title">
-          <h2>{isEN ? "My Statistics" : "Моя Статистика"}</h2>
-        </div>
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-label">
-              {isEN ? "Total Profit" : "Общая прибыль"}
-            </div>
-            <div className={`stat-value ${netProfit >= 0 ? "positive" : "negative"}`}>
-              {netProfit > 0 ? "+" : ""}
-              {displayProfit.toLocaleString("ru-RU", {
-                maximumFractionDigits: 2,
-              })}{" "}
-              {currencyCode}
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">
-              {isEN ? "Success Rate" : "Процент успешных сделок"}
-            </div>
-            <div className="stat-value text-brand-accent">{winRate}%</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">
-              {isEN ? "Total Trades" : "Кол-во сделок"}
-            </div>
-            <div className="stat-value">{totalTrades}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">
-              {isEN ? "Best Series" : "Лучшая серия"}
-            </div>
-            <div className="stat-value positive">{bestSeries}</div>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. НАСТРОЙКИ */}
-      <section className="section-block fade-in delay-3">
-        <div className="section-title">
-          <h2>{isEN ? "App Settings" : "Настройки приложения"}</h2>
-        </div>
-
-        <div className="settings-block">
-          {/* Язык и Валюта */}
-          <div className="settings-row">
-            <div className="settings-label">{isEN ? "Language & Currency" : "Язык и Валюта"}</div>
-            <div className="settings-chips">
-              <button 
-                className={`settings-chip ${settings.language === "ru" ? "active" : ""}`}
-                onClick={() => updateSettings({ language: "ru" })}
-              >RU</button>
-              <button 
-                className={`settings-chip ${settings.language === "en" ? "active" : ""}`}
-                onClick={() => updateSettings({ language: "en" })}
-              >EN</button>
-              
-              <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
-              
-              <button 
-                className={`settings-chip ${settings.currency === "RUB" ? "active" : ""}`}
-                onClick={() => updateSettings({ currency: "RUB" })}
-              >RUB</button>
-              <button 
-                className={`settings-chip ${settings.currency === "USD" ? "active" : ""}`}
-                onClick={() => updateSettings({ currency: "USD" })}
-              >USD</button>
-            </div>
-          </div>
-
-          {/* Тема */}
-          <div className="settings-row" style={{ marginTop: 12 }}>
-            <div className="settings-label">{isEN ? "Theme" : "Тема"}</div>
-            <div className="settings-chips">
-              <button className={`settings-chip ${settings.theme === "fox" ? "active" : ""}`} onClick={() => updateSettings({ theme: "fox" })}>🦊 Fox</button>
-              <button className={`settings-chip ${settings.theme === "night" ? "active" : ""}`} onClick={() => updateSettings({ theme: "night" })}>🌙 Night</button>
-              <button className={`settings-chip ${settings.theme === "day" ? "active" : ""}`} onClick={() => updateSettings({ theme: "day" })}>☀ Day</button>
-            </div>
-          </div>
-
-          {/* Переключатели */}
-          <div style={{ marginTop: 16, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 8 }}>
-            <div className="toggle-row" onClick={() => safeToggleHandler('notifications')}>
-              <div className="toggle-label">{isEN ? "Push Notifications" : "Уведомления"}</div>
-              <div className={`toggle-switch ${safeToggles.notifications ? 'active' : ''}`}>
-                <div className="toggle-thumb" />
-              </div>
-            </div>
-            <div className="toggle-row" onClick={() => safeToggleHandler('sounds')}>
-              <div className="toggle-label">{isEN ? "Sound Effects" : "Звуки и вибрация"}</div>
-              <div className={`toggle-switch ${safeToggles.sounds ? 'active' : ''}`}>
-                <div className="toggle-thumb" />
+            <div style={{ position: "absolute", top: 12, right: 14, textAlign: "right", lineHeight: 1.3 }}>
+              {telegramUsername && (
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", marginBottom: 2 }}>
+                  @{telegramUsername}
+                </div>
+              )}
+              <div style={{ fontSize: 10, opacity: 0.5 }}>
+                ID: {telegramId || user.id.toString().slice(0,6)}
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* 4. УПРАВЛЕНИЕ АККАУНТОМ */}
-      <section className="section-block fade-in delay-4">
-        <div className="section-title">
-          <h2>{isEN ? "Security" : "Управление аккаунтом"}</h2>
-        </div>
-        <div className="profile-actions-grid">
-          <button className="profile-btn" onClick={() => {
-             setSettingsMsg("");
-             setLoginForm({ login: user.login || "" });
-             setLoginModalOpen(true);
-          }}>
-            {isEN ? "Change Login" : "Сменить логин"}
+        {/* 2. ЛИЧНАЯ СТАТИСТИКА */}
+        <section className="section-block fade-in delay-2">
+          <div className="section-title">
+            <h2>{isEN ? "My Statistics" : "Моя Статистика"}</h2>
+          </div>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div className="stat-label">
+                {isEN ? "Total Profit" : "Общая прибыль"}
+              </div>
+              <div className={`stat-value ${netProfit >= 0 ? "positive" : "negative"}`}>
+                {netProfit > 0 ? "+" : ""}
+                {displayProfit.toLocaleString("ru-RU", {
+                  maximumFractionDigits: 2,
+                })}{" "}
+                {currencyCode}
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">
+                {isEN ? "Success Rate" : "Процент успешных сделок"}
+              </div>
+              <div className="stat-value text-brand-accent">{winRate}%</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">
+                {isEN ? "Total Trades" : "Кол-во сделок"}
+              </div>
+              <div className="stat-value">{totalTrades}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">
+                {isEN ? "Best Series" : "Лучшая серия"}
+              </div>
+              <div className="stat-value positive">{bestSeries}</div>
+            </div>
+          </div>
+        </section>
+
+        {/* 3. НАСТРОЙКИ */}
+        <section className="section-block fade-in delay-3">
+          <div className="section-title">
+            <h2>{isEN ? "App Settings" : "Настройки приложения"}</h2>
+          </div>
+
+          <div className="settings-block">
+            {/* Язык и Валюта */}
+            <div className="settings-row">
+              <div className="settings-label">{isEN ? "Language & Currency" : "Язык и Валюта"}</div>
+              <div className="settings-chips">
+                <button 
+                  className={`settings-chip ${settings.language === "ru" ? "active" : ""}`}
+                  onClick={() => updateSettings({ language: "ru" })}
+                >RU</button>
+                <button 
+                  className={`settings-chip ${settings.language === "en" ? "active" : ""}`}
+                  onClick={() => updateSettings({ language: "en" })}
+                >EN</button>
+                
+                <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
+                
+                <button 
+                  className={`settings-chip ${settings.currency === "RUB" ? "active" : ""}`}
+                  onClick={() => updateSettings({ currency: "RUB" })}
+                >RUB</button>
+                <button 
+                  className={`settings-chip ${settings.currency === "USD" ? "active" : ""}`}
+                  onClick={() => updateSettings({ currency: "USD" })}
+                >USD</button>
+              </div>
+            </div>
+
+            {/* Тема */}
+            <div className="settings-row" style={{ marginTop: 12 }}>
+              <div className="settings-label">{isEN ? "Theme" : "Тема"}</div>
+              <div className="settings-chips">
+                <button className={`settings-chip ${settings.theme === "fox" ? "active" : ""}`} onClick={() => updateSettings({ theme: "fox" })}>🦊 Fox</button>
+                <button className={`settings-chip ${settings.theme === "night" ? "active" : ""}`} onClick={() => updateSettings({ theme: "night" })}>🌙 Night</button>
+                <button className={`settings-chip ${settings.theme === "day" ? "active" : ""}`} onClick={() => updateSettings({ theme: "day" })}>☀ Day</button>
+              </div>
+            </div>
+
+            {/* Переключатели */}
+            <div style={{ marginTop: 16, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 8 }}>
+              <div className="toggle-row" onClick={() => safeToggleHandler('notifications')}>
+                <div className="toggle-label">{isEN ? "Push Notifications" : "Уведомления"}</div>
+                <div className={`toggle-switch ${safeToggles.notifications ? 'active' : ''}`}>
+                  <div className="toggle-thumb" />
+                </div>
+              </div>
+              <div className="toggle-row" onClick={() => safeToggleHandler('sounds')}>
+                <div className="toggle-label">{isEN ? "Sound Effects" : "Звуки и вибрация"}</div>
+                <div className={`toggle-switch ${safeToggles.sounds ? 'active' : ''}`}>
+                  <div className="toggle-thumb" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. УПРАВЛЕНИЕ АККАУНТОМ */}
+        <section className="section-block fade-in delay-4">
+          <div className="section-title">
+            <h2>{isEN ? "Security" : "Управление аккаунтом"}</h2>
+          </div>
+          <div className="profile-actions-grid">
+            <button className="profile-btn" onClick={() => {
+               setSettingsMsg("");
+               setLoginForm({ login: user.login || "" });
+               setLoginModalOpen(true);
+            }}>
+              {isEN ? "Change Login" : "Сменить логин"}
+            </button>
+            <button className="profile-btn" onClick={() => {
+               setSettingsMsg("");
+               setEmailForm({ email: user.email || "" });
+               setEmailModalOpen(true);
+            }}>
+              {isEN ? "Change Email" : "Сменить Email"}
+            </button>
+            <button className="profile-btn" onClick={() => {
+               setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
+               setPasswordError(""); setPasswordSuccess("");
+               setPasswordModalOpen(true);
+            }}>
+              {isEN ? "Change Password" : "Сменить пароль"}
+            </button>
+            <button className="profile-btn" style={{ borderColor: 'rgba(34, 197, 94, 0.3)', color: '#4ade80' }}>
+              {isEN ? "Verify Identity (KYC)" : "Верификация (KYC)"}
+            </button>
+          </div>
+          
+          {settingsMsg && (
+            <div className="wallet-modal-note" style={{ marginTop: 8 }}>
+              {settingsMsg}
+            </div>
+          )}
+        </section>
+
+        {/* 5. ТЕХПОДДЕРЖКА */}
+        <section className="section-block fade-in delay-5">
+          <a 
+              href="https://t.me/ForbexSupport" 
+              target="_blank" 
+              rel="noreferrer"
+              className="greenPulse support-cta" 
+              style={{ width: '100%', textDecoration: 'none', margin: 0 }}
+          >
+              <span className="support-cta-icon">👨‍💻</span>
+              <span className="support-cta-text">
+                {isEN ? "Contact Support" : "Написать в поддержку"}
+              </span>
+          </a>
+        </section>
+
+        {/* 6. ВЫХОД */}
+        <section className="section-block fade-in delay-5" style={{ marginBottom: 24 }}>
+          <button className="profile-btn logout" onClick={handleLogout}>
+            {isEN ? "Log Out" : "Выйти из аккаунта"}
           </button>
-          <button className="profile-btn" onClick={() => {
-             setSettingsMsg("");
-             setEmailForm({ email: user.email || "" });
-             setEmailModalOpen(true);
-          }}>
-            {isEN ? "Change Email" : "Сменить Email"}
-          </button>
-          <button className="profile-btn" onClick={() => {
-             setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
-             setPasswordError(""); setPasswordSuccess("");
-             setPasswordModalOpen(true);
-          }}>
-            {isEN ? "Change Password" : "Сменить пароль"}
-          </button>
-          <button className="profile-btn" style={{ borderColor: 'rgba(34, 197, 94, 0.3)', color: '#4ade80' }}>
-            {isEN ? "Verify Identity (KYC)" : "Верификация (KYC)"}
-          </button>
-        </div>
-        
-        {settingsMsg && (
-          <div className="wallet-modal-note" style={{ marginTop: 8 }}>
-            {settingsMsg}
+        </section>
+
+        {/* === МОДАЛКИ (оставляем без изменений) === */}
+        {loginModalOpen && (
+          <div className="wallet-modal-backdrop" onClick={() => setLoginModalOpen(false)}>
+            <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="wallet-modal-title">{isEN ? "Change login" : "Смена логина"}</div>
+              <div className="wallet-modal-input-group">
+                <label>{isEN ? "New login" : "Новый логин"}</label>
+                <input type="text" value={loginForm.login} onChange={(e) => { setLoginForm({ login: e.target.value }); setSettingsMsg(""); }} placeholder={isEN ? "New login" : "Введите новый логин"} />
+              </div>
+              {settingsMsg && <div className="wallet-modal-note">{settingsMsg}</div>}
+              <div className="wallet-modal-actions">
+                <button className="wallet-modal-btn secondary" onClick={() => setLoginModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
+                <button className="wallet-modal-btn primary" onClick={handleLoginChange}>{isEN ? "Save" : "Сохранить"}</button>
+              </div>
+            </div>
           </div>
         )}
-      </section>
 
-      {/* 5. ТЕХПОДДЕРЖКА */}
-      <section className="section-block fade-in delay-5">
-        <a 
-            href="https://t.me/ForbexSupport" 
-            target="_blank" 
-            rel="noreferrer"
-            className="greenPulse support-cta" 
-            style={{ width: '100%', textDecoration: 'none', margin: 0 }}
-        >
-            <span className="support-cta-icon">👨‍💻</span>
-            <span className="support-cta-text">
-              {isEN ? "Contact Support" : "Написать в поддержку"}
-            </span>
-        </a>
-      </section>
-
-      {/* 6. ВЫХОД */}
-      <section className="section-block fade-in delay-5" style={{ marginBottom: 24 }}>
-        <button className="profile-btn logout" onClick={handleLogout}>
-          {isEN ? "Log Out" : "Выйти из аккаунта"}
-        </button>
-      </section>
-
-      {/* === МОДАЛКИ === */}
-      {loginModalOpen && (
-        <div className="wallet-modal-backdrop" onClick={() => setLoginModalOpen(false)}>
-          <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="wallet-modal-title">{isEN ? "Change login" : "Смена логина"}</div>
-            <div className="wallet-modal-input-group">
-              <label>{isEN ? "New login" : "Новый логин"}</label>
-              <input type="text" value={loginForm.login} onChange={(e) => { setLoginForm({ login: e.target.value }); setSettingsMsg(""); }} placeholder={isEN ? "New login" : "Введите новый логин"} />
-            </div>
-            {settingsMsg && <div className="wallet-modal-note">{settingsMsg}</div>}
-            <div className="wallet-modal-actions">
-              <button className="wallet-modal-btn secondary" onClick={() => setLoginModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
-              <button className="wallet-modal-btn primary" onClick={handleLoginChange}>{isEN ? "Save" : "Сохранить"}</button>
+        {emailModalOpen && (
+          <div className="wallet-modal-backdrop" onClick={() => setEmailModalOpen(false)}>
+            <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="wallet-modal-title">{isEN ? "Change email" : "Смена email"}</div>
+              <div className="wallet-modal-input-group">
+                <label>{isEN ? "New email" : "Новый email"}</label>
+                <input type="email" value={emailForm.email} onChange={(e) => { setEmailForm({ email: e.target.value }); setSettingsMsg(""); }} placeholder="name@example.com" />
+              </div>
+              {settingsMsg && <div className="wallet-modal-note">{settingsMsg}</div>}
+              <div className="wallet-modal-actions">
+                <button className="wallet-modal-btn secondary" onClick={() => setEmailModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
+                <button className="wallet-modal-btn primary" onClick={handleEmailChange}>{isEN ? "Save" : "Сохранить"}</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {emailModalOpen && (
-        <div className="wallet-modal-backdrop" onClick={() => setEmailModalOpen(false)}>
-          <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="wallet-modal-title">{isEN ? "Change email" : "Смена email"}</div>
-            <div className="wallet-modal-input-group">
-              <label>{isEN ? "New email" : "Новый email"}</label>
-              <input type="email" value={emailForm.email} onChange={(e) => { setEmailForm({ email: e.target.value }); setSettingsMsg(""); }} placeholder="name@example.com" />
-            </div>
-            {settingsMsg && <div className="wallet-modal-note">{settingsMsg}</div>}
-            <div className="wallet-modal-actions">
-              <button className="wallet-modal-btn secondary" onClick={() => setEmailModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
-              <button className="wallet-modal-btn primary" onClick={handleEmailChange}>{isEN ? "Save" : "Сохранить"}</button>
+        {passwordModalOpen && (
+          <div className="wallet-modal-backdrop" onClick={() => setPasswordModalOpen(false)}>
+            <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="wallet-modal-title">{isEN ? "Change password" : "Смена пароля"}</div>
+              
+              <div className="wallet-modal-input-group">
+                <label>{isEN ? "Current password" : "Текущий пароль"}</label>
+                <input type="password" value={passwordForm.oldPassword} onChange={(e) => handlePasswordInput("oldPassword", e.target.value)} />
+              </div>
+              <div className="wallet-modal-input-group">
+                <label>{isEN ? "New password" : "Новый пароль"}</label>
+                <input type="password" value={passwordForm.newPassword} onChange={(e) => handlePasswordInput("newPassword", e.target.value)} />
+              </div>
+              <div className="wallet-modal-input-group">
+                <label>{isEN ? "Repeat" : "Повтор нового пароля"}</label>
+                <input type="password" value={passwordForm.confirmPassword} onChange={(e) => handlePasswordInput("confirmPassword", e.target.value)} />
+              </div>
+
+              {passwordError && <div className="wallet-modal-note error">{passwordError}</div>}
+              {passwordSuccess && <div className="wallet-modal-note success">{passwordSuccess}</div>}
+
+              <div className="wallet-modal-actions">
+                <button className="wallet-modal-btn secondary" onClick={() => setPasswordModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
+                <button className="wallet-modal-btn primary" onClick={handlePasswordChange}>{isEN ? "Save" : "Сохранить"}</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {passwordModalOpen && (
-        <div className="wallet-modal-backdrop" onClick={() => setPasswordModalOpen(false)}>
-          <div className="wallet-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="wallet-modal-title">{isEN ? "Change password" : "Смена пароля"}</div>
-            
-            <div className="wallet-modal-input-group">
-              <label>{isEN ? "Current password" : "Текущий пароль"}</label>
-              <input type="password" value={passwordForm.oldPassword} onChange={(e) => handlePasswordInput("oldPassword", e.target.value)} />
-            </div>
-            <div className="wallet-modal-input-group">
-              <label>{isEN ? "New password" : "Новый пароль"}</label>
-              <input type="password" value={passwordForm.newPassword} onChange={(e) => handlePasswordInput("newPassword", e.target.value)} />
-            </div>
-            <div className="wallet-modal-input-group">
-              <label>{isEN ? "Repeat" : "Повтор нового пароля"}</label>
-              <input type="password" value={passwordForm.confirmPassword} onChange={(e) => handlePasswordInput("confirmPassword", e.target.value)} />
-            </div>
-
-            {passwordError && <div className="wallet-modal-note error">{passwordError}</div>}
-            {passwordSuccess && <div className="wallet-modal-note success">{passwordSuccess}</div>}
-
-            <div className="wallet-modal-actions">
-              <button className="wallet-modal-btn secondary" onClick={() => setPasswordModalOpen(false)}>{isEN ? "Close" : "Закрыть"}</button>
-              <button className="wallet-modal-btn primary" onClick={handlePasswordChange}>{isEN ? "Save" : "Сохранить"}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-};
+        )}
+      </>
+    );
+  };
 
 // ===== Рендер AUTH (когда нет user) =====
 
