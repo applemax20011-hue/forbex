@@ -3997,30 +3997,30 @@ body,
   top: 16px;          /* Отступ сверху */
   left: 50%;
   transform: translateX(-50%);
-  z-index: 99999;     /* Поверх всего */
+  z-index: 2147483647; /* Поверх всего */
   
   width: auto;        /* Ширина по контенту */
   min-width: auto;    /* Убираем фиксированную ширину */
   max-width: 90%;
   
-  /* Уменьшаем отступы, чтобы уведомление было тонким */
+  /* Тонкие отступы */
   padding: 8px 16px;  
   
   display: flex;
   align-items: center;
   gap: 10px;
   
-  border-radius: 99px; /* Полная капсула (круглые края) */
-  background: rgba(10, 10, 12, 0.85); /* Полупрозрачный черный фон */
+  border-radius: 99px; /* Полная капсула */
+  background: rgba(10, 10, 12, 0.85); /* Полупрозрачный черный */
   border: 1px solid rgba(255,255,255,0.1);
-  backdrop-filter: blur(12px); /* Эффект стекла */
+  backdrop-filter: blur(12px); /* Размытие фона */
   box-shadow: 0 8px 20px rgba(0,0,0,0.4);
   
   animation: toastSlideDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .toast-icon {
-  font-size: 16px; /* Иконка чуть меньше */
+  font-size: 16px; 
 }
 
 .toast-content {
@@ -4028,25 +4028,24 @@ body,
   flex-direction: column;
 }
 
-/* Заголовок в одну строку, белый */
+/* Заголовок в одну строку */
 .toast-title {
   font-size: 12px !important;
   font-weight: 700 !important;
   line-height: 1.1;
   margin: 0;
   color: #fff;
-  margin-bottom: 1px;
 }
 
-/* Текст чуть серый */
+/* Текст ошибки */
 .toast-text {
   font-size: 11px !important;
   color: #9ca3af;
   line-height: 1.1;
-  margin: 0;
+  margin-top: 2px;
 }
 
-/* Цветовые акценты (зеленый/красный) */
+/* Цвета */
 .toast-success { 
   border-color: rgba(34, 197, 94, 0.4); 
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15); 
@@ -4060,7 +4059,6 @@ body,
   from { transform: translate(-50%, -150%); opacity: 0; }
   to   { transform: translate(-50%, 0); opacity: 1; }
 }
-
 /* ===== 2. ЧИНИМ "СДЕЛКА ОТКРЫТА" (TRADE TOAST) ===== */
 /* Переносим наверх */
 .trade-toast {

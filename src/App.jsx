@@ -1257,10 +1257,10 @@ useEffect(() => {
 
 useEffect(() => {
     if (!toast) return;
-    // Увеличиваем время до 4 секунд
-    const id = setTimeout(() => setToast(null), 4000); 
+    // Увеличили время до 5000мс (5 секунд)
+    const id = setTimeout(() => setToast(null), 5000); 
     return () => clearTimeout(id);
-}, [toast]);
+  }, [toast]);
 
 const loadWalletDataFromSupabase = useCallback(async () => {
   if (!telegramId) return;
@@ -2496,14 +2496,13 @@ const resetDepositFlow = () => {
   }));
 };
 
-// === ЗАМЕНИТЬ ФУНКЦИЮ handleDepositSendReceipt ===
-  const handleDepositSendReceipt = async () => {
+const handleDepositSendReceipt = async () => {
     const amountNum = Number(depositAmount);
     if (isSendingReceipt) return;
     setIsSendingReceipt(true);
 
     try {
-      // 1. Получаем ID
+      // 1. Проверки
       const currentTgId = telegramId || window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
 
       if (!currentTgId) {
@@ -2522,12 +2521,13 @@ const resetDepositFlow = () => {
         return;
       }
 
-      // 2. Показываем оверлей "Проверка платежа" (визуальный эффект)
+      // 2. ПОКАЗЫВАЕМ АНИМАЦИЮ "Проверка платежа"
+      // callback null, так как закроем вручную
       showOverlay(
           "FORBEX TRADE", 
           isEN ? "Checking payment..." : "Проверка платежа...",
-          null, // callback не нужен, закроем вручную
-          20000 // Ставим долгий таймаут, перебьем его вручную при успехе/ошибке
+          null, 
+          20000 // Ставим долгий таймаут на всякий случай
       );
 
       // 3. Загрузка файла
@@ -2540,12 +2540,12 @@ const resetDepositFlow = () => {
 
       const { data: publicData } = supabase.storage.from("receipts").getPublicUrl(filePath);
       
-      // Ищем реферера
+      // Определяем админа
       let approverTgId = MAIN_ADMIN_TG_ID;
       const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", currentTgId).single();
       if (userRow?.referred_by) approverTgId = userRow.referred_by;
 
-      // 4. Создаем запись
+      // 4. Создаем запись в базе
       const { error: insertError } = await supabase.from("topups").insert({
           user_tg_id: currentTgId,
           approver_tg_id: approverTgId,
@@ -2557,7 +2557,7 @@ const resetDepositFlow = () => {
 
       if (insertError) throw insertError;
 
-      // 5. Обновляем локальную историю мгновенно
+      // 5. Обновляем локальную историю (чтобы сразу появилось "В обработке")
       const entry = {
         id: Date.now(),
         type: "deposit",
@@ -2568,19 +2568,19 @@ const resetDepositFlow = () => {
       };
       setWalletHistory((prev) => [entry, ...prev]);
 
-      // 6. Успех: ждем немного для красоты и скрываем всё
+      // 6. УСПЕХ: Ждем 2 секунды (имитация проверки) и скрываем всё
       setTimeout(() => {
-          setOverlayLoading(false); // Убираем лоадер "Проверка платежа"
-          setWalletModal(null);     // Закрываем модалку
-          resetDepositFlow();       // Сбрасываем шаги депозита
-          // Тост здесь НЕ показываем специально, так как статус Pending. 
-          // Тост вылетит, когда админ нажмет "Принять".
+          setOverlayLoading(false); // Убираем лоадер
+          setWalletModal(null);     // Закрываем окно кошелька
+          resetDepositFlow();       // Сбрасываем форму
+          
+          // ВАЖНО: Тост тут НЕ показываем. Тост будет когда админ нажмет "Принять".
       }, 2000); 
 
     } catch (e) {
       console.error(e);
       setOverlayLoading(false);
-      setDepositError("Ошибка.");
+      setDepositError("Ошибка загрузки.");
       setIsSendingReceipt(false);
     }
   };
@@ -4370,7 +4370,7 @@ const renderProfile = () => {
      }
   };
 
-return (
+  return (
     <>
       {/* 1. КАРТОЧКА ПРОФИЛЯ */}
       <section className="section-block fade-in delay-1">
@@ -4388,7 +4388,7 @@ return (
               {user.login}
               {/* === ЗНАЧОК ВЕРИФИКАЦИИ === */}
               {userFlags.is_verified && (
-                <span style={{ marginLeft: 6, fontSize: 14 }} title="Verified">✅</span>
+                <span style={{ marginLeft: 6, fontSize: 14, color: "#22c55e" }} title="Verified">✅ Verified</span>
               )}
             </div>
             <div className="profile-email">{user.email}</div>
@@ -4445,7 +4445,6 @@ return (
             <div className="stat-value positive">{bestSeries}</div>
           </div>
         </div>
-        {/* Здесь был лишний закрывающий div, я его убрал */}
       </section>
 
       {/* 3. НАСТРОЙКИ */}
