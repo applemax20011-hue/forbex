@@ -3991,36 +3991,36 @@ body,
   to   { transform: translate(-50%, 0); opacity: 1; }
 }
 
-/* ===== 1. ЧИНИМ ТОСТЫ (Делаем их тонкими и аккуратными) ===== */
+/* ===== ОБНОВЛЕННЫЕ ТОСТЫ (TOASTS) ===== */
 .toast-root {
   position: fixed;
-  top: 16px;          /* Сверху */
+  top: 16px;          /* Отступ сверху */
   left: 50%;
   transform: translateX(-50%);
   z-index: 99999;     /* Поверх всего */
   
   width: auto;        /* Ширина по контенту */
-  min-width: auto;    /* Убираем min-width 280px */
+  min-width: auto;    /* Убираем фиксированную ширину */
   max-width: 90%;
   
-  /* Уменьшаем паддинги, чтобы не был жирным */
+  /* Уменьшаем отступы, чтобы уведомление было тонким */
   padding: 8px 16px;  
   
   display: flex;
   align-items: center;
   gap: 10px;
   
-  border-radius: 99px; /* Полная капсула */
-  background: rgba(10, 10, 12, 0.95);
+  border-radius: 99px; /* Полная капсула (круглые края) */
+  background: rgba(10, 10, 12, 0.85); /* Полупрозрачный черный фон */
   border: 1px solid rgba(255,255,255,0.1);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px); /* Эффект стекла */
   box-shadow: 0 8px 20px rgba(0,0,0,0.4);
   
   animation: toastSlideDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .toast-icon {
-  font-size: 16px; /* Чуть меньше иконка */
+  font-size: 16px; /* Иконка чуть меньше */
 }
 
 .toast-content {
@@ -4028,25 +4028,38 @@ body,
   flex-direction: column;
 }
 
-/* Заголовки в одну строку */
+/* Заголовок в одну строку, белый */
 .toast-title {
   font-size: 12px !important;
   font-weight: 700 !important;
   line-height: 1.1;
   margin: 0;
+  color: #fff;
+  margin-bottom: 1px;
 }
 
+/* Текст чуть серый */
 .toast-text {
   font-size: 11px !important;
   color: #9ca3af;
   line-height: 1.1;
-  margin-top: 1px;
+  margin: 0;
 }
 
-/* Цветовые акценты тостов */
-.toast-success { border-color: rgba(34, 197, 94, 0.4); box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15); }
-.toast-error   { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15); }
+/* Цветовые акценты (зеленый/красный) */
+.toast-success { 
+  border-color: rgba(34, 197, 94, 0.4); 
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15); 
+}
+.toast-error { 
+  border-color: rgba(239, 68, 68, 0.4); 
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15); 
+}
 
+@keyframes toastSlideDown {
+  from { transform: translate(-50%, -150%); opacity: 0; }
+  to   { transform: translate(-50%, 0); opacity: 1; }
+}
 
 /* ===== 2. ЧИНИМ "СДЕЛКА ОТКРЫТА" (TRADE TOAST) ===== */
 /* Переносим наверх */

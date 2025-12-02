@@ -1266,11 +1266,12 @@ const loadWalletDataFromSupabase = useCallback(async () => {
   if (!telegramId) return;
 
   try {
-    // 1. Параллельная загрузка: Пополнения, Выводы, Настройки юзера (ВКЛЮЧАЯ БАЛАНС)
+    // 1. Параллельная загрузка
     const [topupsRes, withdrawsRes, userRes] = await Promise.all([
       supabase
         .from("topups")
-        .select("id, amount, status, created_at")
+        // ДОБАВИЛИ 'method' в запрос
+        .select("id, amount, status, created_at, method")
         .eq("user_tg_id", telegramId)
         .order("created_at", { ascending: false }),
       supabase
@@ -1279,7 +1280,8 @@ const loadWalletDataFromSupabase = useCallback(async () => {
         .eq("user_tg_id", telegramId)
         .order("ts", { ascending: false }),
       supabase
-        .from("users") // Таблица настроек мамонта
+        .from("users") 
+        // ДОБАВИЛИ 'balance' и 'is_verified' в запрос
         .select("luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw, is_verified, balance")
         .eq("tg_id", telegramId)
         .maybeSingle()
@@ -1288,24 +1290,22 @@ const loadWalletDataFromSupabase = useCallback(async () => {
     // 2. Сохраняем настройки и БАЛАНС
     if (userRes.data) {
       setUserFlags(userRes.data);
-      // === ВАЖНО: Баланс берем жестко из базы ===
-      setBalance(userRes.data.balance || 0);
+      
+      // === ГЛАВНОЕ ИСПРАВЛЕНИЕ: БЕРЕМ БАЛАНС ИЗ БАЗЫ ===
+      // Больше не считаем (пополнения - выводы), а верим базе
+      setBalance(Number(userRes.data.balance) || 0);
     }
 
-    // 3. Грузим активы (крипту на балансе), если есть
+    // 3. Грузим активы
     if (user) {
       const { data: assets } = await supabase
         .from("user_assets")
         .select("*")
         .eq("user_id", user.id);
-      
       if (assets) setUserAssets(assets);
     }
 
-    if (topupsRes.error) console.error("loadWalletData topups error:", topupsRes.error);
-    if (withdrawsRes.error) console.error("loadWalletData withdrawals error:", withdrawsRes.error);
-
-    // === ФИЛЬТРАЦИЯ ИСТОРИИ ===
+    // === ИСТОРИЯ ===
     const userRegTime = user?.createdAt || 0;
     const rawTopups = topupsRes.data || [];
     const rawWithdrawals = withdrawsRes.data || [];
@@ -1320,10 +1320,10 @@ const loadWalletDataFromSupabase = useCallback(async () => {
       return wTime >= userRegTime;
     });
 
-    const normalizeStatus = (s) => (s || "").toLowerCase();
+    // УДАЛИЛИ БЛОК "Считаем баланс" (approvedDepositSum - withdrawSum)
 
-    // Формируем единый список истории
     const history = [];
+    const normalizeStatus = (s) => (s || "").toLowerCase();
 
     topups.forEach((row) => {
       const status = normalizeStatus(row.status) || "pending";
@@ -1332,7 +1332,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
         topupId: row.id,
         type: "deposit",
         amount: Number(row.amount || 0),
-        method: row.method || "card",
+        method: row.method || "card", // Теперь метод берется из базы
         ts: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
         status, 
       });
@@ -2496,100 +2496,70 @@ const resetDepositFlow = () => {
   }));
 };
 
-const handleDepositSendReceipt = async () => {
+// === ЗАМЕНИТЬ ФУНКЦИЮ handleDepositSendReceipt ===
+  const handleDepositSendReceipt = async () => {
     const amountNum = Number(depositAmount);
-
     if (isSendingReceipt) return;
     setIsSendingReceipt(true);
 
     try {
-      // 1. ЖЕСТКОЕ ПОЛУЧЕНИЕ TG ID
-      // Если в стейте пусто, берем напрямую из объекта Telegram
+      // 1. Получаем ID
       const currentTgId = telegramId || window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
 
       if (!currentTgId) {
-        setDepositError(isEN ? "Telegram ID not found. Open via Bot." : "Не найден Telegram ID. Перезайдите через бота.");
+        setDepositError(isEN ? "Telegram ID not found." : "Не найден Telegram ID.");
+        setIsSendingReceipt(false);
         return;
       }
-
       if (!amountNum || Number.isNaN(amountNum)) {
         setDepositError(isEN ? "Enter amount." : "Введите сумму.");
+        setIsSendingReceipt(false);
         return;
       }
-
       if (!receiptFile) {
         setDepositError(isEN ? "Attach receipt." : "Прикрепите чек.");
+        setIsSendingReceipt(false);
         return;
       }
 
-      // 2. Проверяем активные заявки
-      const { data: existingPending, error: pendingErr } = await supabase
-        .from("topups")
-        .select("id,status")
-        .eq("user_tg_id", currentTgId)
-        .eq("status", "pending")
-        .limit(1);
+      // 2. Показываем оверлей "Проверка платежа" (визуальный эффект)
+      showOverlay(
+          "FORBEX TRADE", 
+          isEN ? "Checking payment..." : "Проверка платежа...",
+          null, // callback не нужен, закроем вручную
+          20000 // Ставим долгий таймаут, перебьем его вручную при успехе/ошибке
+      );
 
-      if (!pendingErr && existingPending && existingPending.length > 0) {
-        setDepositError(isEN ? "You have a pending request." : "У вас уже есть заявка в обработке.");
-        return;
-      }
-
-      // 3. Ищем реферера (админа)
-      let approverTgId = MAIN_ADMIN_TG_ID;
-      const { data: userRow } = await supabase
-        .from("users")
-        .select("referred_by")
-        .eq("tg_id", currentTgId)
-        .single();
-
-      if (userRow?.referred_by) {
-        approverTgId = userRow.referred_by;
-      }
-
-      // 4. Загрузка файла
+      // 3. Загрузка файла
       const fileExt = receiptFile.name.split('.').pop();
       const safeFileName = `receipt_${Date.now()}.${fileExt}`;
       const filePath = `${currentTgId}/${safeFileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from("receipts")
-        .upload(filePath, receiptFile);
-
-      if (uploadError) {
-        console.error("uploadError:", uploadError);
-        setDepositError(isEN ? "Upload failed." : "Ошибка загрузки чека.");
-        return;
-      }
+      const { error: uploadError } = await supabase.storage.from("receipts").upload(filePath, receiptFile);
+      if (uploadError) throw uploadError;
 
       const { data: publicData } = supabase.storage.from("receipts").getPublicUrl(filePath);
-      const receiptUrl = publicData?.publicUrl;
+      
+      // Ищем реферера
+      let approverTgId = MAIN_ADMIN_TG_ID;
+      const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", currentTgId).single();
+      if (userRow?.referred_by) approverTgId = userRow.referred_by;
 
-      // 5. Создаем запись
-      const { data: inserted, error: insertError } = await supabase
-        .from("topups")
-        .insert({
+      // 4. Создаем запись
+      const { error: insertError } = await supabase.from("topups").insert({
           user_tg_id: currentTgId,
           approver_tg_id: approverTgId,
           amount: amountNum,
-          receipt_url: receiptUrl,
+          receipt_url: publicData?.publicUrl,
           status: "pending",
-          notified: false // Важно для логов
-        })
-        .select()
-        .single();
+          notified: false
+      });
 
-      if (insertError) {
-        console.error("insertError:", insertError);
-        setDepositError(isEN ? "Error creating request." : "Ошибка создания заявки.");
-        return;
-      }
+      if (insertError) throw insertError;
 
-      // 6. Успех
-      const topupId = inserted?.id;
+      // 5. Обновляем локальную историю мгновенно
       const entry = {
         id: Date.now(),
-        topupId,
         type: "deposit",
         amount: amountNum,
         method: walletForm.method || "card",
@@ -2598,23 +2568,22 @@ const handleDepositSendReceipt = async () => {
       };
       setWalletHistory((prev) => [entry, ...prev]);
 
-      setToast({
-        type: "success",
-        text: isEN ? "Receipt sent!" : "Чек отправлен! Ожидайте проверки.",
-      });
-
+      // 6. Успех: ждем немного для красоты и скрываем всё
       setTimeout(() => {
-        setWalletModal(null);
-        resetDepositFlow();
-      }, 1500);
+          setOverlayLoading(false); // Убираем лоадер "Проверка платежа"
+          setWalletModal(null);     // Закрываем модалку
+          resetDepositFlow();       // Сбрасываем шаги депозита
+          // Тост здесь НЕ показываем специально, так как статус Pending. 
+          // Тост вылетит, когда админ нажмет "Принять".
+      }, 2000); 
 
     } catch (e) {
       console.error(e);
-      setDepositError("Ошибка приложения");
-    } finally {
+      setOverlayLoading(false);
+      setDepositError("Ошибка.");
       setIsSendingReceipt(false);
     }
-};
+  };
 
 const renderHome = () => (
     <>
