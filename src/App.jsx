@@ -3096,7 +3096,7 @@ const renderWallet = () => {
       return m;
     };
 
-    // Логика переходов (без изменений)
+    // Логика переходов
     const handleDepositStep = () => {
       if (depositStep === 1) {
         if (!walletForm.method) return;
@@ -3118,7 +3118,6 @@ const renderWallet = () => {
     };
 
     const handleWithdrawSubmit = async () => {
-      // ... (оставляем логику вывода как была, она не менялась) ...
       if (!telegramId) return;
       const raw = walletForm.amount?.toString().replace(",", ".") || "";
       const amountNum = parseFloat(raw);
@@ -3200,96 +3199,104 @@ const renderWallet = () => {
           </div>
         </section>
         
-{/* ИСТОРИЯ (Вернул как было: Сразу после баланса) */}
+        {/* ИСТОРИЯ (Обновленная логика из вкладки История) */}
         <section className="section-block fade-in delay-2" style={{ marginTop: 16 }}>
           <div className="section-title">
-            <h2>{isEN ? "Recent operations" : "Последние операции"}</h2>
+            <h2>{isEN ? "Last wallet operations" : "Последние операции кошелька"}</h2>
           </div>
 
           <div className="history-block">
             {walletHistory.slice(0, 3).map((e) => {
-              const displayAmount = toDisplayCurrency(e.amount, settings.currency);
+               const displayAmount = toDisplayCurrency(e.amount, settings.currency);
+               
+               const isWithdraw = e.type === "withdraw";
+               // const isDeposit = e.type === "deposit"; // не используется, но подразумевается
 
-              const isWithdraw = e.type === "withdraw";
-              const isPending = e.status === "pending";
-              const isRejected = e.status === "rejected";
-              const isDone = e.status === "done" || e.status === "approved";
+               const isPending = e.status === "pending";
+               const isRejected = e.status === "rejected";
+               // const isApproved = e.status === "approved";
+               const isDone = e.status === "done" || e.status === "approved";
+               
+               // Логика для текста "обработка" у выводов
+               const pendingWithdraw = isWithdraw && (!e.status || e.status === "pending");
 
-              const rowClass =
-                "history-row " +
-                (isPending ? "is-pending " : "") +
-                (isRejected ? "is-rejected " : "") +
-                (isDone ? "is-approved" : "");
+               const rowClass = "history-row " + 
+                  (isPending ? "is-pending " : "") + 
+                  (isRejected ? "is-rejected " : "") +
+                  (isDone ? "is-approved" : "");
 
-              let sign = isWithdraw ? "-" : "+";
-              let amountClass = "history-amount ";
+               let sign = isWithdraw ? "-" : "+";
+               let amountClass = "history-amount ";
 
-              if (isWithdraw) {
-                amountClass += "negative";
-              } else {
-                if (isRejected) {
-                  sign = "×";
-                  amountClass += "rejected";
-                } else if (isPending) {
-                  amountClass += "pending";
-                } else {
-                  amountClass += "positive";
-                }
-              }
+               if (isWithdraw) {
+                  amountClass += "negative"; 
+               } else {
+                  if (isRejected) {
+                      sign = "×";
+                      amountClass += "rejected";
+                  } else if (isPending) {
+                      amountClass += "pending";
+                  } else {
+                      amountClass += "positive";
+                  }
+               }
 
-              return (
-                <div key={e.id} className={rowClass}>
-                  <div className="history-main">
-                    <div className="history-type">
-                      {isWithdraw
-                        ? isEN
-                          ? "Withdrawal"
-                          : "Вывод средств"
-                        : isEN
-                        ? "Deposit"
-                        : "Пополнение"}
-                    </div>
-                    <div className="history-sub">{methodLabel(e.method)}</div>
-                  </div>
+               return (
+                 <div key={e.id} className={rowClass}>
+                   <div className="history-main">
+                     <div className="history-type">
+                        {/* Тип операции */}
+                        {isWithdraw 
+                          ? (isEN ? "Withdrawal" : "Вывод средств") 
+                          : (isEN ? "Deposit" : "Пополнение")}
+                        {" · "}
+                        {/* Метод + статус текстом (как в истории) */}
+                        {methodLabel(e.method)}
+                        
+                        {isWithdraw && isDone && (
+                          <span style={{color: '#ef4444', fontSize: 10, marginLeft: 4}}>
+                            {isEN ? "(completed)" : "(исполнен)"}
+                          </span>
+                        )}
+                        {isWithdraw && pendingWithdraw && (
+                          <span style={{color: '#fbbf24', fontSize: 10, marginLeft: 4}}>
+                            {isEN ? "(processing)" : "(обработка)"}
+                          </span>
+                        )}
+                     </div>
+                     <div className="history-sub">{methodLabel(e.method)}</div>
+                   </div>
 
-                  <div className="history-right">
-                    <div className={amountClass}>
-                      {sign} {displayAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 })}{" "}
-                      {currencyCode}
-                    </div>
-
-                    {isPending && (
-                      <button
-                        className="cancel-btn"
-                        onClick={(evt) => {
-                          evt.stopPropagation();
-                          const idStr = String(e.id);
-                          if (isWithdraw)
-                            handleCancelWithdrawal(e.id, idStr.replace("wd-", ""));
-                          else
-                            handleCancelDeposit(
-                              e.id,
-                              e.topupId || idStr.replace("topup-", "")
-                            );
-                        }}
-                      >
-                        {isEN ? "Cancel" : "Отменить"}
-                      </button>
-                    )}
-
-                    <div className="history-time">{formatDateTime(e.ts)}</div>
-                  </div>
-                </div>
-              );
+                   <div className="history-right">
+                      <div className={amountClass}>
+                         {sign} {displayAmount.toLocaleString("ru-RU", {minimumFractionDigits: 2})} {currencyCode}
+                      </div>
+                      
+                      {isPending && (
+                        <button className="cancel-btn" onClick={(evt) => {
+                           evt.stopPropagation();
+                           const idStr = String(e.id);
+                           if (isWithdraw) handleCancelWithdrawal(e.id, idStr.replace("wd-", ""));
+                           else handleCancelDeposit(e.id, e.topupId || idStr.replace("topup-", ""));
+                        }}>
+                          {isEN ? "Cancel" : "Отменить"}
+                        </button>
+                      )}
+                      
+                      <div className="history-time">{formatDateTime(e.ts)}</div>
+                   </div>
+                 </div>
+               );
             })}
-
+            
             {walletHistory.length === 0 && (
-              <div className="wallet-empty" style={{ padding: 16 }}>
-                {isEN ? "No operations" : "Нет операций"}
-              </div>
+               <div className="wallet-empty" style={{ padding: 16 }}>
+                 {isEN ? "No operations" : "Нет операций"}
+               </div>
             )}
           </div>
-        </section> {/* <--- ВОТ ЭТОТ ТЕГ БЫЛ ПРОПУЩЕН */}
+        </section>
+
         {/* Модалки */}
         {walletModal && (
           <div
@@ -5310,8 +5317,8 @@ return (
           <span className="brand-title">Forbex Trade</span>
           <span className="brand-sub">
             {isEN
-              ? "Crypto platform in fox style"
-              : "Криптоплатформа в лисьем стиле"}
+              ? "Crypto-platform in fox style"
+              : "Крипто-платформа в лисьем стиле"}
           </span>
         </div>
       </div>
