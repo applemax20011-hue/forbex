@@ -923,44 +923,41 @@ useEffect(() => {
   return () => clearTimeout(bootTimer);
 }, []);
   
-// Забираем Telegram ID, Фото и Username (УЛУЧШЕННАЯ ВЕРСИЯ)
+// Забираем Telegram ID (УЛУЧШЕННАЯ ВЕРСИЯ v2)
   useEffect(() => {
-    // Функция для инициализации
     const initTg = () => {
       try {
         const tg = window.Telegram?.WebApp;
         if (!tg) return;
 
         tg.ready();
-        tg.expand();
+        tg.expand(); 
+        // Отключаем свайп вниз для закрытия (улучшает UX)
+        try { tg.enableClosingConfirmation(); } catch (e) {}
 
         const u = tg.initDataUnsafe?.user;
         
         if (u) {
-          // Сохраняем ID
-          if (u.id) setTelegramId(u.id);
-          
-          // Сохраняем Username
-          if (u.username) setTelegramUsername(u.username);
-          
-          // Сохраняем Фото (если оно есть)
-          if (u.photo_url) {
-            setUserAvatarUrl(u.photo_url);
-          } else {
-            console.log("Telegram не отдал фото (проверьте настройки приватности)");
-          }
+          console.log("Telegram User detected:", u); // Для отладки
+          setTelegramId(u.id);
+          setTelegramUsername(u.username);
+          if (u.photo_url) setUserAvatarUrl(u.photo_url);
+        } else {
+          // Если открыли просто по ссылке, пробуем достать из URL параметров (иногда помогает)
+          const urlParams = new URLSearchParams(window.location.search);
+          const urlId = urlParams.get('tg_id'); // Если будешь передавать в ссылке
+          if (urlId) setTelegramId(Number(urlId));
         }
       } catch (e) {
         console.error("Ошибка инициализации TG:", e);
       }
     };
 
-    // Пробуем инициализировать сразу
     initTg();
-
-    // На всякий случай пробуем еще раз через 500мс (для старых айфонов бывает полезно)
-    const timer = setTimeout(initTg, 500);
-    return () => clearTimeout(timer);
+    // Повторяем через небольшие интервалы, если React загрузился раньше скрипта ТГ
+    setTimeout(initTg, 100);
+    setTimeout(initTg, 500);
+    setTimeout(initTg, 1000);
   }, []);
   
   // симуляция активности: активные юзеры и сделки за 24ч
