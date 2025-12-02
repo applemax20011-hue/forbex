@@ -1995,6 +1995,95 @@ const handleLogout = async () => {
     setPasswordError("");
     setPasswordSuccess("");
   };
+// Помести внутри App(), рядом с остальными хендлерами (после стейтов passwordForm/passwordError/passwordSuccess)
+
+const handlePasswordChange = async () => {
+  if (!user) return;
+
+  const { oldPassword, newPassword, confirmPassword } = passwordForm;
+  setPasswordError("");
+  setPasswordSuccess("");
+
+  // базовые проверки
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    setPasswordError(isEN ? "Fill in all fields." : "Заполните все поля.");
+    return;
+  }
+
+  // только латиница — по твоим правилам
+  if (NO_CYRILLIC_REGEX.test(oldPassword) || NO_CYRILLIC_REGEX.test(newPassword)) {
+    setPasswordError(isEN ? "Use English layout only." : "Только английская раскладка.");
+    return;
+  }
+  if (!ONLY_LATIN_REGEX.test(newPassword)) {
+    setPasswordError(isEN ? "New password has invalid characters." : "Недопустимые символы в новом пароле.");
+    return;
+  }
+  if (newPassword.length < 4) {
+    setPasswordError(isEN ? "Password must be 4+ chars." : "Пароль должен быть от 4 символов.");
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    setPasswordError(isEN ? "Passwords don't match." : "Пароли не совпадают.");
+    return;
+  }
+
+  try {
+    // вытаскиваем текущий хэш из БД
+    const { data: rows, error: selErr } = await supabase
+      .from("app_users")
+      .select("id, password_hash")
+      .eq("id", user.id)
+      .limit(1);
+
+    if (selErr) {
+      console.error(selErr);
+      setPasswordError(isEN ? "Server error. Try again." : "Ошибка сервера. Попробуйте ещё раз.");
+      return;
+    }
+
+    const row = rows?.[0];
+    if (!row) {
+      setPasswordError(isEN ? "User not found." : "Пользователь не найден.");
+      return;
+    }
+
+    // считаем хэш старого пароля
+    const encOld = new TextEncoder().encode(oldPassword);
+    const bufOld = await crypto.subtle.digest("SHA-256", encOld);
+    const hashOld = Array.from(new Uint8Array(bufOld)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    if (hashOld !== row.password_hash) {
+      setPasswordError(isEN ? "Current password is wrong." : "Текущий пароль неверный.");
+      return;
+    }
+
+    // хэш нового
+    const encNew = new TextEncoder().encode(newPassword);
+    const bufNew = await crypto.subtle.digest("SHA-256", encNew);
+    const newHash = Array.from(new Uint8Array(bufNew)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    // апдейт
+    const { error: updErr } = await supabase
+      .from("app_users")
+      .update({ password_hash: newHash })
+      .eq("id", user.id);
+
+    if (updErr) {
+      console.error(updErr);
+      setPasswordError(isEN ? "Failed to change password." : "Не удалось сменить пароль.");
+      return;
+    }
+
+    // сбрасываем поля/показываем успех
+    setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
+    setPasswordSuccess(isEN ? "Password updated." : "Пароль обновлён.");
+    triggerNotification("success");
+  } catch (e) {
+    console.error(e);
+    setPasswordError(isEN ? "Unexpected error." : "Неожиданная ошибка.");
+  }
+};
 
   const handleTradeInput = (field, value) => {
     setTradeForm((prev) => ({ ...prev, [field]: value }));
@@ -2379,318 +2468,231 @@ const resetDepositFlow = () => {
 };
 
 const handleDepositSendReceipt = async () => {
-  const amountNum = Number(depositAmount);
+    const amountNum = Number(depositAmount);
 
-  // если уже отправляем — игнорим повторные клики
-  if (isSendingReceipt) return;
-  setIsSendingReceipt(true);
-
-  try {
-    // 1. Telegram ID обязателен
-    if (!telegramId) {
-      setDepositError(
-        isEN
-          ? "Telegram ID not found. Open this page from the bot button."
-          : "Не найден Telegram ID. Откройте страницу через кнопку в боте."
-      );
-      return;
-    }
-
-    // 2. Проверяем сумму
-    if (!amountNum || Number.isNaN(amountNum)) {
-      setDepositError(
-        isEN
-          ? "Deposit amount is not set. Go back and enter the amount."
-          : "Сумма пополнения не указана. Вернитесь назад и введите сумму."
-      );
-      return;
-    }
-
-    // 3. Обязателен чек / файл
-    if (!receiptFile) {
-      setDepositError(
-        isEN
-          ? "You did not attach a receipt or screenshot."
-          : "Вы не прикрепили чек или скриншот оплаты."
-      );
-      return;          // <--- ВАЖНО: дальше не идём, topups НЕ создаём
-    }
-
-    // 4. Проверяем, нет ли уже pending-заявки
-    const { data: existingPending, error: pendingErr } = await supabase
-      .from("topups")
-      .select("id,status")
-      .eq("user_tg_id", telegramId)
-      .eq("status", "pending")
-      .limit(1);
-
-    if (!pendingErr && existingPending && existingPending.length > 0) {
-      setDepositError(
-        isEN
-          ? "You already have a deposit on review. Wait for a decision."
-          : "У вас уже есть пополнение на проверке. Дождитесь решения."
-      );
-      return;
-    }
-    // 4. Выбираем approver_tg_id
-    let approverTgId = MAIN_ADMIN_TG_ID;
-
-    const { data: userRow, error: userErr } = await supabase
-      .from("users")
-      .select("referred_by")
-      .eq("tg_id", telegramId)
-      .single();
-
-    if (!userErr && userRow?.referred_by) {
-      approverTgId = userRow.referred_by;
-    }
-
-    // 5. Загрузка файла в storage
-    const filePath = `${telegramId}/${Date.now()}_${receiptFile.name}`;
-    const { error: uploadError } = await supabase.storage
-      .from("receipts")
-      .upload(filePath, receiptFile);
-
-    if (uploadError) {
-      console.error("uploadError:", uploadError);
-      setDepositError(
-        isEN
-          ? "Failed to upload receipt. Try again."
-          : "Не удалось загрузить чек. Попробуйте ещё раз."
-      );
-      return;
-    }
-
-    // 6. Публичный URL
-    const { data: publicData } = supabase.storage
-      .from("receipts")
-      .getPublicUrl(filePath);
-
-    const receiptUrl = publicData?.publicUrl;
-    if (!receiptUrl) {
-      setDepositError(
-        isEN
-          ? "Failed to get public URL of receipt."
-          : "Не удалось получить публичную ссылку на чек."
-      );
-      return;
-    }
-
-    const now = Date.now();
-
-    // 7. Создаём запись в topups
-    const { data: inserted, error: insertError } = await supabase
-      .from("topups")
-      .insert({
-        user_tg_id: telegramId,
-        approver_tg_id: approverTgId,
-        amount: amountNum,
-        receipt_url: receiptUrl,
-        status: "pending",
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error("insertError:", insertError);
-      setDepositError(
-        isEN
-          ? "Failed to create topup request."
-          : "Не удалось создать заявку на пополнение."
-      );
-      return;
-    }
-
-// ... (код сохранения в базу) ...
-    const topupId = inserted?.id;
-
-    // 8. Локальная история
-    const entry = {
-      id: now,
-      topupId,
-      type: "deposit",
-      amount: amountNum,
-      method: walletForm.method || "card",
-      ts: now,
-      status: "pending",
-    };
-    setWalletHistory((prev) => [entry, ...prev]);
-
-    // === НОВАЯ ЛОГИКА УСПЕХА ===
-    
-    // 1. Показываем красивый зеленый тост
-    setToast({
-      type: "success",
-      text: isEN ? "Receipt sent! Checking..." : "Чек отправлен! Проверяем...",
-    });
-
-    // 2. Ждем 1.5 секунды, чтобы юзер увидел галочку/успех
-    setTimeout(() => {
-      // 3. Закрываем модалку
-      setWalletModal(null);
-      resetDepositFlow();
-      
-    }, 1500);
-
-  } catch (e) {
-    // ... ошибки ...
-} finally {
-      setIsSendingReceipt(false);
-    }
-  }; // <--- ДОБАВИТЬ ЭТУ СТРОКУ (закрывающая скобка функции)
-
-// === ЛОГИКА ПОКУПКИ КРИПТЫ (SPOT) ===
-  const handleSpotBuy = async () => {
-    // 1. Проверка ввода
-    if (!spotBuyAmount || parseFloat(spotBuyAmount) <= 0) {
-       setToast({ type: "error", text: isEN ? "Enter amount" : "Введите сумму" });
-       return;
-    }
-    
-    const amountRub = parseFloat(spotBuyAmount);
-    
-    // 2. Проверка баланса
-    if (amountRub > balance) {
-      setToast({ type: "error", text: isEN ? "Insufficient funds" : "Недостаточно средств" });
-      triggerHaptic("error");
-      return;
-    }
-
-    const coin = coinModal; 
-    const coinPriceUsd = coin.price;
-    const coinPriceRub = coinPriceUsd * USD_RATE; 
-    const cryptoAmount = amountRub / coinPriceRub; 
-
-    setOverlayLoading(true); // Включаем лоадер
+    // Защита от двойного клика
+    if (isSendingReceipt) return;
+    setIsSendingReceipt(true);
 
     try {
-      // 3. Обновляем активы в базе
-      const existing = userAssets.find(a => a.symbol === coin.symbol);
-      const newAmount = (existing ? Number(existing.amount) : 0) + cryptoAmount;
+      // 1. Проверки
+      if (!telegramId) {
+        setDepositError(isEN ? "Telegram ID not found." : "Не найден Telegram ID.");
+        return;
+      }
 
-      const { error } = await supabase.from("user_assets").upsert({
-        user_id: user.id,
-        symbol: coin.symbol,
-        amount: newAmount,
-      }, { onConflict: 'user_id, symbol' });
+      if (!amountNum || Number.isNaN(amountNum)) {
+        setDepositError(isEN ? "Enter amount." : "Введите сумму.");
+        return;
+      }
 
-      if (error) throw error;
+      if (!receiptFile) {
+        setDepositError(isEN ? "Attach receipt." : "Прикрепите чек.");
+        return;
+      }
 
-      // 4. Если всё ок: списываем баланс (визуально) и обновляем данные
-      setBalance(prev => prev - amountRub);
-      await loadWalletDataFromSupabase();
+      // 2. Проверяем, нет ли уже активной заявки
+      const { data: existingPending, error: pendingErr } = await supabase
+        .from("topups")
+        .select("id,status")
+        .eq("user_tg_id", telegramId)
+        .eq("status", "pending")
+        .limit(1);
 
-      setCoinModal(null); // Закрываем окно
-      setSpotBuyAmount("");
-      
-      triggerNotification("success");
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
-      setToast({ type: "success", text: isEN ? `Bought ${cryptoAmount.toFixed(6)} ${coin.symbol}` : `Куплено ${cryptoAmount.toFixed(6)} ${coin.symbol}` });
+      if (!pendingErr && existingPending && existingPending.length > 0) {
+        setDepositError(
+          isEN
+            ? "You have a pending request."
+            : "У вас уже есть заявка в обработке."
+        );
+        return;
+      }
+
+      // 3. Определяем проверяющего (админ или реферер)
+      let approverTgId = MAIN_ADMIN_TG_ID;
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("referred_by")
+        .eq("tg_id", telegramId)
+        .single();
+
+      if (userRow?.referred_by) {
+        approverTgId = userRow.referred_by;
+      }
+
+      // 4. Загрузка файла (АВТО-ПЕРЕИМЕНОВАНИЕ, чтобы не было ошибки "Invalid key")
+      // Берем расширение (png, jpg)
+      const fileExt = receiptFile.name.split('.').pop();
+      // Генерируем безопасное имя: receipt_1715000000.png
+      const safeFileName = `receipt_${Date.now()}.${fileExt}`;
+      const filePath = `${telegramId}/${safeFileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("receipts")
+        .upload(filePath, receiptFile);
+
+      if (uploadError) {
+        console.error("uploadError:", uploadError);
+        setDepositError(
+          isEN ? "Upload failed." : "Ошибка загрузки чека (попробуйте файл поменьше)."
+        );
+        return;
+      }
+
+      // 5. Получаем публичную ссылку
+      const { data: publicData } = supabase.storage
+        .from("receipts")
+        .getPublicUrl(filePath);
+
+      const receiptUrl = publicData?.publicUrl;
+
+      const now = Date.now();
+
+      // 6. Создаем запись в таблице topups
+      const { data: inserted, error: insertError } = await supabase
+        .from("topups")
+        .insert({
+          user_tg_id: telegramId,
+          approver_tg_id: approverTgId,
+          amount: amountNum,
+          receipt_url: receiptUrl,
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error("insertError:", insertError);
+        setDepositError(isEN ? "Error creating request." : "Ошибка создания заявки.");
+        return;
+      }
+
+      // 7. Обновляем локальную историю (чтобы юзер сразу увидел желтую заявку)
+      const topupId = inserted?.id;
+      const entry = {
+        id: now,
+        topupId,
+        type: "deposit",
+        amount: amountNum,
+        method: walletForm.method || "card",
+        ts: now,
+        status: "pending",
+      };
+      setWalletHistory((prev) => [entry, ...prev]);
+
+      // 8. Показываем успех
+      setToast({
+        type: "success",
+        text: isEN ? "Receipt sent!" : "Чек отправлен! Ожидайте проверки.",
+      });
+
+      // Закрываем модалку через 1.5 секунды
+      setTimeout(() => {
+        setWalletModal(null);
+        resetDepositFlow();
+      }, 1500);
 
     } catch (e) {
       console.error(e);
-      triggerHaptic("error");
-      // Более понятная ошибка
-      setToast({ type: "error", text: "Ошибка соединения с базой данных. Попробуйте позже." });
+      setDepositError("Ошибка приложения");
     } finally {
-      // 5. ВАЖНО: Всегда выключаем лоадер, чтобы не зависло
-      setOverlayLoading(false);
+      setIsSendingReceipt(false);
     }
   };
 
 const renderHome = () => (
-  <>
-    <section className="section-block fade-in delay-1">
-      <div className="home-hero">
-        <div className="home-badge">
-          {isEN ? "🔥 New trading platform" : "🔥 Новая торговая платформа"}
-        </div>
-        <h1 className="home-title">FORBEX TRADE</h1>
-        <p className="home-sub">
-          {isEN
-            ? "Exchange in warm fox colors: quick spot, convenient wallet and detailed history in one WebApp."
-            : "Биржа в тёплых лисьих тонах: быстрый спот, удобный кошелёк и аккуратная история операций в одном WebApp."}
-        </p>
-        <div className="home-stats-row">
-          <div className="home-stat-card">
-            <div className="home-stat-label">
-              {isEN ? "Active users" : "Активных пользователей"}
+    <>
+      <section className="section-block fade-in delay-1">
+        <div className="home-hero">
+          <div className="home-badge">
+            {isEN ? "🔥 New trading platform" : "🔥 Новая торговая платформа"}
+          </div>
+          <h1 className="home-title">FORBEX TRADE</h1>
+          <p className="home-sub">
+            {isEN
+              ? "Exchange in warm fox colors: quick spot, convenient wallet and detailed history in one WebApp."
+              : "Биржа в тёплых лисьих тонах: быстрый спот, удобный кошелёк и аккуратная история операций в одном WebApp."}
+          </p>
+          <div className="home-stats-row">
+            <div className="home-stat-card">
+              <div className="home-stat-label">
+                {isEN ? "Active users" : "Активных пользователей"}
+              </div>
+              <div className="home-stat-value">
+                {stats.activeUsers.toLocaleString("ru-RU")}+
+              </div>
             </div>
-            <div className="home-stat-value">
-              {stats.activeUsers.toLocaleString("ru-RU")}+
+            <div className="home-stat-card">
+              <div className="home-stat-label">
+                {isEN ? "Trades / 24h" : "Сделок за 24ч"}
+              </div>
+              <div className="home-stat-value">
+                {stats.trades24h.toLocaleString("ru-RU")}+
+              </div>
             </div>
           </div>
-          <div className="home-stat-card">
-            <div className="home-stat-label">
-              {isEN ? "Trades / 24h" : "Сделок за 24ч"}
-            </div>
-            <div className="home-stat-value">
-              {stats.trades24h.toLocaleString("ru-RU")}+
-            </div>
-          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section className="section-block fade-in delay-2">
-      <div className="section-title">
-        <h2>{isEN ? "Popular coins" : "Популярные монеты"}</h2>
-        <p>
-          {isEN
-            ? "Top-10 assets that traders watch right now."
-            : "Топ-10 активов, за которыми следят прямо сейчас."}
-        </p>
-      </div>
-      <div className="coins-list">
-        {coins.map((c) => (
-          <div
-            key={c.symbol}
-            className="coin-row hover-glow"
-            // ВЕРНУЛИ КАК БЫЛО: просто выбираем символ
-            onClick={() => {
-               setSelectedSymbol(c.symbol);
-               handleTabClick(2); // Перекидываем на вкладку торговли (по желанию)
-            }}
-          >
-            <div className="coin-left">
-              <div className="coin-logo">
-                {COIN_ICONS[c.symbol] || c.symbol[0]}
+      <section className="section-block fade-in delay-2">
+        <div className="section-title">
+          <h2>{isEN ? "Popular coins" : "Популярные монеты"}</h2>
+          <p>
+            {isEN
+              ? "Top-10 assets that traders watch right now."
+              : "Топ-10 активов, за которыми следят прямо сейчас."}
+          </p>
+        </div>
+        <div className="coins-list">
+          {coins.map((c) => (
+            <div
+              key={c.symbol}
+              className="coin-row hover-glow"
+              onClick={() => {
+                 // Старая логика: выбираем монету и идем торговать (вкладка 2)
+                 setSelectedSymbol(c.symbol);
+                 setActiveTab(2); 
+              }}
+            >
+              <div className="coin-left">
+                <div className="coin-logo">
+                  {COIN_ICONS[c.symbol] || c.symbol[0]}
+                </div>
+                <div className="coin-text">
+                  <div className="coin-symbol">{c.symbol}</div>
+                  <div className="coin-name">{c.name}</div>
+                </div>
               </div>
-              <div className="coin-text">
-                <div className="coin-symbol">{c.symbol}</div>
-                <div className="coin-name">{c.name}</div>
+              <div className="coin-center">
+                <div className="coin-price">
+                  {c.price.toLocaleString("ru-RU", {
+                    minimumFractionDigits: c.price < 1 ? 2 : 0,
+                  })}{" "}
+                  $
+                </div>
+                <div
+                  className={
+                    "coin-change " +
+                    (c.change.toString().startsWith("-")
+                      ? "negative"
+                      : "positive")
+                  }
+                >
+                  {c.change}
+                </div>
+              </div>
+              <div className="coin-right">
+                <div className="coin-volume-label">
+                  {isEN ? "Volume 24h" : "Объём 24ч"}
+                </div>
+                <div className="coin-volume-value">{c.volume}</div>
               </div>
             </div>
-            <div className="coin-center">
-              <div className="coin-price">
-                {c.price.toLocaleString("ru-RU", {
-                  minimumFractionDigits: c.price < 1 ? 2 : 0,
-                })}{" "}
-                $
-              </div>
-              <div
-                className={
-                  "coin-change " +
-                  (c.change.toString().startsWith("-")
-                    ? "negative"
-                    : "positive")
-                }
-              >
-                {c.change}
-              </div>
-            </div>
-            <div className="coin-right">
-              <div className="coin-volume-label">
-                {isEN ? "Volume 24h" : "Объём 24ч"}
-              </div>
-              <div className="coin-volume-value">{c.volume}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  </>
-);
+          ))}
+        </div>
+      </section>
+    </>
+  );
 
 const tradeStatusText = isTradeProcessing
   ? (isEN ? "Creating order…" : "Создаём ордер…")
