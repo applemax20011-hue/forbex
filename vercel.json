@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/cmc-api/:path*",
-      "destination": "https://pro-api.coinmarketcap.com/:path*"
+      "source": "/cmc-api/:match*",
+      "destination": "https://pro-api.coinmarketcap.com/:match*"
     },
     {
       "source": "/(.*)",

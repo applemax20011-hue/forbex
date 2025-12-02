@@ -1265,7 +1265,7 @@ const loadWalletDataFromSupabase = useCallback(async () => {
         .eq("user_tg_id", telegramId)
         .order("ts", { ascending: false }),
       supabase
-        .from("users") // Таблица, где хранятся настройки мамонта
+        .from("app_users") // Таблица, где хранятся настройки мамонта
         .select("luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw")
         .eq("tg_id", telegramId)
         .maybeSingle()
