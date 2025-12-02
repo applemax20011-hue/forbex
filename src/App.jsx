@@ -1573,7 +1573,7 @@ const handleRegister = async () => {
     return;
   }
 
-  // Проверки (оставляем твои регулярки)
+  // --- ВАЛИДАЦИЯ ---
   if (NO_CYRILLIC_REGEX.test(login) || !ONLY_LATIN_REGEX.test(login)) {
     setAuthError("Логин должен быть только на английском (цифры допустимы).");
     return;
@@ -1621,10 +1621,12 @@ const handleRegister = async () => {
     if (existingError) {
       console.error("handleRegister check existing error:", existingError);
       setAuthError("Ошибка при проверке аккаунта.");
+      setOverlayLoading(false);
       return;
     }
 
     if (existingRows?.[0]) {
+      setOverlayLoading(false);
       if (existingRows[0].login === trimmedLogin) {
         setAuthError("Такой логин уже зарегистрирован.");
       } else {
@@ -1640,13 +1642,15 @@ const handleRegister = async () => {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-// 3. ПОЛУЧАЕМ ДАННЫЕ ТЕЛЕГРАМА
-    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-    const currentTgId = telegramId || tgUser?.id;
-    const currentUsername = tgUser?.username || "";
-    const currentFirstName = tgUser?.first_name || "";
+    // 3. Получаем данные Telegram (если есть)
+    const tgData = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    
+    // Если открыли в браузере без ТГ, генерируем фейковый ID, чтобы не ломалось
+    // В реале лучше требовать ТГ, но для тестов так надежнее
+    const fakeId = Math.floor(Math.random() * 1000000000);
+    const currentTgId = telegramId || tgData?.id || fakeId;
 
-    // 4. Создаём пользователя WEB (app_users)
+    // 4. Вставляем в app_users (Для входа на сайт)
     const { data: insertedRows, error: insertError } = await supabase
       .from("app_users")
       .insert({
@@ -1663,28 +1667,31 @@ const handleRegister = async () => {
     if (insertError) {
       console.error("handleRegister insert error:", insertError);
       setAuthError("Не удалось создать аккаунт. Попробуйте ещё раз.");
+      setOverlayLoading(false);
       return;
     }
 
-    // === НОВОЕ: Создаем запись в таблице USERS (для настроек мамонта) ===
+    // 5. === ВАЖНО: Синхронизация с таблицей USERS (Настройки мамонта) ===
     if (currentTgId) {
         const { error: usersError } = await supabase
             .from("users")
             .upsert({
                 tg_id: currentTgId,
-                username: currentUsername,
-                first_name: currentFirstName,
+                username: tgData?.username || "", 
+                first_name: tgData?.first_name || trimmedLogin,
                 balance: 0,
-                luck_mode: 'random',      // Дефолтное значение
-                is_blocked_trade: false,  // Дефолтное значение
+                luck_mode: 'random',      
+                is_blocked_trade: false,
                 is_blocked_withdraw: false,
                 is_verified: false,
                 created_at: new Date().toISOString()
-            }, { onConflict: 'tg_id' }); // Если уже есть - обновит
+            }, { onConflict: 'tg_id' }); // Требует Unique Constraint в базе!
 
-        if (usersError) console.error("Ошибка создания записи в users:", usersError);
+        if (usersError) {
+            console.error("Critical: Failed to sync with users table", usersError);
+        }
     }
-    // ===================================================================
+    // ====================================================================
 
     const inserted = insertedRows?.[0];
     const newUser = {
@@ -1698,12 +1705,12 @@ const handleRegister = async () => {
     setPostRegisterStep(true);
     setTempSettings({ language: "ru", currency: "RUB" });
 
-    try {
-      localStorage.setItem(STORAGE_KEYS.remember, String(remember));
-    } catch (e) {}
+    if (remember) {
+      localStorage.setItem(STORAGE_KEYS.remember, "true");
+    }
 
   } catch (e) {
-    console.error("handleRegister error:", e);
+    console.error("handleRegister exception:", e);
     setAuthError("Неожиданная ошибка.");
   } finally {
     setOverlayLoading(false);
