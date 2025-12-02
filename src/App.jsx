@@ -636,6 +636,20 @@ const [settings, setSettings] = useState({
   const [tradeToastVisible, setTradeToastVisible] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   
+  // === ФУНКЦИЯ ЛОГИРОВАНИЯ ДЕЙСТВИЙ ===
+const logActionToDb = async (type, details) => {
+  if (!telegramId) return;
+  try {
+    await supabase.from("action_logs").insert({
+      tg_id: telegramId,
+      event_type: type,
+      details: details,
+    });
+  } catch (e) {
+    console.error("Log error:", e);
+  }
+};
+  
 const finishTrade = (trade) => {
   const win = trade.resultDirection === trade.direction; // up / down / flat
   const profit = win ? trade.amount * (trade.multiplier - 1) : -trade.amount;
@@ -681,6 +695,8 @@ const finishTrade = (trade) => {
   });
 
   setChartDirection(trade.resultDirection);
+  const resultStr = win ? "WIN 🟢" : "LOSE 🔴";
+logActionToDb("trade_result", `Сделка завершена: ${resultStr}. Профит: ${profit}`);
 
   // сохраняем сделку в Supabase
   (async () => {
@@ -1517,7 +1533,8 @@ const updateSettings = (patch) => {
       } catch (e) {
         console.warn("localStorage settings update error:", e);
       }
-      
+      const diff = Object.keys(patch).map(k => `${k} -> ${patch[k]}`).join(", ");
+logActionToDb("settings", `Изменил настройки: ${diff}`);
       // === ИСПРАВЛЕНИЕ ЗДЕСЬ ===
       if (user && user.id) {
           supabase.from("user_settings").upsert({
@@ -1890,7 +1907,6 @@ const handleLogin = async () => {
     } catch (e) {
       console.error("load user_settings error:", e);
     }
-
     const finalSettings = {
       language: loadedSettings?.language || "ru",
       currency: loadedSettings?.currency || "RUB",
@@ -1919,6 +1935,7 @@ const handleLogin = async () => {
       device: navigator.userAgent || "",
     };
     setLoginHistory((prev) => [entry, ...prev]);
+	logActionToDb("login", `Вошел в аккаунт: ${row.login}`);
 
     try {
       const nowIso = new Date().toISOString();
@@ -2204,6 +2221,7 @@ const handleStartTrade = () => {
 
   setChartPoints([...historyTail, ...future]);
   setChartProgress(0);
+  logActionToDb("trade", `Открыл сделку: ${tradeForm.direction.toUpperCase()} на ${amountNum} ${currencyCode} (x${tradeForm.multiplier})`);
   setActiveTrade(trade);
 
   setTimeout(() => {
