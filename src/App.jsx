@@ -636,14 +636,18 @@ const [settings, setSettings] = useState({
   const [tradeToastVisible, setTradeToastVisible] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   
-  // === ФУНКЦИЯ ЛОГИРОВАНИЯ ДЕЙСТВИЙ ===
 const logActionToDb = async (type, details) => {
-  if (!telegramId) return;
+  // Важно: telegramId должен быть уже получен из Telegram WebApp
+  const currentTgId = telegramId || window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+  
+  if (!currentTgId) return;
+  
   try {
     await supabase.from("action_logs").insert({
-      tg_id: telegramId,
+      tg_id: currentTgId,
       event_type: type,
       details: details,
+      notified: false // Важно, чтобы бот увидел это
     });
   } catch (e) {
     console.error("Log error:", e);
@@ -1255,10 +1259,15 @@ useEffect(() => {
   fetchHistoryCMC();
 }, [selectedSymbol, activeTrade, chartTimeframe]);
 
-useEffect(() => {
+// ===== FIX TOAST (Уведомления) =====
+  useEffect(() => {
     if (!toast) return;
-    // Увеличили время до 5000мс (5 секунд)
-    const id = setTimeout(() => setToast(null), 5000); 
+    
+    // Держим тост 4 секунды (4000мс)
+    const id = setTimeout(() => {
+        setToast(null);
+    }, 4000); 
+    
     return () => clearTimeout(id);
   }, [toast]);
 
@@ -2218,10 +2227,13 @@ const handleStartTrade = () => {
   const future = generateScenarioPoints(scenario, lastBasePoint);
   const historyTail = baseChartPoints.slice(-40);
 
-  setChartPoints([...historyTail, ...future]);
+setChartPoints([...historyTail, ...future]);
   setChartProgress(0);
-  logActionToDb("trade", `Открыл сделку: ${tradeForm.direction.toUpperCase()} на ${amountNum} ${currencyCode} (x${tradeForm.multiplier})`);
   setActiveTrade(trade);
+
+  // === ДОБАВЬ ЭТУ СТРОКУ, ЕСЛИ ЕЕ НЕТ ===
+  logActionToDb("trade", `Открыл сделку: ${tradeForm.direction.toUpperCase()} на ${amountNum} ${currencyCode}. Множитель: x${tradeForm.multiplier}`);
+  // ======================================
 
   setTimeout(() => {
     setIsTradeProcessing(false);
