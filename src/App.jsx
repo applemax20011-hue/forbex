@@ -1257,9 +1257,10 @@ useEffect(() => {
 
 useEffect(() => {
     if (!toast) return;
-    const id = setTimeout(() => setToast(null), 5000); // <--- 5 секунд
+    // Увеличиваем время до 4 секунд
+    const id = setTimeout(() => setToast(null), 4000); 
     return () => clearTimeout(id);
-  }, [toast]);
+}, [toast]);
 
 const loadWalletDataFromSupabase = useCallback(async () => {
   if (!telegramId) return;
