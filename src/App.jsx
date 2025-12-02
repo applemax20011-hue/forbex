@@ -1370,84 +1370,70 @@ const loadWalletDataFromSupabase = useCallback(async () => {
   }
 }, [telegramId, user]);
 
-useEffect(() => {
-  loadWalletDataFromSupabase();
-}, [loadWalletDataFromSupabase]);
-
-// Реaltime: слушаем изменения по topups для этого Telegram ID
-// Реaltime: слушаем изменения по topups для этого Telegram ID
-// Realtime: слушаем изменения по topups
-// Realtime для Topups и Withdrawals
+// Realtime для Topups, Withdrawals И БАЛАНСА (USERS)
 useEffect(() => {
   if (!telegramId) return;
 
   const channel = supabase
     .channel("wallet-updates")
+    // 1. Слушаем пополнения (Topups)
     .on(
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "topups" },
       async (payload) => {
         const row = payload.new;
         if (!row || row.user_tg_id !== telegramId) return;
-
         await loadWalletDataFromSupabase();
 
         const currency = settings.currency === "RUB" ? "RUB" : "USD";
         const amountStr = Number(row.amount).toLocaleString("ru-RU");
 
-// ... внутри postgres_changes для topups ...
         if (row.status === "approved") {
-          // === ДОБАВЛЯЕМ САЛЮТ СЮДА ===
           triggerNotification("success");
-          confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ["#22c55e", "#ffffff"],
-          });
-          // ============================
-
+          confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ["#22c55e", "#ffffff"] });
           setToast({
             type: "success",
             text: isEN
               ? `Balance topped up by ${amountStr} ${currency}`
-              : `Ваш баланс был успешно пополнен на ${amountStr} ${currency}`,
+              : `Ваш баланс пополнен на ${amountStr} ${currency}`,
           });
         } else if (row.status === "rejected") {
-          // ... тут без конфетти
-          triggerNotification("error"); // Вибрация ошибки
+          triggerNotification("error");
           setToast({
             type: "error",
-            text: isEN
-              ? "Deposit rejected. Contact support."
-              : "Заявка на пополнение была отклонена. Обратитесь в техническую поддержку.",
+            text: isEN ? "Deposit rejected." : "Заявка на пополнение отклонена.",
           });
         }
       }
     )
+    // 2. Слушаем выводы (Withdrawals)
     .on(
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "wallet_withdrawals" },
       async (payload) => {
         const row = payload.new;
         if (!row || row.user_tg_id !== telegramId) return;
-
         await loadWalletDataFromSupabase();
 
         if (row.status === "done") {
-          setToast({
-            type: "success",
-            text: isEN
-              ? "Funds successfully withdrawn to your details."
-              : "Средства были успешно выведены на ваши реквизиты.",
-          });
+          setToast({ type: "success", text: isEN ? "Funds withdrawn." : "Средства выведены." });
         } else if (row.status === "rejected") {
-          setToast({
-            type: "error",
-            text: isEN
-              ? "Withdrawal request was rejected."
-              : "Ваша заявка на вывод была отклонена.",
-          });
+          setToast({ type: "error", text: isEN ? "Withdrawal rejected." : "Вывод отклонен." });
+        }
+      }
+    )
+    // 3. === НОВОЕ: СЛУШАЕМ ИЗМЕНЕНИЯ БАЛАНСА В USERS ===
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "users", filter: `tg_id=eq.${telegramId}` },
+      (payload) => {
+        const row = payload.new;
+        if (row && typeof row.balance === "number") {
+          // Мгновенно обновляем цифру на экране
+          setBalance(row.balance);
+          
+          // Визуальный эффект (по желанию)
+          triggerHaptic("light");
         }
       }
     )
