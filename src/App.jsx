@@ -636,27 +636,6 @@ const [settings, setSettings] = useState({
   const [tradeToastVisible, setTradeToastVisible] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   
-// === ВСТАВЬ ЭТУ ФУНКЦИЮ СЮДА (внутри App) ===
-  const handleShare = () => {
-    if (!lastTradeResult) return;
-    
-    // Формируем текст
-    const text = `🚀 Forbex Trade Result: ${lastTradeResult.status === 'win' ? 'PROFIT 🤑' : 'LOSS 🥲'}\n` +
-                 `Coin: ${selectedSymbol}\n` +
-                 `Profit: ${lastTradeResult.status === 'win' ? '+' : ''}${toDisplayCurrency(lastTradeResult.profit, settings.currency).toFixed(2)} ${currencyCode}`;
-
-    const botUsername = "ForbexTradeBot"; // <--- ЗАМЕНИ НА СВОЙ ЮЗЕРНЕЙМ (без @)
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(`https://t.me/${botUsername}`)}&text=${encodeURIComponent(text)}`;
-
-    // Пытаемся открыть через WebApp
-    if (window.Telegram?.WebApp?.openTelegramLink) {
-       window.Telegram.WebApp.openTelegramLink(shareUrl);
-    } else {
-       // Если открыто в браузере — просто новая вкладка или копирование
-       window.open(shareUrl, '_blank');
-    }
-  };
-  
 const finishTrade = (trade) => {
   const win = trade.resultDirection === trade.direction; // up / down / flat
   const profit = win ? trade.amount * (trade.multiplier - 1) : -trade.amount;
@@ -2721,19 +2700,55 @@ const tradeStatusText = isTradeProcessing
   : (isEN ? "No active trades" : "Нет активных сделок");
 
 const renderTrade = () => {
-  const currentCoin = coins.find((c) => c.symbol === selectedSymbol) || coins[0];
+  const currentCoin =
+    coins.find((c) => c.symbol === selectedSymbol) || coins[0];
+
   const scenario = chartScenario || "idle";
+
   const minInvest = settings.currency === "RUB" ? 100 : 5;
   const multipliers = [2, 5, 10];
   const durations = [10, 30, 60];
 
-  // Текст статуса для графика
+  const timeframes = [
+    { id: "1M", label: "1М" },
+    { id: "15M", label: "15М" },
+    { id: "1H", label: "1Ч" },
+    { id: "4H", label: "4Ч" },
+    { id: "1D", label: "1Д" },
+  ];
+
   const chartLabel =
     scenario === "idle"
-      ? isEN ? "Waiting for trade…" : "Ожидаем сделку…"
-      : scenario.includes("win") // Простая проверка на win/lose
-      ? isEN ? "Price moves in your favor" : "Цена идет в вашу сторону"
-      : isEN ? "Price moves against you" : "Цена идет против вас";
+      ? isEN
+        ? "Waiting for trade…"
+        : "Ожидаем сделку…"
+      : scenario.startsWith("up") && scenario.endsWith("win")
+      ? isEN
+        ? "Price goes up"
+        : "Курс растёт"
+      : scenario.startsWith("up") && scenario.endsWith("lose")
+      ? isEN
+        ? "Price goes down"
+        : "Курс падает"
+      : scenario.startsWith("down") && scenario.endsWith("win")
+      ? isEN
+        ? "Price goes down"
+        : "Курс падает"
+      : scenario.startsWith("down") && scenario.endsWith("lose")
+      ? isEN
+        ? "Price goes up"
+        : "Курс растёт"
+      : scenario.startsWith("flat") && scenario.endsWith("win")
+      ? isEN
+        ? "Almost no change"
+        : "Почти без изменений"
+      : scenario.startsWith("flat") && scenario.endsWith("lose")
+      ? isEN
+        ? "Small volatility"
+        : "Небольшая волатильность"
+      : isEN
+      ? "Almost no change"
+      : "Почти без изменений";
 
   return (
     <>
@@ -2742,28 +2757,34 @@ const renderTrade = () => {
           <h2>{isEN ? "Trading" : "Торговля"}</h2>
           <p>
             {isEN
-              ? "Choose asset, amount and time."
-              : "Выберите актив, сумму и время сделки."}
+              ? "Choose a coin, set amount, direction and time — the result will be calculated automatically."
+              : "Выберите монету, задайте сумму, направление и время — результат сделки посчитается автоматически."}
           </p>
         </div>
-        
         <div className="trade-layout">
-          {/* Левая часть: ГРАФИК */}
+          {/* Левая часть: график */}
           <div className="trade-chart-card">
             <div className="trade-chart-header">
               <div className="trade-pair">
                 {currentCoin.symbol}/USDT
-                <span className="pair-tag">Live</span>
+                <span className="pair-tag">
+                  {isEN ? "Chart" : "График"}
+                </span>
               </div>
               <div className="trade-price">
                 {currentCoin.price.toLocaleString("ru-RU", {
-                  minimumFractionDigits: currentCoin.price < 1 ? 4 : 2,
-                })} $
+                  minimumFractionDigits: currentCoin.price < 1 ? 2 : 0,
+                })}{" "}
+                $
               </div>
             </div>
-            
             <div className="trade-status-pill">
-              <span className={"trade-status-dot " + (isTradeProcessing || activeTrade ? "live" : "")} />
+              <span
+                className={
+                  "trade-status-dot " +
+                  (isTradeProcessing || activeTrade ? "live" : "")
+                }
+              />
               <span>{tradeStatusText}</span>
             </div>
 
@@ -2777,50 +2798,71 @@ const renderTrade = () => {
               <div className="fake-chart-label">{chartLabel}</div>
             </div>
 
-            {/* Оверлей загрузки (при создании) */}
+            {/* Оверлей поверх графика */}
             {isTradeProcessing && (
               <div className="trade-overlay">
                 <div className="trade-overlay-orbit">
                   <div className="trade-overlay-core" />
                 </div>
                 <p className="trade-overlay-title">
-                  {isEN ? "Processing..." : "Обработка..."}
+                  {isEN ? "Creating trade…" : "Создаём сделку…"}
+                </p>
+                <p className="trade-overlay-subtitle">
+                  {isEN
+                    ? "Sending order to Forbex engine"
+                    : "Отправляем ордер в движок Forbex"}
                 </p>
               </div>
             )}
           </div>
 
-          {/* === ИСПРАВЛЕННЫЙ ТОСТ: СВЕРХУ === */}
-          {/* Мы добавляем класс slide-in-top и меняем CSS */}
+          {/* Тост "Сделка открыта" */}
           {tradeToastVisible && lastOpenedTrade && (
-            <div className="trade-toast slide-in-top">
+            <div className="trade-toast">
               <div className="trade-toast-dot" />
               <div className="trade-toast-text">
                 <div className="trade-toast-title">
-                  {isEN ? "Order Opened" : "Сделка открыта"}
+                  {isEN ? "Trade opened" : "Сделка открыта"}
                 </div>
                 <div className="trade-toast-subtitle">
-                  {lastOpenedTrade.direction === "up" ? "⬆ UP" 
-                   : lastOpenedTrade.direction === "down" ? "⬇ DOWN" : "↔ FLAT"} 
-                  {" · "}
-                  {lastOpenedTrade.amountDisplay} {currencyCode}
+                  {lastOpenedTrade.direction === "up"
+                    ? isEN
+                      ? "Up"
+                      : "Вверх"
+                    : lastOpenedTrade.direction === "down"
+                    ? isEN
+                      ? "Down"
+                      : "Вниз"
+                    : isEN
+                    ? "No change"
+                    : "Не изменится"}{" "}
+                  ·{" "}
+                  {lastOpenedTrade.amountDisplay.toLocaleString("ru-RU", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  {currencyCode} · {lastOpenedTrade.symbol}/USDT
                 </div>
               </div>
             </div>
           )}
 
-          {/* Правая часть: ПАНЕЛЬ УПРАВЛЕНИЯ */}
+          {/* Правая часть: форма сделки */}
           <div className="trade-side">
-            
-            {/* 1. Выбор монеты (компактный) */}
+            {/* выбор монеты */}
             <div className="trade-param-row">
-              <div className="trade-input-label">{isEN ? "Asset" : "Актив"}</div>
+              <div className="trade-input-label">
+                {isEN ? "Asset" : "Актив для торговли"}
+              </div>
               <div className="trade-coin-buttons">
-                {coins.slice(0, 5).map((coin) => (
+                {coins.slice(0, 10).map((coin) => (
                   <button
                     key={coin.symbol}
                     type="button"
-                    className={"trade-coin-btn " + (selectedSymbol === coin.symbol ? "active" : "")}
+                    className={
+                      "trade-coin-btn " +
+                      (selectedSymbol === coin.symbol ? "active" : "")
+                    }
                     onClick={() => setSelectedSymbol(coin.symbol)}
                   >
                     {coin.symbol}
@@ -2829,106 +2871,179 @@ const renderTrade = () => {
               </div>
             </div>
 
-            {/* 2. Сумма */}
+            {/* сумма инвестиций */}
             <div className="trade-param-row">
-              <div className="trade-input-label">{isEN ? "Amount" : "Сумма"}</div>
+              <div className="trade-input-label">
+                {isEN ? "Investment amount" : "Сумма инвестиций"}
+              </div>
               <div className="trade-input-with-suffix">
                 <input
                   type="number"
                   min="0"
+                  step="0.01"
                   value={tradeForm.amount}
                   onChange={(e) => handleTradeInput("amount", e.target.value)}
-                  placeholder={settings.currency === "RUB" ? "1000" : "10"}
+                  placeholder={
+                    settings.currency === "RUB"
+                      ? "Например, 1000"
+                      : "For example, 20"
+                  }
                 />
                 <span className="trade-input-suffix">{currencyCode}</span>
               </div>
+              <div className="trade-hint">
+                {isEN
+                  ? `Minimum investment — ${minInvest} ${
+                      settings.currency === "RUB" ? "RUB" : "USD"
+                    }.`
+                  : `Минимальная сумма инвестиций — ${minInvest} ${
+                      settings.currency === "RUB" ? "₽" : "USD"
+                    }.`}
+              </div>
             </div>
 
-            {/* 3. Кнопки направления */}
-            <div className="trade-direction-row" style={{ marginTop: 12 }}>
-               <button
-                 className={"trade-direction-btn " + (tradeForm.direction === "up" ? "active" : "")}
-                 onClick={() => handleTradeInput("direction", "up")}
-               >
-                 ⬆ {isEN ? "Up" : "Вверх"}
-               </button>
-               <button
-                 className={"trade-direction-btn " + (tradeForm.direction === "down" ? "active" : "")}
-                 onClick={() => handleTradeInput("direction", "down")}
-               >
-                 ⬇ {isEN ? "Down" : "Вниз"}
-               </button>
+            {/* направление */}
+            <div className="trade-param-row">
+              <div className="trade-input-label">
+                {isEN ? "Where will the price go?" : "Куда пойдёт курс актива?"}
+              </div>
+              <div className="trade-direction-row">
+                <button
+                  type="button"
+                  className={
+                    "trade-direction-btn " +
+                    (tradeForm.direction === "up" ? "active" : "")
+                  }
+                  onClick={() => handleTradeInput("direction", "up")}
+                >
+                  ⬆ {isEN ? "Up (LONG)" : "Вверх (покупка)"}
+                </button>
+                <button
+                  type="button"
+                  className={
+                    "trade-direction-btn " +
+                    (tradeForm.direction === "flat" ? "active" : "")
+                  }
+                  onClick={() => handleTradeInput("direction", "flat")}
+                >
+                  ↔ {isEN ? "No change" : "Не изменится"}
+                </button>
+                <button
+                  type="button"
+                  className={
+                    "trade-direction-btn " +
+                    (tradeForm.direction === "down" ? "active" : "")
+                  }
+                  onClick={() => handleTradeInput("direction", "down")}
+                >
+                  ⬇ {isEN ? "Down (SHORT)" : "Вниз (продажа)"}
+                </button>
+              </div>
             </div>
 
-            {/* 4. Мультипликатор и Время */}
-            <div className="trade-param-row" style={{ marginTop: 8 }}>
+            {/* коэффициент */}
+            <div className="trade-param-row">
+              <div className="trade-input-label">
+                {isEN ? "Multiplier" : "Коэффициент (x)"}
+              </div>
               <div className="trade-multiplier-row">
                 {multipliers.map((m) => (
                   <button
                     key={m}
-                    className={"trade-mult-btn " + (tradeForm.multiplier === m ? "active" : "")}
+                    type="button"
+                    className={
+                      "trade-mult-btn " +
+                      (tradeForm.multiplier === m ? "active" : "")
+                    }
                     onClick={() => handleTradeInput("multiplier", m)}
                   >
                     x{m}
                   </button>
                 ))}
               </div>
-              <div className="trade-duration-row" style={{ marginTop: 4 }}>
+            </div>
+
+            {/* время ожидания */}
+            <div className="trade-param-row">
+              <div className="trade-input-label">
+                {isEN ? "Waiting time" : "Время ожидания"}
+              </div>
+              <div className="trade-duration-row">
                 {durations.map((sec) => (
                   <button
                     key={sec}
-                    className={"trade-duration-btn " + (tradeForm.duration === sec ? "active" : "")}
+                    type="button"
+                    className={
+                      "trade-duration-btn " +
+                      (tradeForm.duration === sec ? "active" : "")
+                    }
                     onClick={() => handleTradeInput("duration", sec)}
                   >
-                    {sec}s
+                    {sec} {isEN ? "sec" : "сек"}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Ошибка валидации */}
+            {/* ошибка */}
             {tradeError && <div className="trade-error">{tradeError}</div>}
 
-            {/* === КНОПКА СВАЙПА ИЛИ АКТИВНАЯ СДЕЛКА === */}
-            <div style={{ marginTop: 12 }}>
-              {activeTrade ? (
-                <div className="trade-active-panel">
-                  <div className="trade-active-title">
-                    {isEN ? "Trade in progress..." : "Сделка в процессе..."}
-                  </div>
-                  <div className="trade-progress-bar">
-                    <div
-                      className="trade-progress-fill"
-                      style={{ width: `${chartProgress * 100}%` }}
-                    />
-                  </div>
-                  <div className="trade-active-row">
-                    <span>{currentCoin.symbol} · x{activeTrade.multiplier}</span>
-                    <span className="trade-active-countdown">{formatTimer(tradeCountdown)}</span>
-                  </div>
+            {/* АКТИВНАЯ СДЕЛКА ИЛИ SWIPE BUTTON */}
+            {activeTrade ? (
+              <div className="trade-active-panel">
+                <div className="trade-active-title">
+                  {isEN ? "Trade in progress" : "Сделка в процессе"}
                 </div>
-              ) : (
-                <SwipeButton
-                  onConfirm={handleStartTrade}
-                  label={isEN ? "SWIPE TO INVEST" : "СВАЙП ДЛЯ СДЕЛКИ"}
-                  isEN={isEN}
-                />
-              )}
-            </div>
+                <div className="trade-progress-bar">
+                  <div
+                    className="trade-progress-fill"
+                    style={{
+                      width: `${
+                        ((activeTrade.duration - tradeCountdown) /
+                          activeTrade.duration) *
+                        100
+                      }%`,
+                    }}
+                  />
+                </div>
+                <div className="trade-active-row">
+                  <span>
+                    {currentCoin.symbol}/USDT ·{" "}
+                    {activeTrade.direction === "up"
+                      ? isEN
+                        ? "Up"
+                        : "Вверх"
+                      : activeTrade.direction === "down"
+                      ? isEN
+                        ? "Down"
+                        : "Вниз"
+                      : isEN
+                      ? "No change"
+                      : "Не изменится"}{" "}
+                    · x{activeTrade.multiplier}
+                  </span>
+                  <span className="trade-active-countdown">
+                    {formatTimer(tradeCountdown)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <SwipeButton
+                onConfirm={handleStartTrade}
+                label={isEN ? "SWIPE TO INVEST" : "СВАЙП ДЛЯ СДЕЛКИ"}
+                isEN={isEN}
+              />
+            )}
 
-            {/* === РЕЗУЛЬТАТ И КНОПКА SHARE (Вот тут она появляется) === */}
+            {/* результат последней сделки */}
             {lastTradeResult && !activeTrade && (
-              <div className={"trade-result " + (lastTradeResult.status === "win" ? "win" : "lose")}>
-                <div style={{marginBottom: 6, fontWeight: 500}}>
-                  {lastTradeResult.message}
-                </div>
-                
-                {/* КНОПКА ПОДЕЛИТЬСЯ */}
-                {lastTradeResult.status === "win" && (
-                   <button className="share-btn" onClick={handleShare}>
-                      🚀 {isEN ? "Share Result" : "Поделиться результатом"}
-                   </button>
-                )}
+              <div
+                className={
+                  "trade-result " +
+                  (lastTradeResult.status === "win" ? "win" : "lose")
+                }
+              >
+                {lastTradeResult.message}
               </div>
             )}
           </div>
