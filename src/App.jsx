@@ -3206,86 +3206,97 @@ const renderWallet = () => {
             <h2>{isEN ? "Recent operations" : "Последние операции"}</h2>
           </div>
 
-           <div className="history-block">
-            {walletHistory.slice(0, 3).map((e) => {
-               const displayAmount = toDisplayCurrency(e.amount, settings.currency);
-               
-               const isWithdraw = e.type === "withdraw";
-               const isPending = e.status === "pending";
-               const isRejected = e.status === "rejected";
-               const isDone = e.status === "done" || e.status === "approved";
+// Внутри renderWallet -> section "Recent operations"
 
-               // Классы для цвета
-               const rowClass = "history-row " + 
-                  (isPending ? "is-pending " : "") + 
-                  (isRejected ? "is-rejected " : "") +
-                  (isDone ? "is-approved" : "");
+<div className="history-block">
+  {walletHistory.slice(0, 3).map((e) => {
+    const displayAmount = toDisplayCurrency(e.amount, settings.currency);
 
-               let sign = isWithdraw ? "-" : "+";
-               let amountClass = "history-amount ";
+    const isWithdraw = e.type === "withdraw";
+    const isPending = e.status === "pending";
+    const isRejected = e.status === "rejected"; // Отклонено или отменено
+    const isDone = e.status === "done" || e.status === "approved";
 
-               // ЛОГИКА ЦВЕТОВ (Исправлено)
-               if (isWithdraw) {
-                  amountClass += "negative"; // Красный
-               } else {
-                  // Это депозит
-                  if (isRejected) {
-                      sign = "×";
-                      amountClass += "rejected";
-                  } else if (isPending) {
-                      amountClass += "pending"; // Желтый
-                  } else {
-                      amountClass += "positive"; // ЗЕЛЕНЫЙ
-                  }
-               }
+    // 1. Класс для самой строки (точка слева)
+    const rowClass =
+      "history-row " +
+      (isPending ? "is-pending " : "") +
+      (isRejected ? "is-rejected " : "") +
+      (isDone ? "is-approved" : "");
 
-               return (
-                 <div key={e.id} className={rowClass}>
-                   <div className="history-main">
-                     <div className="history-type">
-                        {/* Тип операции */}
-                        {isWithdraw 
-                          ? (isEN ? "Withdrawal" : "Вывод средств") 
-                          : (isEN ? "Deposit" : "Пополнение")}
-                        
-                        {/* Статус текстом */}
-                        {isWithdraw && isDone && <span style={{color:'#ef4444', fontSize:10, marginLeft:4}}>(ok)</span>}
-                        {isPending && <span style={{color:'#fbbf24', fontSize:10, marginLeft:4}}>(...)</span>}
-                     </div>
-                     {/* Метод оплаты (Банковская карта) */}
-                     <div className="history-sub">{methodLabel(e.method)}</div>
-                   </div>
+    // 2. Логика знака и цвета суммы (как в Истории)
+    let sign = isWithdraw ? "-" : "+";
+    let amountClass = "history-amount ";
 
-                   <div className="history-right">
-                      <div className={amountClass}>
-                         {sign} {displayAmount.toLocaleString("ru-RU", {minimumFractionDigits: 2})} {currencyCode}
-                      </div>
-                      
-                      {isPending && (
-                        <button className="cancel-btn" onClick={(evt) => {
-                           evt.stopPropagation();
-                           /* логика отмены */
-                           const idStr = String(e.id);
-                           if (isWithdraw) handleCancelWithdrawal(e.id, idStr.replace("wd-", ""));
-                           else handleCancelDeposit(e.id, e.topupId || idStr.replace("topup-", ""));
-                        }}>
-                          {isEN ? "Cancel" : "Отменить"}
-                        </button>
-                      )}
-                      
-                      <div className="history-time">{formatDateTime(e.ts)}</div>
-                   </div>
-                 </div>
-               );
-            })}
-            
-            {walletHistory.length === 0 && (
-               <div className="wallet-empty" style={{ padding: 8 }}>
-                 {isEN ? "No operations" : "Нет операций"}
-               </div>
-            )}
+    if (isWithdraw) {
+      amountClass += "negative"; // Вывод всегда оранжевый/красный
+    } else {
+      // Это депозит
+      if (isRejected) {
+        sign = "×"; // Крестик, если отклонено
+        amountClass += "rejected"; // Зачеркнутый красный
+      } else if (isPending) {
+        amountClass += "pending"; // Желтый
+      } else {
+        amountClass += "positive"; // Зеленый
+      }
+    }
+
+    return (
+      <div key={e.id} className={rowClass}>
+        <div className="history-main">
+          <div className="history-type">
+            {/* Тип операции */}
+            {isWithdraw
+              ? isEN
+                ? "Withdrawal"
+                : "Вывод средств"
+              : isEN
+              ? "Deposit"
+              : "Пополнение"}
           </div>
-        </section>
+          {/* Метод оплаты */}
+          <div className="history-sub">{methodLabel(e.method)}</div>
+        </div>
+
+        <div className="history-right">
+          <div className={amountClass}>
+            {sign} {displayAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2 })}{" "}
+            {currencyCode}
+          </div>
+
+          {/* Кнопка отмены (только для Pending) */}
+          {isPending && (
+            <button
+              className="cancel-btn"
+              onClick={(evt) => {
+                evt.stopPropagation();
+                const idStr = String(e.id);
+                if (isWithdraw)
+                  handleCancelWithdrawal(e.id, idStr.replace("wd-", ""));
+                else
+                  handleCancelDeposit(
+                    e.id,
+                    e.topupId || idStr.replace("topup-", "")
+                  );
+              }}
+            >
+              {isEN ? "Cancel" : "Отменить"}
+            </button>
+          )}
+
+          <div className="history-time">{formatDateTime(e.ts)}</div>
+        </div>
+      </div>
+    );
+  })}
+
+  {walletHistory.length === 0 && (
+    <div className="wallet-empty" style={{ padding: 16 }}>
+      {isEN ? "No operations" : "Нет операций"}
+    </div>
+  )}
+</div>
 
         {/* Модалки */}
         {walletModal && (
@@ -4373,28 +4384,44 @@ const renderProfile = () => {
         <div className="section-title">
           <h2>{isEN ? "My Statistics" : "Моя Статистика"}</h2>
         </div>
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-label">{isEN ? "Total Profit" : "Общая прибыль"}</div>
-            <div className={`stat-value ${netProfit >= 0 ? 'positive' : 'negative'}`}>
-              {netProfit > 0 ? "+" : ""}
-              {displayProfit.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} {currencyCode}
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">{isEN ? "Win Rate" : "Винрейт %"}</div>
-            <div className="stat-value text-brand-accent">{winRate}%</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">{isEN ? "Total Trades" : "Кол-во сделок"}</div>
-            <div className="stat-value">{totalTrades}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">{isEN ? "Best Series" : "Лучшая серия"}</div>
-            <div className="stat-value positive">
-               🔥 {bestSeries}
-            </div>
-          </div>
+// Внутри renderProfile
+
+<div className="stats-grid">
+  <div className="stat-card">
+    <div className="stat-label">
+      {isEN ? "Total Profit" : "Общая прибыль"}
+    </div>
+    <div
+      className={`stat-value ${netProfit >= 0 ? "positive" : "negative"}`}
+    >
+      {netProfit > 0 ? "+" : ""}
+      {displayProfit.toLocaleString("ru-RU", {
+        maximumFractionDigits: 2,
+      })}{" "}
+      {currencyCode}
+    </div>
+  </div>
+  <div className="stat-card">
+    {/* ИЗМЕНЕНИЕ: Официальное название */}
+    <div className="stat-label">
+      {isEN ? "Success Rate" : "Процент успешных сделок"}
+    </div>
+    <div className="stat-value text-brand-accent">{winRate}%</div>
+  </div>
+  <div className="stat-card">
+    <div className="stat-label">
+      {isEN ? "Total Trades" : "Кол-во сделок"}
+    </div>
+    <div className="stat-value">{totalTrades}</div>
+  </div>
+  <div className="stat-card">
+    <div className="stat-label">
+      {isEN ? "Best Series" : "Лучшая серия"}
+    </div>
+    {/* ИЗМЕНЕНИЕ: Убрали смайлик 🔥 */}
+    <div className="stat-value positive">{bestSeries}</div>
+  </div>
+</div>
         </div>
       </section>
 
