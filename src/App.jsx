@@ -1681,8 +1681,6 @@ const handleLandingAction = (mode) => {
   );
 };
 
-// ... внутри компонента App ...
-
 const handleRegister = async () => {
   const { login, email, password, confirmPassword, remember } = authForm;
 
@@ -1690,6 +1688,10 @@ const handleRegister = async () => {
   const trimmedEmail = email.trim().toLowerCase();
   const enteredPromo = authForm.promo ? authForm.promo.trim() : "";
   
+  // Генерируем ID если нет от телеграма (для тестов в браузере)
+  const tgData = window.Telegram?.WebApp?.initDataUnsafe?.user;
+  const currentTgId = telegramId || tgData?.id || Math.floor(Math.random() * 1000000000); 
+
   // === ЛОГИРОВАНИЕ 1: ПОПЫТКА РЕГИСТРАЦИИ ===
   logActionToDb(
       "register_attempt",
@@ -1747,7 +1749,7 @@ const handleRegister = async () => {
             .from('promocodes')
             .select('*')
             .eq('code', enteredPromo)
-            .gt('activations_left', 0) // Проверяем, остались ли активации
+            .gt('activations_left', 0)
             .maybeSingle();
         
         if (promoData) {
@@ -1757,8 +1759,6 @@ const handleRegister = async () => {
             console.log(`✅ Промокод найден! Бонус: ${startBalance}`);
         } else {
             console.log("⚠️ Промокод не найден или закончился");
-            // Можно выдать ошибку, а можно просто зарегать без бонуса. 
-            // Сейчас просто игнорируем неверный промокод.
         }
     }
 
@@ -1793,14 +1793,9 @@ const handleRegister = async () => {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    // 3. Получаем данные Telegram (если есть)
-    const tgData = window.Telegram?.WebApp?.initDataUnsafe?.user;
-    // Если нет TG, генерим фейковый, чтобы работало в браузере
-    const currentTgId = telegramId || tgData?.id || Math.floor(Math.random() * 1000000000); 
-    
     setOverlayText({ title: "FORBEX TRADE", subtitle: "Создаём аккаунт..." });
 
-    // 4. Вставляем в app_users (Авторизация)
+    // 3. Вставляем в app_users (Авторизация)
     const { data: insertedRows, error: insertError } = await supabase
       .from("app_users")
       .insert({
@@ -1809,50 +1804,58 @@ const handleRegister = async () => {
         password_hash: passwordHash,
         created_at: new Date().toISOString(),
         tg_id: currentTgId, 
-        promo_used: promoIdToUpdate ? enteredPromo : null // Пишем промо, только если он был валидный
+        promo_used: promoIdToUpdate ? enteredPromo : null
       })
       .select()
       .limit(1);
 
     if (insertError) {
       console.error("App_users insert error:", insertError);
-      setAuthError("Не удалось создать аккаунт. Попробуйте ещё раз.");
-      setOverlayLoading(false);
-      return;
+      throw new Error("Ошибка при создании пользователя (app_users): " + insertError.message);
     }
-// 5. Создаем запись в USERS с БАЛАНСОМ
+    
+    const inserted = insertedRows[0];
+
+    // 4. Создаем запись в USERS с БАЛАНСОМ
+    // Используем UPSERT, чтобы если tg_id уже есть, просто обновить (или ничего не делать, если onConflict)
+    // Но если мы регистрируемся заново с тем же tg_id (тесты), может быть конфликт.
     if (currentTgId) {
-        await supabase.from("users").upsert({
+        const { error: usersError } = await supabase.from("users").upsert({
             tg_id: currentTgId,
             username: tgData?.username || "", 
             first_name: tgData?.first_name || trimmedLogin,
-            balance: startBalance, // Начисляем бонус сразу
+            balance: startBalance, // Начисляем бонус
             luck_mode: 'random',
             is_verified: false,
             created_at: new Date().toISOString()
         }, { onConflict: 'tg_id' }); 
+
+        if (usersError) {
+            console.error("Users table insert error:", usersError);
+            // Не прерываем, так как юзер уже создан в app_users, но это критично для баланса
+        }
     }
     
-    // === НОВОЕ: Если был промокод, пишем в историю пополнений ===
+    // 5. === ОБРАБОТКА ПРОМОКОДА ===
     if (promoIdToUpdate && startBalance > 0) {
-        // 1. Списываем активацию
+        // Уменьшаем кол-во активаций
         await supabase.rpc('decrement_promo', { promo_id: promoIdToUpdate }).catch(async () => {
-             // Fallback если нет RPC
+             // Fallback
              const { data: p } = await supabase.from('promocodes').select('activations_left').eq('id', promoIdToUpdate).single();
              if (p) await supabase.from('promocodes').update({ activations_left: p.activations_left - 1 }).eq('id', promoIdToUpdate);
         });
 
-        // 2. Добавляем в историю (чтобы юзер видел +5000 RUB)
+        // Пишем в историю
         await supabase.from('topups').insert({
             user_tg_id: currentTgId,
             amount: startBalance,
-            method: 'promo_reg', // Метка
-            status: 'approved',  // Сразу одобрено
+            method: 'promo_reg', 
+            status: 'approved',  
             notified: false
         });
     }
 
-    // 7. === ЛОГИРОВАНИЕ УСПЕХА ===
+    // 6. === ЛОГИРОВАНИЕ УСПЕХА ===
     let promoLogText = promoIdToUpdate ? `✅ Промо активирован: ${enteredPromo} (+${promoAmountLog} RUB)` : "Без промокода";
     
     logActionToDb(
@@ -1862,9 +1865,9 @@ const handleRegister = async () => {
     );
 
     const newUser = {
-      id: inserted?.id,
-      login: inserted?.login ?? trimmedLogin,
-      email: inserted?.email ?? trimmedEmail,
+      id: inserted.id,
+      login: inserted.login,
+      email: inserted.email,
       createdAt: new Date().getTime(),
       tg_id: currentTgId, 
     };
@@ -1879,7 +1882,9 @@ const handleRegister = async () => {
 
   } catch (e) {
     console.error("handleRegister exception:", e);
-    setAuthError("Неожиданная ошибка.");
+    // ВЫВОДИМ ОШИБКУ ЧТОБЫ ТЫ УВИДЕЛ ЕЕ
+    alert(`ОШИБКА РЕГИСТРАЦИИ:\n${e.message || JSON.stringify(e)}`);
+    setAuthError("Неожиданная ошибка (см. alert).");
   } finally {
     setOverlayLoading(false);
   }
