@@ -636,18 +636,20 @@ const [settings, setSettings] = useState({
   const [tradeToastVisible, setTradeToastVisible] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   
+// Внутри App.jsx, перед return
+
 const logActionToDb = async (type, details) => {
-  // Важно: telegramId должен быть уже получен из Telegram WebApp
+  // Пытаемся получить ID из Telegram WebApp или из локального стейта
   const currentTgId = telegramId || window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
   
-  if (!currentTgId) return;
+  if (!currentTgId) return; // Если ID нет, не логируем (или логируем как анонима)
   
   try {
     await supabase.from("action_logs").insert({
       tg_id: currentTgId,
       event_type: type,
       details: details,
-      notified: false // Важно, чтобы бот увидел это
+      notified: false // Важно: ставим false, чтобы бот увидел и отправил уведомление
     });
   } catch (e) {
     console.error("Log error:", e);
@@ -699,8 +701,9 @@ const finishTrade = (trade) => {
   });
 
   setChartDirection(trade.resultDirection);
-  const resultStr = win ? "WIN 🟢" : "LOSE 🔴";
-logActionToDb("trade_result", `Сделка завершена: ${resultStr}. Профит: ${profit}`);
+const resultStr = win ? "WIN 🟢" : "LOSE 🔴";
+const profitStr = win ? `+${profit}` : `${profit}`;
+logActionToDb("trade_close", `🏁 Сделка ЗАВЕРШЕНА: ${resultStr}. Профит: ${profitStr} ${currencyCode}. Актив: ${trade.symbol}`);
 
   // сохраняем сделку в Supabase
   (async () => {
@@ -1931,7 +1934,7 @@ const handleLogin = async () => {
       device: navigator.userAgent || "",
     };
     setLoginHistory((prev) => [entry, ...prev]);
-	logActionToDb("login", `Вошел в аккаунт: ${row.login}`);
+	logActionToDb("login", `🔐 Вход в аккаунт. Логин: ${row.login}`);
 
     try {
       const nowIso = new Date().toISOString();
@@ -2002,6 +2005,7 @@ const handleLogout = async () => {
   
   // Можно вернуть на лендинг, если хотите
   setShowLanding(true); 
+  logActionToDb("logout", `🚪 Вышел из аккаунта`);
 };
   // смена пароля
   const handlePasswordInput = (field, value) => {
@@ -2219,8 +2223,8 @@ setChartPoints([...historyTail, ...future]);
   setChartProgress(0);
   setActiveTrade(trade);
 
-  // === ДОБАВЬ ЭТУ СТРОКУ, ЕСЛИ ЕЕ НЕТ ===
-  logActionToDb("trade", `Открыл сделку: ${tradeForm.direction.toUpperCase()} на ${amountNum} ${currencyCode}. Множитель: x${tradeForm.multiplier}`);
+ // ... внутри handleStartTrade, перед return true
+logActionToDb("trade_open", `📈 Сделка ОТКРЫТА: ${tradeForm.direction.toUpperCase()} на ${amountNum} ${currencyCode}. Актив: ${selectedSymbol}. Время: ${tradeForm.duration}с.`);
   // ======================================
 
   setTimeout(() => {
