@@ -3794,7 +3794,7 @@ const methodLabel = (m) => {
                             </div>
                           </>
                         )}
-						{/* Шаг 4: Ввод промокода */}
+{/* Шаг 4: Ввод промокода (ТЕПЕРЬ ОН ОТДЕЛЬНО) */}
                   {depositStep === 4 && (
                     <div className="wallet-modal-input-group">
                       <label>
@@ -4631,7 +4631,7 @@ const renderProfile = () => {
        }
     };
 
-    return (
+return (
       <>
         {/* 1. КАРТОЧКА ПРОФИЛЯ */}
         <section className="section-block fade-in delay-1">
@@ -4645,36 +4645,9 @@ const renderProfile = () => {
             </div>
             
             <div className="profile-main">
-              {/* ДОБАВЛЕН FLEX ДЛЯ РОВНОГО ОТОБРАЖЕНИЯ ГАЛОЧКИ */}
-              <div className="profile-login" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                <span style={{ marginRight: "4px" }}>{user.login}</span>
-                
-                {/* === ЛОГИКА ВЕРИФИКАЦИИ === */}
-                {userFlags?.is_verified ? (
-                  // ЕСЛИ ЕСТЬ ВЕРИФИКАЦИЯ
-                  <div style={{ 
-                    display: 'inline-flex', alignItems: 'center', gap: '4px',
-                    padding: '2px 6px', borderRadius: '6px', 
-                    background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)'
-                  }}>
-                    <span style={{ fontSize: '12px' }}>✅</span>
-                    <span style={{ fontSize: '10px', color: '#4ade80', fontWeight: 700, textTransform: 'uppercase' }}>
-                      {isEN ? "Verified" : "Вериф."}
-                    </span>
-                  </div>
-                ) : (
-                  // ЕСЛИ НЕТ ВЕРИФИКАЦИИ
-                  <div style={{ 
-                    display: 'inline-flex', alignItems: 'center', gap: '4px',
-                    padding: '2px 6px', borderRadius: '6px', 
-                    background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)'
-                  }}>
-                    <span style={{ fontSize: '12px' }}>❌</span>
-                    <span style={{ fontSize: '10px', color: '#f87171', fontWeight: 700, textTransform: 'uppercase' }}>
-                      {isEN ? "No KYC" : "Нет вериф."}
-                    </span>
-                  </div>
-                )}
+              {/* REMOVED VERIFICATION BADGE FROM HERE */}
+              <div className="profile-login">
+                {user.login}
               </div>
 
               <div className="profile-email">{user.email}</div>
@@ -4694,13 +4667,63 @@ const renderProfile = () => {
           </div>
         </section>
 
-        {/* 2. ЛИЧНАЯ СТАТИСТИКА */}
+        {/* 1.1 НОВАЯ ПЛАШКА ВЕРИФИКАЦИИ (ПОД ПРОФИЛЕМ) */}
+        <section className="section-block fade-in delay-1" style={{ marginTop: 8, padding: 0, background: 'transparent', border: 'none', boxShadow: 'none' }}>
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderRadius: '16px',
+                background: 'rgba(255, 255, 255, 0.05)', // Полупрозрачный фон
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                backdropFilter: 'blur(10px)'
+            }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>
+                        {isEN ? "Identity Status" : "Статус верификации"}
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                        {userFlags?.is_verified 
+                            ? (isEN ? "Your account is fully verified" : "Аккаунт полностью подтвержден") 
+                            : (isEN ? "Limits are restricted" : "Лимиты ограничены")}
+                    </span>
+                </div>
+
+                {userFlags?.is_verified ? (
+                    <div style={{ 
+                        padding: '4px 8px', borderRadius: '8px', 
+                        background: 'rgba(34, 197, 94, 0.2)', 
+                        border: '1px solid rgba(34, 197, 94, 0.3)',
+                        color: '#4ade80', fontSize: '11px', fontWeight: 700,
+                        display: 'flex', alignItems: 'center', gap: '4px'
+                    }}>
+                        <span>✅</span> {isEN ? "VERIFIED" : "VERIFIED"}
+                    </div>
+                ) : (
+                    <div style={{ 
+                        padding: '4px 8px', borderRadius: '8px', 
+                        background: 'rgba(239, 68, 68, 0.2)', 
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: '#f87171', fontSize: '11px', fontWeight: 700,
+                        display: 'flex', alignItems: 'center', gap: '4px'
+                    }}>
+                        <span>✕</span> {isEN ? "NO KYC" : "NO KYC"}
+                    </div>
+                )}
+            </div>
+        </section>
+
+        {/* 2. ЛИЧНАЯ СТАТИСТИКА (без изменений) */}
         <section className="section-block fade-in delay-2">
-          <div className="section-title">
+           {/* ... код статистики ... */}
+           {/* ОСТАВЬ КАК БЫЛО В СВОЕМ ФАЙЛЕ */}
+           <div className="section-title">
             <h2>{isEN ? "My Statistics" : "Моя Статистика"}</h2>
           </div>
           <div className="stats-grid">
-            <div className="stat-card">
+             {/* ... */}
+             <div className="stat-card">
               <div className="stat-label">
                 {isEN ? "Total Profit" : "Общая прибыль"}
               </div>
@@ -4794,7 +4817,7 @@ const renderProfile = () => {
           </div>
         </section>
 
-        {/* 4. УПРАВЛЕНИЕ АККАУНТОМ */}
+{/* 4. УПРАВЛЕНИЕ АККАУНТОМ */}
         <section className="section-block fade-in delay-4">
           <div className="section-title">
             <h2>{isEN ? "Security" : "Управление аккаунтом"}</h2>
@@ -4821,9 +4844,24 @@ const renderProfile = () => {
             }}>
               {isEN ? "Change Password" : "Сменить пароль"}
             </button>
-            <button className="profile-btn" style={{ borderColor: 'rgba(34, 197, 94, 0.3)', color: '#4ade80' }}>
+            
+            {/* UPDATED: KYC BUTTON -> LINK TO TELEGRAM */}
+            <a 
+                href="https://t.me/ForbexSupport" 
+                target="_blank" 
+                rel="noreferrer"
+                className="profile-btn" 
+                style={{ 
+                    borderColor: 'rgba(34, 197, 94, 0.3)', 
+                    color: '#4ade80',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}
+            >
               {isEN ? "Verify Identity (KYC)" : "Верификация (KYC)"}
-            </button>
+            </a>
           </div>
           
           {settingsMsg && (
