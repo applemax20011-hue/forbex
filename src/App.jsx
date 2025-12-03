@@ -1289,13 +1289,27 @@ useEffect(() => {
       setChartScenario("idle");
       setChartProgress(1);
       setChartPoints(last);
-    } catch (e) {
+} catch (e) {
       console.warn("Failed to load history for chart from CMC, fallback:", e);
       const fallback = buildFallbackHistory();
-      setBaseChartPoints(fallback);
+      
+      // ВАЖНО: Если fallback вернул пустой массив, сгенерируем хоть что-то
+      if (!fallback || fallback.length === 0) {
+         const now = Math.floor(Date.now() / 1000);
+         const mock = [];
+         let val = 100;
+         for(let i=60; i>=0; i--) {
+             mock.push({ time: now - i*60, value: val + Math.random()*5 });
+         }
+         setBaseChartPoints(mock);
+         setChartPoints(mock);
+      } else {
+         setBaseChartPoints(fallback);
+         setChartPoints(fallback);
+      }
+      
       setChartScenario("idle");
       setChartProgress(1);
-      setChartPoints(fallback);
     }
   }
 
@@ -2327,15 +2341,18 @@ setChartPoints([...historyTail, ...future]);
   setChartProgress(0);
   setActiveTrade(trade);
 
-logActionToDb(
+  // ЛОГИРУЕМ (без await, чтобы не тормозить интерфейс)
+  logActionToDb(
       "trade_open", 
-      `📈 Сделка ОТКРЫТА\nАктив: ${selectedSymbol}\nСумма: ${amountNum} ${currencyCode}\nКуда: ${dirIcon}\nВремя: ${tradeForm.duration} сек`
-  );
-  // ======================================
+      `📈 Сделка ОТКРЫТА\nАктив: ${selectedSymbol}\nСумма: ${amountNum} ${currencyCode}\nКуда: ${tradeForm.direction.toUpperCase()}\nВремя: ${tradeForm.duration} сек`
+  ).catch(console.error);
 
+  // СБРОС ОВЕРЛЕЯ ЧЕРЕЗ 700мс (Гарантированно)
   setTimeout(() => {
-    setIsTradeProcessing(false);
+    setIsTradeProcessing(false); // <--- ВОТ ЭТО УБИРАЕТ НАДПИСЬ "Создаем сделку..."
     setTradeToastVisible(true);
+    
+    // Скрываем тост через 2.2 сек
     setTimeout(() => {
       setTradeToastVisible(false);
     }, 2200);
