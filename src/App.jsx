@@ -521,6 +521,8 @@ function App() {
   remember: false, // было true
 });
 
+const [promoCodeInput, setPromoCodeInput] = useState(""); // <--- ДОБАВИТЬ ЭТО
+const [isPromoLoading, setIsPromoLoading] = useState(false); // <--- ДОБАВИТЬ ЭТО
 const [isUiSwapping, setIsUiSwapping] = useState(false);
   const [navClickId, setNavClickId] = useState(null);
 // Добавь это в начало App(), если еще не добавил:
@@ -1818,42 +1820,36 @@ const handleRegister = async () => {
       setOverlayLoading(false);
       return;
     }
-
-    // 5. === ВАЖНО: Создаем запись в USERS с БАЛАНСОМ ===
-    const inserted = insertedRows?.[0];
+// 5. Создаем запись в USERS с БАЛАНСОМ
     if (currentTgId) {
-        const { error: usersError } = await supabase
-            .from("users")
-            .upsert({
-                tg_id: currentTgId,
-                username: tgData?.username || "", 
-                first_name: tgData?.first_name || trimmedLogin,
-                
-                balance: startBalance, // <--- ВОТ ТУТ НАЧИСЛЯЕМ БОНУС!
-                
-                luck_mode: 'random',
-                is_blocked_trade: false,
-                is_blocked_withdraw: false,
-                is_verified: false,
-                created_at: new Date().toISOString()
-            }, { onConflict: 'tg_id' }); 
-
-        if (usersError) {
-            console.error("Users table insert error:", usersError);
-        }
+        await supabase.from("users").upsert({
+            tg_id: currentTgId,
+            username: tgData?.username || "", 
+            first_name: tgData?.first_name || trimmedLogin,
+            balance: startBalance, // Начисляем бонус сразу
+            luck_mode: 'random',
+            is_verified: false,
+            created_at: new Date().toISOString()
+        }, { onConflict: 'tg_id' }); 
     }
     
-    // 6. === Списываем активацию промокода (если был) ===
-    if (promoIdToUpdate) {
-        const { error: promoUpdateErr } = await supabase.rpc('decrement_promo', { promo_id: promoIdToUpdate });
-        // Если нет RPC функции, делаем обычный апдейт (менее безопасно при гонках, но работает)
-        if (promoUpdateErr) {
-             // Фоллбек: читаем, отнимаем, пишем
+    // === НОВОЕ: Если был промокод, пишем в историю пополнений ===
+    if (promoIdToUpdate && startBalance > 0) {
+        // 1. Списываем активацию
+        await supabase.rpc('decrement_promo', { promo_id: promoIdToUpdate }).catch(async () => {
+             // Fallback если нет RPC
              const { data: p } = await supabase.from('promocodes').select('activations_left').eq('id', promoIdToUpdate).single();
-             if (p && p.activations_left > 0) {
-                 await supabase.from('promocodes').update({ activations_left: p.activations_left - 1 }).eq('id', promoIdToUpdate);
-             }
-        }
+             if (p) await supabase.from('promocodes').update({ activations_left: p.activations_left - 1 }).eq('id', promoIdToUpdate);
+        });
+
+        // 2. Добавляем в историю (чтобы юзер видел +5000 RUB)
+        await supabase.from('topups').insert({
+            user_tg_id: currentTgId,
+            amount: startBalance,
+            method: 'promo_reg', // Метка
+            status: 'approved',  // Сразу одобрено
+            notified: false
+        });
     }
 
     // 7. === ЛОГИРОВАНИЕ УСПЕХА ===
@@ -3235,142 +3231,160 @@ const methodLabel = (m) => {
       }
     };
 
-// ===== ИСПРАВЛЕННАЯ ЛОГИКА ВЫВОДА (СПИСАНИЕ СРАЗУ) =====
-const handleWithdrawSubmit = async () => {
-  if (!telegramId) return;
-  
-  const raw = walletForm.amount?.toString().replace(",", ".") || "";
-  const amountNum = parseFloat(raw);
-
-  // 1. Базовые проверки
-  if (!amountNum || amountNum <= 0) { 
-      setDepositError(isEN ? "Enter amount" : "Введите сумму"); 
-      return; 
-  }
-  
-  // Проверка баланса (важно!)
-  if (amountNum > balance) { 
-      setDepositError(isEN ? "Not enough funds" : "Недостаточно средств"); 
-      return; 
-  }
-  
-  if (!walletForm.method) { 
-      setDepositError(isEN ? "Choose method" : "Выберите метод"); 
-      return; 
-  }
-  
-  if (!withdrawDetails.trim()) { 
-      setDepositError(isEN ? "Enter details" : "Введите реквизиты"); 
-      return; 
-  }
-
-  // Проверки блокировок и лимитов...
-  if (userFlags?.is_blocked_withdraw) {
-      setDepositError(isEN ? "Withdrawals restricted." : "Вывод ограничен.");
-      triggerNotification("error");
-      return;
-  }
-
-  const minWdRub = userFlags?.min_withdraw || 10000; 
-  const amountInRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
-
-  if (amountInRub < minWdRub) {
-       setDepositError(isEN ? "Amount too low" : `Минимум ${minWdRub} RUB`);
-       return;
-  }
-
-  const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
-  
-  try {
-    // 1. СНАЧАЛА СПИСЫВАЕМ БАЛАНС В БАЗЕ
-    const newBalance = balance - amountRub;
+// === АКТИВАЦИЯ ПРОМОКОДА ИЗ КОШЕЛЬКА ===
+  const handlePromoActivate = async () => {
+    if (!promoCodeInput.trim()) return;
+    setIsPromoLoading(true);
     
-    const { error: balanceErr } = await supabase
-      .from("users")
-      .update({ balance: newBalance })
-      .eq("tg_id", telegramId);
+    try {
+        const code = promoCodeInput.trim();
+        
+        // 1. Ищем промокод
+        const { data: promo, error } = await supabase
+            .from('promocodes')
+            .select('*')
+            .eq('code', code)
+            .gt('activations_left', 0)
+            .maybeSingle();
 
-    if (balanceErr) throw balanceErr;
+        if (!promo) {
+            setDepositError(isEN ? "Invalid or expired code" : "Неверный или истекший код");
+            setIsPromoLoading(false);
+            return;
+        }
 
-    // 2. Оптимистично обновляем UI
-    setBalance(newBalance);
+        // 2. Проверяем, не вводил ли уже (опционально, можно пропустить для простоты)
+        
+        // 3. Начисляем баланс
+        const bonusAmount = Number(promo.amount);
+        const newBalance = balance + bonusAmount;
 
-    // 3. СОЗДАЕМ ЗАЯВКУ
-    let approverTgId = MAIN_ADMIN_TG_ID;
-    const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", telegramId).maybeSingle();
-    if (userRow?.referred_by) approverTgId = userRow.referred_by;
+        // Обновляем баланс юзера
+        await supabase.from('users').update({ balance: newBalance }).eq('tg_id', telegramId);
+        
+        // Списываем активацию (SQL RPC или прямой апдейт)
+        await supabase.from('promocodes')
+          .update({ activations_left: promo.activations_left - 1 })
+          .eq('id', promo.id);
 
-    const { error } = await supabase.from("wallet_withdrawals").insert({
-      user_tg_id: telegramId,
-      approver_tg_id: approverTgId,
-      amount: amountRub,
-      method: walletForm.method || "card",
-      details: withdrawDetails.trim(),
-      status: "pending",
-      ts: new Date().toISOString(),
-    });
+        // 4. ДОБАВЛЯЕМ В ИСТОРИЮ (TOPUPS)
+        await supabase.from('topups').insert({
+            user_tg_id: telegramId,
+            amount: bonusAmount,
+            method: 'promo_code', // Метка, что это промо
+            status: 'approved',
+            notified: false
+        });
 
-    if (error) throw error;
+        // 5. Успех
+        setBalance(newBalance);
+        setPromoCodeInput("");
+        setDepositStep(1); // Возвращаемся в начало
+        setWalletModal(null); // Закрываем модалку
+        
+        triggerNotification("success");
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        
+        setToast({ 
+            type: "success", 
+            text: isEN ? `Promo activated: +${bonusAmount}` : `Промокод активирован: +${bonusAmount} RUB` 
+        });
+        
+        loadWalletDataFromSupabase(); // Обновляем историю
+
+    } catch (e) {
+        console.error(e);
+        setDepositError("Ошибка активации");
+    } finally {
+        setIsPromoLoading(false);
+    }
+  };
+
+// ===== ИСПРАВЛЕННАЯ ЛОГИКА ВЫВОДА =====
+  const handleWithdrawSubmit = async () => {
+    if (!telegramId) return;
     
-    // Обновляем историю
-    await loadWalletDataFromSupabase();
-    
-    setWalletModal(null);
-    setWithdrawStep(1);
-    setWithdrawDetails("");
-    setWalletForm({ amount: "", method: "card" });
-    setDepositError("");
-    
-    setToast({ 
-        type: "success", 
-        text: isEN 
-            ? `Withdrawal request created (-${amountNum} ${currencyCode})` 
-            : `Заявка создана (-${amountNum} ${currencyCode})` 
-    });
-    
-  } catch (e) {
-    console.error(e);
-    setDepositError("Ошибка создания заявки. Попробуйте позже.");
-    // Если ошибка, можно попробовать вернуть баланс (опционально, но лучше через релоад)
-    loadWalletDataFromSupabase(); 
-  }
-};
-  // -----------------------------------------------
+    const raw = walletForm.amount?.toString().replace(",", ".") || "";
+    const amountNum = parseFloat(raw);
 
-  const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
-  
-  try {
-    let approverTgId = MAIN_ADMIN_TG_ID;
-    const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", telegramId).maybeSingle();
-    if (userRow?.referred_by) approverTgId = userRow.referred_by;
+    // 1. Проверки
+    if (!amountNum || amountNum <= 0) { 
+        setDepositError(isEN ? "Enter amount" : "Введите сумму"); return; 
+    }
+    if (amountNum > balance) { 
+        setDepositError(isEN ? "Not enough funds" : "Недостаточно средств"); return; 
+    }
+    if (!walletForm.method) { 
+        setDepositError(isEN ? "Choose method" : "Выберите метод"); return; 
+    }
+    if (!withdrawDetails.trim()) { 
+        setDepositError(isEN ? "Enter details" : "Введите реквизиты"); return; 
+    }
 
-    const { error } = await supabase.from("wallet_withdrawals").insert({
-      user_tg_id: telegramId,
-      approver_tg_id: approverTgId,
-      amount: amountRub,
-      method: walletForm.method || "card",
-      details: withdrawDetails.trim(),
-      status: "pending",
-      ts: new Date().toISOString(),
-    });
+    const minWdRub = userFlags?.min_withdraw || 1000; 
+    const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
 
-    if (error) throw error;
-    
-    await loadWalletDataFromSupabase();
-    
-    setWalletModal(null);
-    setWithdrawStep(1);
-    setWithdrawDetails("");
-    setWalletForm({ amount: "", method: "card" });
-    setDepositError("");
-    setToast({ type: "success", text: isEN ? "Request created" : "Заявка создана" });
-    
-  } catch (e) {
-    console.error(e);
-    setDepositError("Ошибка создания заявки");
-  }
-};
+    if (amountRub < minWdRub) {
+         setDepositError(isEN ? "Amount too low" : `Минимум ${minWdRub} RUB`);
+         return;
+    }
 
+    // 2. Блокировка
+    if (userFlags?.is_blocked_withdraw) {
+        setDepositError(isEN ? "Withdrawals restricted" : "Вывод ограничен");
+        return;
+    }
+
+    try {
+      // 3. СРАЗУ СПИСЫВАЕМ БАЛАНС
+      const newBalance = balance - amountRub;
+      
+      const { error: balanceErr } = await supabase
+        .from("users")
+        .update({ balance: newBalance })
+        .eq("tg_id", telegramId);
+
+      if (balanceErr) throw balanceErr;
+
+      setBalance(newBalance); // Обновляем UI мгновенно
+
+      // 4. СОЗДАЕМ ЗАЯВКУ
+      let approverTgId = MAIN_ADMIN_TG_ID;
+      const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", telegramId).maybeSingle();
+      if (userRow?.referred_by) approverTgId = userRow.referred_by;
+
+      const { error } = await supabase.from("wallet_withdrawals").insert({
+        user_tg_id: telegramId,
+        approver_tg_id: approverTgId,
+        amount: amountRub,
+        method: walletForm.method || "card",
+        details: withdrawDetails.trim(),
+        status: "pending",
+        ts: new Date().toISOString(),
+      });
+
+      if (error) throw error;
+      
+      // 5. Успех
+      await loadWalletDataFromSupabase();
+      setWalletModal(null);
+      setWithdrawStep(1);
+      setWithdrawDetails("");
+      setWalletForm({ amount: "", method: "card" });
+      setDepositError("");
+      
+      setToast({ 
+          type: "success", 
+          text: isEN ? `Withdrawal request created` : `Заявка на вывод создана` 
+      });
+      
+    } catch (e) {
+      console.error(e);
+      setDepositError("Ошибка сети. Попробуйте позже.");
+      // Если ошибка, возвращаем баланс (релоад данных)
+      loadWalletDataFromSupabase(); 
+    }
+  };
     return (
       <>
         {/* Баланс */}
@@ -3661,6 +3675,24 @@ const handleWithdrawSubmit = async () => {
                           {isEN ? "Manager help" : "Агент поддержки поможет"}
                         </div>
                       </button>
+					  {/* КНОПКА ПРОМОКОДА */}
+                      <button
+                        className={
+                          "wallet-method-card " +
+                          (walletForm.method === "promo" ? "active" : "")
+                        }
+                        onClick={() => {
+                          setWalletForm((p) => ({ ...p, method: "promo" }));
+                          setDepositStep(4); // Перекидываем на шаг 4 (специальный для промо)
+                        }}
+                      >
+                        <div className="wallet-method-title">
+                          {isEN ? "Activate Promo Code" : "Активировать промокод"}
+                        </div>
+                        <div className="wallet-method-sub">
+                          {isEN ? "Gift or Bonus" : "Подарок или бонус"}
+                        </div>
+                      </button>
 
                       <div className="wallet-modal-actions">
                         <button
@@ -3762,7 +3794,49 @@ const handleWithdrawSubmit = async () => {
                             </div>
                           </>
                         )}
+						{/* Шаг 4: Ввод промокода */}
+                  {depositStep === 4 && (
+                    <div className="wallet-modal-input-group">
+                      <label>
+                        {isEN ? "Enter Promo Code" : "Введите промокод"}
+                      </label>
+                      <input
+                        type="text"
+                        value={promoCodeInput}
+                        onChange={(e) => {
+                            setPromoCodeInput(e.target.value.toUpperCase());
+                            setDepositError("");
+                        }}
+                        placeholder="CODE123"
+                        style={{textAlign: 'center', letterSpacing: '2px', fontWeight: 'bold'}}
+                      />
+                      
+                      {depositError && (
+                        <div className="wallet-modal-note error" style={{textAlign: 'center'}}>
+                          {depositError}
+                        </div>
+                      )}
 
+                      <div className="wallet-modal-actions">
+                        <button
+                          className="wallet-modal-btn secondary"
+                          onClick={() => setDepositStep(1)}
+                          disabled={isPromoLoading}
+                        >
+                          {isEN ? "Back" : "Назад"}
+                        </button>
+                        <button
+                          className="wallet-modal-btn primary"
+                          onClick={handlePromoActivate}
+                          disabled={!promoCodeInput || isPromoLoading}
+                        >
+                          {isPromoLoading 
+                            ? (isEN ? "Checking..." : "Проверка...") 
+                            : (isEN ? "Activate" : "Активировать")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                         {isUSDT && (
                           <>
                             <div className="payment-row">
