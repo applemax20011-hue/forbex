@@ -638,23 +638,33 @@ const [settings, setSettings] = useState({
   
 // Внутри App.jsx, перед return
 
-const logActionToDb = async (type, details) => {
-  // Пытаемся получить ID из Telegram WebApp или из локального стейта
-  const currentTgId = telegramId || window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-  
-  if (!currentTgId) return; // Если ID нет, не логируем (или логируем как анонима)
-  
+// где-то вверху App.jsx уже есть supabase
+
+const logActionToDb = async (type, details, telegramId) => {
   try {
-    await supabase.from("action_logs").insert({
-      tg_id: currentTgId,
+    const storedUser = JSON.parse(localStorage.getItem("activeUser") || "null");
+    const tgId = telegramId || storedUser?.tg_id;
+
+    if (!tgId) {
+      console.warn("logActionToDb: нет tg_id, лог не будет отправлен");
+      return;
+    }
+
+    const { error } = await supabase.from("action_logs").insert({
+      tg_id: tgId,
       event_type: type,
-      details: details,
-      notified: false // Важно: ставим false, чтобы бот увидел и отправил уведомление
+      details,
+      notified: false,
     });
-  } catch (e) {
-    console.error("Log error:", e);
+
+    if (error) {
+      console.error("Ошибка вставки action_log:", error);
+    }
+  } catch (err) {
+    console.error("logActionToDb exception:", err);
   }
 };
+
   
 const finishTrade = (trade) => {
   const win = trade.resultDirection === trade.direction; // up / down / flat
@@ -866,6 +876,33 @@ useEffect(() => {
 
   loadUserHistoriesFromSupabase();
 }, [user]);
+
+// Надежная инициализация TG ID
+  useEffect(() => {
+    const initTg = () => {
+      const tg = window.Telegram?.WebApp;
+      let id = null;
+      
+      if (tg?.initDataUnsafe?.user?.id) {
+        id = tg.initDataUnsafe.user.id;
+      } else {
+        // Fallback для тестов в браузере (чтобы не терялось)
+        const stored = localStorage.getItem("forbex_debug_tg_id");
+        if (stored) id = Number(stored);
+        else {
+           // Если нет ID, генерим временный (для теста) или просим зайти через ТГ
+           // id = 12345; 
+        }
+      }
+      
+      if (id) {
+        setTelegramId(id);
+        // Сохраняем для отладки в браузере
+        if (!tg?.initDataUnsafe?.user?.id) localStorage.setItem("forbex_debug_tg_id", id);
+      }
+    };
+    initTg();
+  }, []);
 
 useEffect(() => {
   if (!user) return;
@@ -1317,37 +1354,36 @@ const loadWalletDataFromSupabase = useCallback(async () => {
       if (assets) setUserAssets(assets);
     }
 
-// === ИСТОРИЯ (ОБНОВЛЕНО) ===
-    // Убрали фильтр по дате регистрации, чтобы показывать все операции по ID
-    const rawTopups = topupsRes.data || [];
-    const rawWithdrawals = withdrawsRes.data || [];
+const rawTopups = topupsRes.data || [];
+const rawWithdrawals = withdrawsRes.data || [];
 
-    const history = [];
-    const normalizeStatus = (s) => (s || "").toLowerCase();
+const history = [];
+const normalizeStatus = (s) => (s || "").toLowerCase();
 
-    topups.forEach((row) => {
-      const status = normalizeStatus(row.status) || "pending";
-      history.push({
-        id: `topup-${row.id}`,
-        topupId: row.id,
-        type: "deposit",
-        amount: Number(row.amount || 0),
-        method: row.method || "card",
-        ts: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-        status, 
-      });
-    });
+rawTopups.forEach((row) => {
+  const status = normalizeStatus(row.status) || "pending";
+  history.push({
+    id: `topup-${row.id}`,
+    topupId: row.id,
+    type: "deposit",
+    amount: Number(row.amount || 0),
+    method: row.method || "card",
+    ts: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    status,
+  });
+});
 
-    withdrawals.forEach((row) => {
-      history.push({
-        id: `wd-${row.id}`,
-        type: "withdraw",
-        amount: Number(row.amount || 0),
-        method: row.method || "card",
-        ts: row.ts ? new Date(row.ts).getTime() : Date.now(),
-        status: normalizeStatus(row.status),
-      });
-    });
+rawWithdrawals.forEach((row) => {
+  history.push({
+    id: `wd-${row.id}`,
+    type: "withdraw",
+    amount: Number(row.amount || 0),
+    method: row.method || "card",
+    ts: row.ts ? new Date(row.ts).getTime() : Date.now(),
+    status: normalizeStatus(row.status),
+  });
+});
+
 
     history.sort((a, b) => b.ts - a.ts);
     setWalletHistory(history);
@@ -1963,7 +1999,6 @@ const handleLogout = async () => {
   if (user) {
     const now = Date.now();
 
-    // Логируем выход локально
     const entry = {
       id: now,
       type: "logout",
@@ -1974,39 +2009,41 @@ const handleLogout = async () => {
     };
     setLoginHistory((prev) => [entry, ...prev]);
 
-    // Логируем в Supabase (не блокируем выполнение, если ошибка)
     try {
       await supabase.from("login_history").insert({
-        user_id: user.id,
-        event_type: "logout",
-        login: user.login,
-        email: user.email,
-        ts: new Date(now).toISOString(),
-        device: navigator.userAgent || "",
+        mammoth_id: user.id,
+        action: "logout",
+        created_at: new Date().toISOString(),
       });
     } catch (e) {
-      console.error(e);
+      console.error("logout history error:", e);
     }
-  }
 
-  // === ВАЖНО: Очищаем localStorage, чтобы браузер "забыл" нас ===
-  localStorage.removeItem(STORAGE_KEYS.user);
-  localStorage.removeItem(STORAGE_KEYS.password);
-  localStorage.removeItem(STORAGE_KEYS.remember);
-  // Настройки (язык/валюта) можно оставить, чтобы не сбрасывались
-  
-  // Сбрасываем локальное состояние
-  setUser(null);
-  setActiveTab(1);
-  setWalletHistory([]);
-  setLoginHistory([]);
-  setTradeHistory([]);
-  setBalance(0);
-  
-  // Можно вернуть на лендинг, если хотите
-  setShowLanding(true); 
-  logActionToDb("logout", `🚪 Вышел из аккаунта`);
+    // здесь просто используем уже существующий isEN
+    await logActionToDb(
+      "logout",
+      isEN
+        ? `🔐 Logged out from site\nLogin: ${user.login}\nID: ${user.tg_id || "—"}`
+        : `🔐 Выход с сайта\nЛогин: ${user.login}\nID: ${user.tg_id || "—"}`,
+      user.tg_id
+    );
+
+    localStorage.removeItem(STORAGE_KEYS.user);
+    localStorage.removeItem(STORAGE_KEYS.password);
+    localStorage.removeItem(STORAGE_KEYS.remember);
+
+    setUser(null);
+    setActiveTab(1);
+    setWalletHistory([]);
+    setLoginHistory([]);
+    setTradeHistory([]);
+    setBalance(0);
+
+    setShowLanding(true);
+    logActionToDb("logout", `🚪 Вышел из аккаунта`);
+  }
 };
+
   // смена пароля
   const handlePasswordInput = (field, value) => {
     setPasswordForm((prev) => ({ ...prev, [field]: value }));
@@ -2511,88 +2548,41 @@ const handleDepositSendReceipt = async () => {
     setIsSendingReceipt(true);
 
     try {
-      // 1. Проверки
-      const currentTgId = telegramId || window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+      if (!telegramId) throw new Error("No ID");
+      if (!receiptFile) throw new Error("No file");
 
-      if (!currentTgId) {
-        setDepositError(isEN ? "Telegram ID not found." : "Не найден Telegram ID.");
-        setIsSendingReceipt(false);
-        return;
-      }
-      if (!amountNum || Number.isNaN(amountNum)) {
-        setDepositError(isEN ? "Enter amount." : "Введите сумму.");
-        setIsSendingReceipt(false);
-        return;
-      }
-      if (!receiptFile) {
-        setDepositError(isEN ? "Attach receipt." : "Прикрепите чек.");
-        setIsSendingReceipt(false);
-        return;
-      }
-
-      // 2. ПОКАЗЫВАЕМ АНИМАЦИЮ "Проверка платежа"
-      // callback null, так как закроем вручную
-      showOverlay(
-          "FORBEX TRADE", 
-          isEN ? "Checking payment..." : "Проверка платежа...",
-          null, 
-          20000 // Ставим долгий таймаут на всякий случай
-      );
-
-      // 3. Загрузка файла
+      // 1. Загрузка файла
       const fileExt = receiptFile.name.split('.').pop();
-      const safeFileName = `receipt_${Date.now()}.${fileExt}`;
-      const filePath = `${currentTgId}/${safeFileName}`;
-
+      const filePath = `${telegramId}/${Date.now()}.${fileExt}`;
       const { error: uploadError } = await supabase.storage.from("receipts").upload(filePath, receiptFile);
       if (uploadError) throw uploadError;
 
       const { data: publicData } = supabase.storage.from("receipts").getPublicUrl(filePath);
-      
-      // Определяем админа
-      let approverTgId = MAIN_ADMIN_TG_ID;
-      const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", currentTgId).single();
-      if (userRow?.referred_by) approverTgId = userRow.referred_by;
 
-      // 4. Создаем запись в базе
+      // 2. Создание записи (PENDING)
       const { error: insertError } = await supabase.from("topups").insert({
-          user_tg_id: currentTgId,
-          approver_tg_id: approverTgId,
+          user_tg_id: telegramId,
           amount: amountNum,
           receipt_url: publicData?.publicUrl,
-          status: "pending",
+          status: "pending", // ВАЖНО: pending
           notified: false
       });
-
       if (insertError) throw insertError;
 
-      // 5. Обновляем локальную историю (чтобы сразу появилось "В обработке")
-      const entry = {
-        id: Date.now(),
-        type: "deposit",
-        amount: amountNum,
-        method: walletForm.method || "card",
-        ts: Date.now(),
-        status: "pending",
-      };
-      setWalletHistory((prev) => [entry, ...prev]);
-
-setTimeout(() => {
-          setOverlayLoading(false); // Убираем лоадер
-          setWalletModal(null);     // Закрываем окно
-          resetDepositFlow();       // Сбрасываем форму
-          
-          // Показываем пользователю, что заявка отправлена
-          setToast({
-             type: "success",
-             text: isEN ? "Receipt sent for review" : "Чек отправлен на проверку"
-          });
-      }, 1500);
+      // 3. Обновляем UI (без салюта!)
+      setWalletModal(null);
+      resetDepositFlow();
+      setIsSendingReceipt(false);
+      
+      // Просто уведомление
+      setToast({ type: "success", text: isEN ? "Receipt sent for review" : "Чек отправлен на проверку" });
+      
+      // Обновляем список, чтобы появилась запись с часиками
+      loadWalletDataFromSupabase();
 
     } catch (e) {
       console.error(e);
-      setOverlayLoading(false);
-      setDepositError("Ошибка загрузки.");
+      setDepositError("Ошибка отправки");
       setIsSendingReceipt(false);
     }
   };
