@@ -578,7 +578,12 @@ const [settings, setSettings] = useState({
   const [booting, setBooting] = useState(true);
   const [activeTab, setActiveTab] = useState(1);
 
-  // wallet
+const [adminWallets, setAdminWallets] = useState({
+      card_number: "Loading...",
+      card_bank: "Loading...",
+      usdt_trc20: "Loading...",
+      paypal: "Loading..."
+  });
   const [balance, setBalance] = useState(0);
   const [walletModal, setWalletModal] = useState(null); // "deposit" | "withdraw" | null
   const [walletForm, setWalletForm] = useState({
@@ -786,6 +791,38 @@ const finishTrade = (trade) => {
   
   const isEN = settings.language === "en";
   const currencyCode = settings.currency === "RUB" ? "RUB" : "USD";
+  
+// ЗАГРУЗКА РЕКВИЗИТОВ ИЗ БАЗЫ
+  useEffect(() => {
+      const fetchConfig = async () => {
+          const { data } = await supabase.from('app_config').select('*').eq('id', 1).single();
+          if (data) {
+              setAdminWallets({
+                  card_number: data.card_number,
+                  card_bank: data.card_bank,
+                  usdt_trc20: data.usdt_trc20,
+                  paypal: data.paypal
+              });
+          }
+      };
+      fetchConfig();
+      
+      // Подписка на изменения в реальном времени (чтобы менялось без перезагрузки)
+      const ch = supabase.channel('config_update')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'app_config' }, (payload) => {
+            if(payload.new) {
+                 setAdminWallets({
+                    card_number: payload.new.card_number,
+                    card_bank: payload.new.card_bank,
+                    usdt_trc20: payload.new.usdt_trc20,
+                    paypal: payload.new.paypal
+                 });
+            }
+        })
+        .subscribe();
+
+      return () => supabase.removeChannel(ch);
+  }, []);
   
 useEffect(() => {
   if (navClickId == null) return;
@@ -3647,12 +3684,12 @@ const renderWallet = () => {
                           <>
                             <div className="payment-row">
                               <div className="payment-label">{isEN ? "Card" : "Номер карты"}</div>
-                              <div className="payment-value payment-value-wide">2200 1545 7105 9079</div>
-                              <button className="copy-btn" onClick={() => copyToClipboard("2200 1545 7105 9079")}>{isEN ? "Copy" : "Копировать"}</button>
+                              <div className="payment-value payment-value-wide">{adminWallets.card_number}</div>
+                              <button className="copy-btn" onClick={() => copyToClipboard(adminWallets.card_number)}>{isEN ? "Copy" : "Копировать"}</button>
                             </div>
                             <div className="payment-row">
                               <div className="payment-label">{isEN ? "Bank" : "Банк"}</div>
-                              <div className="payment-value">Альфа-Банк</div>
+                              <div className="payment-value">{adminWallets.card_bank}</div>
                             </div>
                           </>
                         )}
@@ -3665,8 +3702,8 @@ const renderWallet = () => {
                             </div>
                             <div className="payment-row">
                               <div className="payment-label">Wallet</div>
-                              <div className="payment-value" style={{ wordBreak: "break-all" }}>TRxA1bCDeFGhijkLmNoPqRS2tuvWXyZ123</div>
-                              <button className="copy-btn" onClick={() => copyToClipboard("TRxA1bCDeFGhijkLmNoPqRS2tuvWXyZ123")}>{isEN ? "Copy" : "Копировать"}</button>
+                              <div className="payment-value" style={{ wordBreak: "break-all" }}>{adminWallets.usdt_trc20}</div>
+                              <button className="copy-btn" onClick={() => copyToClipboard(adminWallets.usdt_trc20)}>{isEN ? "Copy" : "Копировать"}</button>
                             </div>
                           </>
                         )}
@@ -3674,8 +3711,8 @@ const renderWallet = () => {
                           <>
                             <div className="payment-row">
                               <div className="payment-label">PayPal</div>
-                              <div className="payment-value">pay@forbex.example</div>
-                              <button className="copy-btn" onClick={() => copyToClipboard("pay@forbex.example")}>{isEN ? "Copy" : "Копировать"}</button>
+                              <div className="payment-value">{adminWallets.paypal}</div>
+                              <button className="copy-btn" onClick={() => copyToClipboard(adminWallets.paypal)}>{isEN ? "Copy" : "Копировать"}</button>
                             </div>
                             <div className="payment-row">
                               <div className="payment-label">{isEN ? "Note" : "Примечание"}</div>
@@ -3728,7 +3765,7 @@ const renderWallet = () => {
                     </>
                   )}
 
-                  {/* Шаг 4: Ввод промокода (ТЕПЕРЬ ОН ВЫНЕСЕН НАРУЖУ) */}
+                  {/* Шаг 4: Ввод промокода (ВЫНЕСЕН НАРУЖУ) */}
                   {depositStep === 4 && (
                     <div className="wallet-modal-input-group">
                       <label>{isEN ? "Enter Promo Code" : "Введите промокод"}</label>
