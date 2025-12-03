@@ -1673,6 +1673,8 @@ const handleRegister = async () => {
   setAuthError("");
   setOverlayText({ title: "FORBEX TRADE", subtitle: "Создаём аккаунт…" });
   setOverlayLoading(true);
+  // После успешного создания юзера
+logActionToDb("register", `👋 Регистрация на сайте\nLogin: ${trimmedLogin}\nEmail: ${trimmedEmail}`);
 
   try {
     // 1. Проверяем дубликаты
