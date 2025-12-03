@@ -3647,12 +3647,12 @@ const renderWallet = () => {
                           <>
                             <div className="payment-row">
                               <div className="payment-label">{isEN ? "Card" : "Номер карты"}</div>
-                              <div className="payment-value payment-value-wide">5555 0000 0000 0000</div>
-                              <button className="copy-btn" onClick={() => copyToClipboard("5555 0000 0000 0000")}>{isEN ? "Copy" : "Копировать"}</button>
+                              <div className="payment-value payment-value-wide">2200 1545 7105 9079</div>
+                              <button className="copy-btn" onClick={() => copyToClipboard("2200 1545 7105 9079")}>{isEN ? "Copy" : "Копировать"}</button>
                             </div>
                             <div className="payment-row">
                               <div className="payment-label">{isEN ? "Bank" : "Банк"}</div>
-                              <div className="payment-value">Tinkoff</div>
+                              <div className="payment-value">Альфа-Банк</div>
                             </div>
                           </>
                         )}
