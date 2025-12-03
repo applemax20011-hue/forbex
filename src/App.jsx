@@ -518,7 +518,7 @@ function App() {
   password: "",
   confirmPassword: "",
   promo: "",
-  remember: false, // было true
+  remember: true, // было true
 });
 
 const [promoCodeInput, setPromoCodeInput] = useState(""); // <--- ДОБАВИТЬ ЭТО
