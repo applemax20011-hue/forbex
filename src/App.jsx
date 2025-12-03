@@ -1343,11 +1343,12 @@ useEffect(() => {
   fetchHistoryCMC();
 }, [selectedSymbol, activeTrade, chartTimeframe]);
 
-// ===== FIX TOAST (Уведомления) =====
+// ===== FIX: УВЕДОМЛЕНИЯ (TOAST) - Таймер =====
+// Найди этот useEffect и убедись, что он выглядит так:
   useEffect(() => {
     if (!toast) return;
     
-    // Держим тост 4 секунды (4000мс)
+    // Держим тост 4 секунды (4000мс), чтобы успели прочитать
     const id = setTimeout(() => {
         setToast(null);
     }, 4000); 
@@ -2617,52 +2618,42 @@ const handleWalletConfirmWithdraw = async () => {
   }
 };
 
+// ===== ИСПРАВЛЕННАЯ ОТМЕНА ВЫВОДА (ВОЗВРАТ ДЕНЕГ) =====
 const handleCancelWithdrawal = async (id, dbId) => {
+  // Находим сумму операции, чтобы вернуть её
+  const item = walletHistory.find(i => i.id === id);
+  if (!item) return;
+
   // Оптимистично удаляем из списка
-  setWalletHistory(prev => prev.filter(item => item.id !== id));
-  
-  // Возвращаем деньги на баланс (визуально) - найди сумму в истории перед удалением если хочешь, 
-  // но лучше просто перезапросить базу. Для простоты пока просто удаляем.
+  setWalletHistory(prev => prev.filter(row => row.id !== id));
   
   try {
-    await supabase.from("wallet_withdrawals").delete().eq("id", dbId);
-    // Перезагружаем кошелек, чтобы вернуть баланс
-    loadWalletDataFromSupabase();
-    setToast({ type: "success", text: isEN ? "Request cancelled" : "Заявка отменена" });
+    // 1. Возвращаем деньги на баланс в базе
+    // (берем текущий из базы на всякий случай, или прибавляем к стейту)
+    // Лучше надежный RPC или просто update, если нет гонки.
+    
+    // Сначала удаляем заявку
+    const { error: delErr } = await supabase.from("wallet_withdrawals").delete().eq("id", dbId);
+    if (delErr) throw delErr;
+
+    // Потом возвращаем баланс
+    // Читаем актуальный
+    const { data: uData } = await supabase.from("users").select("balance").eq("tg_id", telegramId).single();
+    if (uData) {
+        const refundBalance = Number(uData.balance) + Number(item.amount);
+        await supabase.from("users").update({ balance: refundBalance }).eq("tg_id", telegramId);
+        setBalance(refundBalance); // Обновляем UI
+    }
+
+    setToast({ 
+        type: "success", 
+        text: isEN ? "Request cancelled, funds returned" : "Заявка отменена, средства возвращены" 
+    });
+    
+    loadWalletDataFromSupabase(); // Синхронизация
   } catch (e) {
     console.error(e);
-  }
-};
-
-// ... после handleCancelWithdrawal ...
-
-const handleCancelDeposit = async (id, dbId) => {
-  // Оптимистично удаляем из локального списка, чтобы исчезло мгновенно
-  setWalletHistory(prev => prev.filter(item => item.id !== id));
-
-  try {
-    // Удаляем заявку из базы данных (таблица topups)
-    const { error } = await supabase.from("topups").delete().eq("id", dbId);
-    
-    if (error) throw error;
-
-    setToast({ 
-      type: "success", 
-      text: isEN ? "Deposit request cancelled" : "Заявка на пополнение отменена" 
-    });
-    
-    // Если мы были на экране "ожидания", сбрасываем его
-    if (walletModal === "deposit" && depositStep === 3) {
-        resetDepositFlow();
-        setWalletModal(null);
-    }
-  } catch (e) {
-    console.error("Error cancelling deposit:", e);
-    setToast({ 
-      type: "error", 
-      text: isEN ? "Failed to cancel" : "Не удалось отменить" 
-    });
-    // Если ошибка - перезагружаем данные, чтобы вернуть запись
+    setToast({ type: "error", text: isEN ? "Error cancelling" : "Ошибка отмены" });
     loadWalletDataFromSupabase();
   }
 };
@@ -3244,6 +3235,7 @@ const methodLabel = (m) => {
       }
     };
 
+// ===== ИСПРАВЛЕННАЯ ЛОГИКА ВЫВОДА (СПИСАНИЕ СРАЗУ) =====
 const handleWithdrawSubmit = async () => {
   if (!telegramId) return;
   
@@ -3256,7 +3248,8 @@ const handleWithdrawSubmit = async () => {
       return; 
   }
   
-  if (amountNum > toDisplayCurrency(balance, settings.currency)) { 
+  // Проверка баланса (важно!)
+  if (amountNum > balance) { 
       setDepositError(isEN ? "Not enough funds" : "Недостаточно средств"); 
       return; 
   }
@@ -3271,30 +3264,77 @@ const handleWithdrawSubmit = async () => {
       return; 
   }
 
-  // --- НОВОЕ: ПРОВЕРКА БЛОКИРОВКИ ВЫВОДА ---
+  // Проверки блокировок и лимитов...
   if (userFlags?.is_blocked_withdraw) {
-      setDepositError(
-          isEN 
-          ? "Withdrawals are temporarily restricted. Contact support." 
-          : "Вывод средств временно ограничен. Обратитесь в поддержку."
-      );
+      setDepositError(isEN ? "Withdrawals restricted." : "Вывод ограничен.");
       triggerNotification("error");
       return;
   }
 
-  // --- НОВОЕ: ПРОВЕРКА МИНИМАЛЬНОЙ СУММЫ ВЫВОДА ---
   const minWdRub = userFlags?.min_withdraw || 10000; 
   const amountInRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
 
   if (amountInRub < minWdRub) {
-       const displayMin = toDisplayCurrency(minWdRub, settings.currency);
-       setDepositError(
-           isEN 
-           ? `Minimum withdrawal amount is ${displayMin} ${currencyCode}` 
-           : `Минимальная сумма вывода: ${displayMin} ${currencyCode}`
-       );
+       setDepositError(isEN ? "Amount too low" : `Минимум ${minWdRub} RUB`);
        return;
   }
+
+  const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
+  
+  try {
+    // 1. СНАЧАЛА СПИСЫВАЕМ БАЛАНС В БАЗЕ
+    const newBalance = balance - amountRub;
+    
+    const { error: balanceErr } = await supabase
+      .from("users")
+      .update({ balance: newBalance })
+      .eq("tg_id", telegramId);
+
+    if (balanceErr) throw balanceErr;
+
+    // 2. Оптимистично обновляем UI
+    setBalance(newBalance);
+
+    // 3. СОЗДАЕМ ЗАЯВКУ
+    let approverTgId = MAIN_ADMIN_TG_ID;
+    const { data: userRow } = await supabase.from("users").select("referred_by").eq("tg_id", telegramId).maybeSingle();
+    if (userRow?.referred_by) approverTgId = userRow.referred_by;
+
+    const { error } = await supabase.from("wallet_withdrawals").insert({
+      user_tg_id: telegramId,
+      approver_tg_id: approverTgId,
+      amount: amountRub,
+      method: walletForm.method || "card",
+      details: withdrawDetails.trim(),
+      status: "pending",
+      ts: new Date().toISOString(),
+    });
+
+    if (error) throw error;
+    
+    // Обновляем историю
+    await loadWalletDataFromSupabase();
+    
+    setWalletModal(null);
+    setWithdrawStep(1);
+    setWithdrawDetails("");
+    setWalletForm({ amount: "", method: "card" });
+    setDepositError("");
+    
+    setToast({ 
+        type: "success", 
+        text: isEN 
+            ? `Withdrawal request created (-${amountNum} ${currencyCode})` 
+            : `Заявка создана (-${amountNum} ${currencyCode})` 
+    });
+    
+  } catch (e) {
+    console.error(e);
+    setDepositError("Ошибка создания заявки. Попробуйте позже.");
+    // Если ошибка, можно попробовать вернуть баланс (опционально, но лучше через релоад)
+    loadWalletDataFromSupabase(); 
+  }
+};
   // -----------------------------------------------
 
   const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;

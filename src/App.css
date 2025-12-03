@@ -4155,15 +4155,17 @@ body,
 /* ===== FIX: УВЕДОМЛЕНИЯ (TOAST) ===== */
 .toast-root {
   position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 16px;          /* Отступ сверху */
+  left: 50% !important; /* Строго по центру */
+  transform: translateX(-50%) !important; /* Центровка */
   
-  /* Максимальный слой, поверх всех модалок */
+  /* САМЫЙ ВЕРХНИЙ СЛОЙ */
   z-index: 2147483647 !important; 
   
-  min-width: 280px;
+  width: auto;      
+  min-width: 280px; 
   max-width: 90%;
+  
   padding: 12px 16px;
   
   display: flex;
@@ -4171,47 +4173,52 @@ body,
   gap: 12px;
   
   border-radius: 16px;
-  background: rgba(15, 23, 42, 0.98);
-  backdrop-filter: blur(16px);
+  background: rgba(15, 23, 42, 0.98); /* Почти непрозрачный фон */
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+  backdrop-filter: blur(12px);
   
-  animation: toastSlideDown 0.4s ease-out forwards;
-}
-
-/* Делаем текст ошибки тоньше и читабельнее */
-.toast-title {
-  font-size: 13px !important;
-  font-weight: 600 !important;
-  color: #fff;
-  margin-bottom: 2px;
+  /* Анимация появления сверху */
+  animation: toastSlideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
 @keyframes toastSlideDown {
-  from { transform: translate(-50%, -100%); opacity: 0; }
+  from { transform: translate(-50%, -150%); opacity: 0; }
   to   { transform: translate(-50%, 0); opacity: 1; }
 }
 
-.toast-success {
-  background: rgba(6, 78, 59, 0.85); /* Прозрачно-зеленый */
-  border: 1px solid #34d399;
-  color: #ecfdf5;
-  animation: slideInRight 0.4s ease, pulseGreen 2s infinite; /* Пульсация */
+.toast-icon {
+  font-size: 20px;
+  flex-shrink: 0;
 }
 
-.toast-error {
-  background: rgba(127, 29, 29, 0.85); /* Прозрачно-красный */
-  border: 1px solid #f87171;
-  color: #fef2f2;
-  animation: slideInRight 0.4s ease, pulseRed 2s infinite; /* Пульсация */
+.toast-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.toast-title {
+  font-size: 13px !important;
+  font-weight: 600 !important; /* Не жирный, а полужирный */
+  color: #fff;
+  margin-bottom: 2px;
+  line-height: 1.2;
 }
 
 .toast-text {
-  font-size: 11px;
-  line-height: 1.4;
-  opacity: 0.9;
+  font-size: 11px !important;
+  color: #9ca3af; /* Светло-серый, читабельный */
+  line-height: 1.3;
 }
 
-@keyframes slideInRight {
-  from { transform: translateX(120%); opacity: 0; }
-  to   { transform: translateX(0); opacity: 1; }
+/* Цвета статусов */
+.toast-success {
+  border-left: 4px solid #22c55e; /* Зеленая полоска слева */
 }
+
+.toast-error {
+  border-left: 4px solid #ef4444; /* Красная полоска слева */
+}
+
+/* Убираем старые анимации slideInRight, если они есть */
