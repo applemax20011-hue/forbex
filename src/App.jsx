@@ -877,30 +877,34 @@ useEffect(() => {
   loadUserHistoriesFromSupabase();
 }, [user]);
 
-// Надежная инициализация TG ID
+// 1. ЖЕЛЕЗОБЕТОННАЯ ЗАГРУЗКА ID
   useEffect(() => {
     const initTg = () => {
-      const tg = window.Telegram?.WebApp;
-      let id = null;
+      // Пытаемся взять ID от Telegram
+      const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
       
-      if (tg?.initDataUnsafe?.user?.id) {
-        id = tg.initDataUnsafe.user.id;
+      if (tgUser && tgUser.id) {
+        console.log("✅ TG User found:", tgUser.id);
+        setTelegramId(tgUser.id);
+        setTelegramUsername(tgUser.username);
+        // Сохраняем, чтобы не терять при моргании
+        localStorage.setItem("forbex_debug_id", tgUser.id);
       } else {
-        // Fallback для тестов в браузере (чтобы не терялось)
-        const stored = localStorage.getItem("forbex_debug_tg_id");
-        if (stored) id = Number(stored);
-        else {
-           // Если нет ID, генерим временный (для теста) или просим зайти через ТГ
-           // id = 12345; 
+        // ЕСЛИ МЫ В БРАУЗЕРЕ (ТЕСТ)
+        const stored = localStorage.getItem("forbex_debug_id");
+        if (stored) {
+          console.log("⚠️ Browser Mode. Using stored ID:", stored);
+          setTelegramId(Number(stored));
+        } else {
+          // Если вообще ничего нет — генерируем тестовый ID
+          const fakeId = 123456789; // Можешь заменить на свой реальный ID для тестов
+          console.log("⚠️ No ID found. Generated fake ID:", fakeId);
+          localStorage.setItem("forbex_debug_id", fakeId);
+          setTelegramId(fakeId);
         }
       }
-      
-      if (id) {
-        setTelegramId(id);
-        // Сохраняем для отладки в браузере
-        if (!tg?.initDataUnsafe?.user?.id) localStorage.setItem("forbex_debug_tg_id", id);
-      }
     };
+    
     initTg();
   }, []);
 
@@ -1311,89 +1315,78 @@ useEffect(() => {
     return () => clearTimeout(id);
   }, [toast]);
 
-const loadWalletDataFromSupabase = useCallback(async () => {
-  if (!telegramId) return;
+// 2. ЗАГРУЗКА ДАННЫХ ИЗ БАЗЫ
+  const loadWalletDataFromSupabase = useCallback(async () => {
+    if (!telegramId) return; // Если ID нет, не грузим
 
-  try {
-    // 1. Параллельная загрузка
-    const [topupsRes, withdrawsRes, userRes] = await Promise.all([
-      supabase
-        .from("topups")
-        // ДОБАВИЛИ 'method' в запрос
-        .select("id, amount, status, created_at, method")
-        .eq("user_tg_id", telegramId)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("wallet_withdrawals")
-        .select("id, amount, method, status, ts")
-        .eq("user_tg_id", telegramId)
-        .order("ts", { ascending: false }),
-      supabase
-        .from("users") 
-        // ДОБАВИЛИ 'balance' и 'is_verified' в запрос
-        .select("luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw, is_verified, balance")
-        .eq("tg_id", telegramId)
-        .maybeSingle()
-    ]);
-
-    // 2. Сохраняем настройки и БАЛАНС
-    if (userRes.data) {
-      setUserFlags(userRes.data);
+    try {
+      console.log("🔄 Loading data for:", telegramId);
       
-      // === ГЛАВНОЕ ИСПРАВЛЕНИЕ: БЕРЕМ БАЛАНС ИЗ БАЗЫ ===
-      // Больше не считаем (пополнения - выводы), а верим базе
-      setBalance(Number(userRes.data.balance) || 0);
+      // А. ГРУЗИМ ЮЗЕРА (БАЛАНС + НАСТРОЙКИ)
+      const { data: userRow, error: userErr } = await supabase
+        .from("users")
+        .select("balance, luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw, is_verified")
+        .eq("tg_id", telegramId)
+        .maybeSingle();
+
+      if (userRow) {
+        console.log("💰 Balance from DB:", userRow.balance);
+        setBalance(Number(userRow.balance)); // <--- ВОТ ГЛАВНЫЙ ФИКС
+        setUserFlags(userRow);
+      } else if (!userErr) {
+        // Если юзера нет в базе — создаем его
+        console.log("🆕 User not found in DB, creating...");
+        await supabase.from("users").insert({ 
+            tg_id: telegramId, 
+            balance: 0,
+            username: telegramUsername || "User"
+        });
+      }
+
+      // Б. ГРУЗИМ ИСТОРИЮ (ПОПОЛНЕНИЯ + ВЫВОДЫ)
+      const [topups, withdrawals] = await Promise.all([
+        supabase.from("topups").select("*").eq("user_tg_id", telegramId).order("created_at", { ascending: false }),
+        supabase.from("wallet_withdrawals").select("*").eq("user_tg_id", telegramId).order("ts", { ascending: false })
+      ]);
+
+      // В. СОБИРАЕМ ИСТОРИЮ В ОДИН СПИСОК
+      const history = [];
+      
+      (topups.data || []).forEach(t => {
+        history.push({
+          id: `dep-${t.id}`,
+          type: "deposit",
+          amount: t.amount,
+          method: t.method || "card",
+          status: t.status, // pending, approved, rejected
+          ts: new Date(t.created_at).getTime()
+        });
+      });
+
+      (withdrawals.data || []).forEach(w => {
+        history.push({
+          id: `wd-${w.id}`,
+          type: "withdraw",
+          amount: w.amount,
+          method: w.method || "card",
+          status: w.status,
+          ts: new Date(w.ts).getTime()
+        });
+      });
+
+      history.sort((a, b) => b.ts - a.ts);
+      setWalletHistory(history);
+      setHistoryLoading(false);
+
+    } catch (e) {
+      console.error("Load error:", e);
     }
+  }, [telegramId, telegramUsername]);
 
-    // 3. Грузим активы
-    if (user) {
-      const { data: assets } = await supabase
-        .from("user_assets")
-        .select("*")
-        .eq("user_id", user.id);
-      if (assets) setUserAssets(assets);
-    }
-
-const rawTopups = topupsRes.data || [];
-const rawWithdrawals = withdrawsRes.data || [];
-
-const history = [];
-const normalizeStatus = (s) => (s || "").toLowerCase();
-
-rawTopups.forEach((row) => {
-  const status = normalizeStatus(row.status) || "pending";
-  history.push({
-    id: `topup-${row.id}`,
-    topupId: row.id,
-    type: "deposit",
-    amount: Number(row.amount || 0),
-    method: row.method || "card",
-    ts: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-    status,
-  });
-});
-
-rawWithdrawals.forEach((row) => {
-  history.push({
-    id: `wd-${row.id}`,
-    type: "withdraw",
-    amount: Number(row.amount || 0),
-    method: row.method || "card",
-    ts: row.ts ? new Date(row.ts).getTime() : Date.now(),
-    status: normalizeStatus(row.status),
-  });
-});
-
-
-    history.sort((a, b) => b.ts - a.ts);
-    setWalletHistory(history);
-
-  } catch (e) {
-    console.error("loadWalletDataFromSupabase exception", e);
-  } finally {
-    setHistoryLoading(false);
-  }
-}, [telegramId, user]);
+  // Вызываем загрузку при смене ID
+  useEffect(() => {
+    if (telegramId) loadWalletDataFromSupabase();
+  }, [telegramId, loadWalletDataFromSupabase]);
 
 // Realtime для Topups, Withdrawals И БАЛАНСА (USERS)
 useEffect(() => {

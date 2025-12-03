@@ -4153,44 +4153,71 @@ body,
   color: #fca5a5;
 }
 
-/* ===== FIX TOAST (ФИНАЛЬНЫЙ ВАРИАНТ) ===== */
+/* ===== FIX TOAST (КОМПАКТНЫЙ ВАРИАНТ) ===== */
 .toast-root {
   position: fixed;
-  top: 20px;
+  top: 16px;          /* Отступ сверху */
   left: 50%;
   transform: translateX(-50%);
+  z-index: 2147483647; /* Поверх всего */
   
-  /* Самый высокий слой, чтобы перекрывал модалки */
-  z-index: 2147483647 !important; 
-  
-  min-width: 280px;
+  width: auto;        /* Ширина по контенту */
+  min-width: auto;    /* Убираем фиксированную ширину */
   max-width: 90%;
-  padding: 12px 16px;
+  
+  /* Тонкие отступы */
+  padding: 8px 16px;  
   
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   
-  border-radius: 99px; /* Капсула */
-  background: rgba(10, 10, 12, 0.95);
-  backdrop-filter: blur(16px);
+  border-radius: 99px; /* Полная капсула */
+  background: rgba(10, 10, 12, 0.85); /* Полупрозрачный черный */
   border: 1px solid rgba(255,255,255,0.1);
-  box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+  backdrop-filter: blur(12px); /* Размытие фона */
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
   
-  /* Плавное появление */
-  animation: toastSlideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-  pointer-events: none; /* Чтобы клики сквозь него проходили, если мешает */
+  animation: toastSlideDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.toast-success { border-color: rgba(34, 197, 94, 0.5); box-shadow: 0 8px 30px rgba(34, 197, 94, 0.15); }
-.toast-error { border-color: rgba(239, 68, 68, 0.5); box-shadow: 0 8px 30px rgba(239, 68, 68, 0.15); }
+.toast-icon {
+  font-size: 16px; 
+}
 
-.toast-icon { font-size: 18px; }
-.toast-content { display: flex; flex-direction: column; }
-.toast-title { font-size: 13px !important; font-weight: 700 !important; color: #fff; margin: 0; line-height: 1.2; }
-.toast-text { font-size: 11px !important; color: #9ca3af; margin-top: 2px; line-height: 1.2; }
+.toast-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Заголовок в одну строку */
+.toast-title {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  line-height: 1.1;
+  margin: 0;
+  color: #fff;
+}
+
+/* Текст ошибки */
+.toast-text {
+  font-size: 11px !important;
+  color: #9ca3af;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+
+/* Цвета */
+.toast-success { 
+  border-color: rgba(34, 197, 94, 0.4); 
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15); 
+}
+.toast-error { 
+  border-color: rgba(239, 68, 68, 0.4); 
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15); 
+}
 
 @keyframes toastSlideDown {
   from { transform: translate(-50%, -150%); opacity: 0; }
-  to { transform: translate(-50%, 0); opacity: 1; }
+  to   { transform: translate(-50%, 0); opacity: 1; }
 }
