@@ -1388,103 +1388,122 @@ useEffect(() => {
     if (telegramId) loadWalletDataFromSupabase();
   }, [telegramId, loadWalletDataFromSupabase]);
 
-// Realtime для Topups, Withdrawals И БАЛАНСА (USERS)
-useEffect(() => {
-  if (!telegramId) return;
+// 3. REALTIME: БАЛАНС, ИСТОРИЯ, УВЕДОМЛЕНИЯ
+  useEffect(() => {
+    if (!telegramId) return;
 
-  const channel = supabase
-    .channel("wallet-updates")
-    // 1. Слушаем пополнения (Topups) - для уведомлений и истории
-    .on(
-      "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "topups" },
-      async (payload) => {
-        const row = payload.new;
-        if (!row || row.user_tg_id !== telegramId) return;
-        
-        // Перезагружаем историю
-        await loadWalletDataFromSupabase();
-
-        const currency = settings.currency === "RUB" ? "RUB" : "USD";
-        const amountStr = Number(row.amount).toLocaleString("ru-RU");
-
-        if (row.status === "approved") {
-          // Салют и тост
-          triggerNotification("success");
-          confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ["#22c55e", "#ffffff"] });
-          setToast({
-            type: "success",
-            text: isEN
-              ? `Balance topped up by ${amountStr} ${currency}`
-              : `Ваш баланс пополнен на ${amountStr} ${currency}`,
-          });
-        } else if (row.status === "rejected") {
-          triggerNotification("error");
-          setToast({
-            type: "error",
-            text: isEN ? "Deposit rejected." : "Заявка на пополнение отклонена.",
-          });
-        }
-      }
-    )
-    // 2. Слушаем выводы (Withdrawals)
-    .on(
-      "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "wallet_withdrawals" },
-      async (payload) => {
-        const row = payload.new;
-        if (!row || row.user_tg_id !== telegramId) return;
-        await loadWalletDataFromSupabase();
-
-        if (row.status === "done") {
-          setToast({ type: "success", text: isEN ? "Funds withdrawn." : "Средства выведены." });
-        } else if (row.status === "rejected") {
-          setToast({ type: "error", text: isEN ? "Withdrawal rejected." : "Вывод отклонен." });
-        }
-      }
-    )
-// 3. === ДОБАВИТЬ ЭТО: Слушаем изменения ЮЗЕРА (Баланс, Блокировки, Вериф) ===
+    const channel = supabase
+      .channel("main-realtime")
+      
+      // === 1. СЛЕДИМ ЗА БАЛАНСОМ И БЛОКИРОВКАМИ (USERS) ===
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "users", filter: `tg_id=eq.${telegramId}` },
         (payload) => {
+          const newData = payload.new;
+          if (!newData) return;
+
+          // 1. БАЛАНС
+          setBalance((prev) => {
+             // Если баланс изменился, просто обновляем цифру.
+             // Тост о пополнении вызовем ниже через таблицу topups, чтобы не дублировать.
+             return Number(newData.balance);
+          });
+
+          // 2. БЛОКИРОВКИ И УДАЧА (Сравниваем с текущим стейтом userFlags)
+          setUserFlags((prevFlags) => {
+             // Проверка блокировки вывода
+             if (!prevFlags.is_blocked_withdraw && newData.is_blocked_withdraw) {
+                 triggerNotification("error");
+                 setToast({ type: "error", text: isEN ? "Withdrawals blocked by admin" : "Вывод средств заблокирован администратором" });
+             }
+             if (prevFlags.is_blocked_withdraw && !newData.is_blocked_withdraw) {
+                 triggerNotification("success");
+                 setToast({ type: "success", text: isEN ? "Withdrawals unlocked" : "Вывод средств разблокирован" });
+             }
+
+             // Проверка блокировки торговли
+             if (!prevFlags.is_blocked_trade && newData.is_blocked_trade) {
+                 triggerNotification("error");
+                 setToast({ type: "error", text: isEN ? "Trading suspended" : "Торговля приостановлена" });
+             }
+             
+             // Проверка верификации
+             if (!prevFlags.is_verified && newData.is_verified) {
+                 triggerNotification("success");
+                 confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                 setToast({ type: "success", text: isEN ? "Account Verified!" : "Аккаунт успешно верифицирован!" });
+             }
+
+             return newData;
+          });
+        }
+      )
+
+      // === 2. СЛЕДИМ ЗА ПОПОЛНЕНИЯМИ (TOPUPS) ===
+      // Важно: слушаем INSERT (когда бот добавляет) и UPDATE (когда меняется статус)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "topups", filter: `user_tg_id=eq.${telegramId}` },
+        async (payload) => {
+          // Сразу обновляем историю на экране
+          await loadWalletDataFromSupabase();
+
           const row = payload.new;
           if (!row) return;
 
-          // Обновляем баланс в реальном времени
-          if (typeof row.balance === "number") {
-             setBalance(prev => {
-                // Если баланс вырос — значит пополнили через админку
-                if (row.balance > prev) {
-                    triggerNotification("success");
-                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-                    setToast({ type: "success", text: isEN ? "Balance updated" : "Баланс пополнен!" });
-                }
-                return row.balance;
+          // Если это НОВАЯ запись (INSERT) и она сразу APPROVED (от Админа)
+          if (payload.eventType === "INSERT" && row.status === "approved") {
+             const amountStr = Number(row.amount).toLocaleString("ru-RU");
+             const currency = settings.currency === "RUB" ? "RUB" : "USD";
+             
+             triggerNotification("success");
+             confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+             
+             setToast({
+                type: "success",
+                text: isEN 
+                  ? `Balance topped up: +${amountStr} ${currency}` 
+                  : `Баланс пополнен: +${amountStr} ${currency}`
              });
           }
           
-// Обновляем флаги (верификация, блокировки, удача)
-          setUserFlags(prev => ({
-            ...prev,
-            luck_mode: row.luck_mode,
-            is_verified: row.is_verified,
-            is_blocked_trade: row.is_blocked_trade,
-            is_blocked_withdraw: row.is_blocked_withdraw,
-            min_deposit: row.min_deposit,
-            min_withdraw: row.min_withdraw
-          }));
+          // Если это ОБНОВЛЕНИЕ статуса (например, чек проверили)
+          if (payload.eventType === "UPDATE") {
+             if (row.status === "approved") {
+                 setToast({ type: "success", text: isEN ? "Deposit approved!" : "Пополнение одобрено!" });
+                 triggerNotification("success");
+             } else if (row.status === "rejected") {
+                 setToast({ type: "error", text: isEN ? "Deposit rejected" : "Пополнение отклонено" });
+                 triggerNotification("error");
+             }
+          }
+        }
+      )
+
+      // === 3. СЛЕДИМ ЗА ВЫВОДАМИ (WITHDRAWALS) ===
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "wallet_withdrawals", filter: `user_tg_id=eq.${telegramId}` },
+        async (payload) => {
+          await loadWalletDataFromSupabase();
           
-          // Если дали верификацию — уведомляем
-          if (row.is_verified && !userFlags.is_verified) {
-             setToast({ type: "success", text: isEN ? "Account Verified!" : "Аккаунт верифицирован!" });
+          const row = payload.new;
+          if (payload.eventType === "UPDATE") {
+              if (row.status === "done") {
+                  setToast({ type: "success", text: isEN ? "Withdrawal processed" : "Вывод средств исполнен" });
+                  triggerNotification("success");
+              } else if (row.status === "rejected") {
+                  setToast({ type: "error", text: isEN ? "Withdrawal rejected" : "Заявка на вывод отклонена" });
+                  triggerNotification("error");
+              }
           }
         }
       )
       .subscribe();
 
-  return () => supabase.removeChannel(channel);
-}, [telegramId, isEN, settings.currency, loadWalletDataFromSupabase]);
+    return () => supabase.removeChannel(channel);
+  }, [telegramId, isEN, settings.currency, loadWalletDataFromSupabase]); // Зависимости
 
 // === СКРОЛЛ НАВЕРХ (ИСПРАВЛЕННАЯ ВЕРСИЯ) ===
   useEffect(() => {
