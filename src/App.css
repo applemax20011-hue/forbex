@@ -4153,79 +4153,57 @@ body,
   color: #fca5a5;
 }
 
-/* ===== КОМПАКТНЫЕ УВЕДОМЛЕНИЯ (TOAST) ===== */
+/* ===== TOAST FIX (ГАРАНТИРОВАННАЯ ВИДИМОСТЬ) ===== */
 .toast-root {
   position: fixed;
-  top: 16px;          /* Небольшой отступ сверху */
+  top: 24px; /* Чуть ниже, чтобы не перекрывалось челкой телефона */
   left: 50%;
   transform: translateX(-50%);
-  z-index: 2147483647; /* Поверх всего */
+  z-index: 2147483647 !important; /* Максимальный Z-index */
   
-  width: auto;        
-  max-width: 90%;     /* Чтобы не упирался в края на малых экранах */
+  width: auto;
+  min-width: 300px; /* Минимальная ширина */
+  max-width: 90vw;  /* Чтобы не вылазило за экран */
   
-  /* Компактные отступы */
-  padding: 10px 16px; 
+  background: rgba(20, 20, 25, 0.98); /* Почти непрозрачный черный */
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px; /* Скругленные углы, но не капсула */
+  
+  padding: 14px 20px;
   
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   
-  border-radius: 99px; /* Полная капсула */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
   
-  /* Полупрозрачный черный фон + размытие (Glassmorphism) */
-  background: rgba(15, 23, 42, 0.9); 
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  
-  border: 1px solid rgba(255,255,255,0.1);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-  
-  animation: toastSlideDown 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: toastSlideDown 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
-.toast-content {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-/* Заголовок (Успешно/Ошибка) */
 .toast-title {
-  font-size: 12px !important;
+  font-size: 14px !important;
   font-weight: 700 !important;
-  line-height: 1.2;
-  margin: 0;
   color: #fff;
-}
-
-/* Текст сообщения */
-.toast-text {
-  font-size: 11px !important;
-  color: #cbd5e1; /* Светло-серый */
+  margin-bottom: 2px;
   line-height: 1.2;
-  margin-top: 2px;
-  white-space: nowrap; /* Пытаемся держать в одну строку */
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-/* Иконка */
+.toast-text {
+  font-size: 12px !important;
+  color: #d1d5db;
+  line-height: 1.2;
+}
+
 .toast-icon {
-  font-size: 18px;
-  display: flex;
-  align-items: center;
+  font-size: 20px;
 }
 
-/* Цветовые акценты */
-.toast-success { 
-  border-color: rgba(34, 197, 94, 0.4); 
-}
-.toast-error { 
-  border-color: rgba(239, 68, 68, 0.4); 
-}
+/* Цветные бордеры */
+.toast-success { border-left: 4px solid #22c55e; }
+.toast-error { border-left: 4px solid #ef4444; }
 
 @keyframes toastSlideDown {
-  from { transform: translate(-50%, -150%); opacity: 0; }
-  to   { transform: translate(-50%, 0); opacity: 1; }
+  from { opacity: 0; transform: translate(-50%, -20px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
