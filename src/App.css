@@ -4153,57 +4153,74 @@ body,
   color: #fca5a5;
 }
 
-/* ===== TOAST FIX (ГАРАНТИРОВАННАЯ ВИДИМОСТЬ) ===== */
+/* ===== TOAST (ФИНАЛЬНЫЙ, КОМПАКТНЫЙ ВАРИАНТ) ===== */
 .toast-root {
   position: fixed;
-  top: 24px; /* Чуть ниже, чтобы не перекрывалось челкой телефона */
+  top: 16px;           /* Отступ сверху */
   left: 50%;
   transform: translateX(-50%);
-  z-index: 2147483647 !important; /* Максимальный Z-index */
+  z-index: 2147483647 !important; /* Поверх всего */
   
-  width: auto;
-  min-width: 300px; /* Минимальная ширина */
-  max-width: 90vw;  /* Чтобы не вылазило за экран */
+  width: auto;         /* Ширина по контенту */
+  max-width: 90vw;     /* Не шире экрана */
+  min-width: auto;     /* Убираем минималку */
   
-  background: rgba(20, 20, 25, 0.98); /* Почти непрозрачный черный */
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 16px; /* Скругленные углы, но не капсула */
-  
-  padding: 14px 20px;
+  /* Компактные отступы */
+  padding: 10px 16px;
   
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(10px);
+  /* Дизайн "островка" */
+  border-radius: 99px; 
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
   
   animation: toastSlideDown 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
+/* Текст внутри */
+.toast-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 .toast-title {
-  font-size: 14px !important;
+  font-size: 13px !important;
   font-weight: 700 !important;
+  line-height: 1.1;
+  margin: 0;
   color: #fff;
-  margin-bottom: 2px;
-  line-height: 1.2;
 }
 
 .toast-text {
-  font-size: 12px !important;
-  color: #d1d5db;
-  line-height: 1.2;
+  font-size: 11px !important;
+  color: #cbd5e1;
+  line-height: 1.1;
+  margin-top: 2px;
+  max-width: 240px;      /* Ограничиваем ширину текста */
+  white-space: nowrap;   /* В одну строку */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* Иконка */
 .toast-icon {
-  font-size: 20px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
 }
 
-/* Цветные бордеры */
-.toast-success { border-left: 4px solid #22c55e; }
-.toast-error { border-left: 4px solid #ef4444; }
+/* Цветовые индикаторы (бордер слева внутри не нужен, красим иконку) */
+.toast-success .toast-icon { color: #4ade80; }
+.toast-error .toast-icon { color: #f87171; }
 
 @keyframes toastSlideDown {
-  from { opacity: 0; transform: translate(-50%, -20px); }
+  from { opacity: 0; transform: translate(-50%, -150%); }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }

@@ -662,6 +662,10 @@ const logActionToDb = async (type, details) => {
   
 const finishTrade = (trade) => {
   const win = trade.resultDirection === trade.direction; // up / down / flat
+  
+  // Считаем профит (чистую прибыль или убыток)
+  // Если победа: (ставка * множитель) - ставка = чистый навар
+  // Если проигрыш: -ставка
   const profit = win ? trade.amount * (trade.multiplier - 1) : -trade.amount;
 
   // Хаптик + конфетти
@@ -677,8 +681,30 @@ const finishTrade = (trade) => {
     triggerNotification("error");
   }
 
-  // Начисляем обратно ставку + профит (ставка списывалась при старте)
-  setBalance((prev) => prev + trade.amount * trade.multiplier);
+  // === ИСПРАВЛЕНИЕ БАЛАНСА ===
+  // Мы НЕ используем setBalance((prev) => ...) здесь, чтобы избежать рассинхрона.
+  // Мы рассчитываем новый баланс от ТЕКУЩЕГО (который уже без ставки) и отправляем в базу.
+  // Realtime сам обновит интерфейс.
+  
+  const revenue = win ? trade.amount * trade.multiplier : 0; // Сколько вернуть на счет
+  
+  if (revenue > 0 && user && telegramId) {
+      // Сначала читаем актуальный баланс из базы (на всякий случай), потом обновляем
+      // Но для скорости просто прибавим к текущему стейту и отправим
+      const newTotal = balance + revenue;
+      
+      // Оптимистичное обновление (чтобы цифры поменялись мгновенно)
+      setBalance(newTotal);
+      
+      // Отправка в базу
+      supabase.from("users")
+        .update({ balance: newTotal })
+        .eq("tg_id", telegramId)
+        .then(({ error }) => {
+            if (error) console.error("Win payout error:", error);
+        });
+  }
+  // Если проиграл - ничего делать не надо, деньги уже списаны в handleStartTrade
 
   const finishedAt = Date.now();
 
@@ -705,7 +731,8 @@ const finishTrade = (trade) => {
   });
 
   setChartDirection(trade.resultDirection);
-// В КОНЦЕ ФУНКЦИИ:
+
+  // В КОНЦЕ ФУНКЦИИ:
   const resultText = win ? "✅ WIN (+PROFIT)" : "❌ LOSE (Потеря)";
   const profitStr = win ? `+${profit.toFixed(2)}` : `-${trade.amount.toFixed(2)}`;
   
@@ -2263,7 +2290,7 @@ const handleStartTrade = () => {
 
   if (activeTrade) return false; 
 
-  // --- НОВОЕ: ПРОВЕРКА БЛОКИРОВКИ ТОРГОВЛИ ---
+  // --- ПРОВЕРКА БЛОКИРОВКИ ТОРГОВЛИ ---
   if (userFlags?.is_blocked_trade) {
     setTradeError(
       isEN 
@@ -2273,33 +2300,41 @@ const handleStartTrade = () => {
     triggerNotification("error");
     return false;
   }
-  // -------------------------------------------
 
   // 2. ЗАПУСК
   triggerHaptic('heavy'); 
   setIsTradeProcessing(true);
   setTradeToastVisible(false);
 
-  // Списываем ставку
-  setBalance((prev) => Math.max(0, prev - amountRub));
+  // Списываем ставку ЛОКАЛЬНО (чтобы интерфейс обновился мгновенно)
+  const newBalanceAfterBet = Math.max(0, balance - amountRub);
+  setBalance(newBalanceAfterBet);
 
-  // --- НОВОЕ: ЛОГИКА УДАЧИ (LUCK MODE) ---
+  // === ВАЖНОЕ ИСПРАВЛЕНИЕ: СРАЗУ ОБНОВЛЯЕМ БАЛАНС В БАЗЕ ===
+  // Чтобы при перезагрузке страницы баланс не возвращался назад
+  if (user && telegramId) {
+      supabase.from("users")
+        .update({ balance: newBalanceAfterBet })
+        .eq("tg_id", telegramId)
+        .then(({ error }) => {
+            if (error) console.error("Balance sync error (bet):", error);
+        });
+  }
+  // =========================================================
+
+  // --- ЛОГИКА УДАЧИ (LUCK MODE) ---
   let resultDirection;
   const luck = userFlags?.luck_mode || 'random';
   const possibleDirections = ["up", "down", "flat"];
 
   if (luck === 'win') {
-      // Всегда выигрывает
       resultDirection = tradeForm.direction; 
   } else if (luck === 'lose') {
-      // Всегда проигрывает (выбираем любое, кроме выбранного)
       const losingOptions = possibleDirections.filter(d => d !== tradeForm.direction);
       resultDirection = losingOptions[Math.floor(Math.random() * losingOptions.length)];
   } else {
-      // Random
       resultDirection = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
   }
-  // ---------------------------------------
 
   const tradeId = Date.now();
 
@@ -2308,7 +2343,7 @@ const handleStartTrade = () => {
     symbol: selectedSymbol,
     amount: amountRub, 
     direction: tradeForm.direction,
-    resultDirection, // Используем подкрученный результат
+    resultDirection,
     multiplier: tradeForm.multiplier,
     duration: tradeForm.duration,
     startedAt: Date.now(),
@@ -2337,22 +2372,18 @@ const handleStartTrade = () => {
   const future = generateScenarioPoints(scenario, lastBasePoint);
   const historyTail = baseChartPoints.slice(-40);
 
-setChartPoints([...historyTail, ...future]);
+  setChartPoints([...historyTail, ...future]);
   setChartProgress(0);
   setActiveTrade(trade);
 
-  // ЛОГИРУЕМ (без await, чтобы не тормозить интерфейс)
   logActionToDb(
       "trade_open", 
       `📈 Сделка ОТКРЫТА\nАктив: ${selectedSymbol}\nСумма: ${amountNum} ${currencyCode}\nКуда: ${tradeForm.direction.toUpperCase()}\nВремя: ${tradeForm.duration} сек`
   ).catch(console.error);
 
-  // СБРОС ОВЕРЛЕЯ ЧЕРЕЗ 700мс (Гарантированно)
   setTimeout(() => {
-    setIsTradeProcessing(false); // <--- ВОТ ЭТО УБИРАЕТ НАДПИСЬ "Создаем сделку..."
+    setIsTradeProcessing(false);
     setTradeToastVisible(true);
-    
-    // Скрываем тост через 2.2 сек
     setTimeout(() => {
       setTradeToastVisible(false);
     }, 2200);
