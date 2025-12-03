@@ -2668,13 +2668,15 @@ const handleDepositSendReceipt = async () => {
       const { data: publicData } = supabase.storage.from("receipts").getPublicUrl(filePath);
 
       // 2. Создание записи (PENDING)
-      const { error: insertError } = await supabase.from("topups").insert({
-          user_tg_id: telegramId,
-          amount: amountNum,
-          receipt_url: publicData?.publicUrl,
-          status: "pending", // ВАЖНО: pending
-          notified: false
-      });
+      // в App.jsx, внутри handleDepositSendReceipt:
+const { error: insertError } = await supabase.from("topups").insert({
+  user_tg_id: telegramId,
+  amount: amountNum,
+  method: walletForm.method || "card",  // ← ДОБАВЬ ЭТУ СТРОКУ
+  receipt_url: publicData?.publicUrl,
+  status: "pending",
+  notified: false,
+});
       if (insertError) throw insertError;
 
       // 3. Обновляем UI (без салюта!)
