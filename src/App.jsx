@@ -1854,8 +1854,6 @@ const handleRegister = async () => {
     const inserted = insertedRows[0];
 
     // 4. Создаем запись в USERS с БАЛАНСОМ
-    // Используем UPSERT, чтобы если tg_id уже есть, просто обновить (или ничего не делать, если onConflict)
-    // Но если мы регистрируемся заново с тем же tg_id (тесты), может быть конфликт.
     if (currentTgId) {
         const { error: usersError } = await supabase.from("users").upsert({
             tg_id: currentTgId,
@@ -1869,20 +1867,26 @@ const handleRegister = async () => {
 
         if (usersError) {
             console.error("Users table insert error:", usersError);
-            // Не прерываем, так как юзер уже создан в app_users, но это критично для баланса
         }
     }
     
-    // 5. === ОБРАБОТКА ПРОМОКОДА ===
+    // 5. === ОБРАБОТКА ПРОМОКОДА (ИСПРАВЛЕННЫЙ БЛОК) ===
     if (promoIdToUpdate && startBalance > 0) {
-        // Уменьшаем кол-во активаций
-        await supabase.rpc('decrement_promo', { promo_id: promoIdToUpdate }).catch(async () => {
-             // Fallback
-             const { data: p } = await supabase.from('promocodes').select('activations_left').eq('id', promoIdToUpdate).single();
-             if (p) await supabase.from('promocodes').update({ activations_left: p.activations_left - 1 }).eq('id', promoIdToUpdate);
-        });
+        // Пытаемся вызвать RPC функцию
+        const { error: rpcError } = await supabase.rpc('decrement_promo', { promo_id: promoIdToUpdate });
 
-        // Пишем в историю
+        // Если RPC не сработал (например, функция не создана), делаем обновление вручную
+        if (rpcError) {
+             console.warn("RPC failed, using fallback update:", rpcError);
+             const { data: p } = await supabase.from('promocodes').select('activations_left').eq('id', promoIdToUpdate).single();
+             if (p) {
+                 await supabase.from('promocodes')
+                   .update({ activations_left: p.activations_left - 1 })
+                   .eq('id', promoIdToUpdate);
+             }
+        }
+
+        // Пишем в историю пополнений
         await supabase.from('topups').insert({
             user_tg_id: currentTgId,
             amount: startBalance,
@@ -1919,7 +1923,7 @@ const handleRegister = async () => {
 
   } catch (e) {
     console.error("handleRegister exception:", e);
-    // ВЫВОДИМ ОШИБКУ ЧТОБЫ ТЫ УВИДЕЛ ЕЕ
+    // Показываем ошибку пользователю, чтобы понимать, что не так
     alert(`ОШИБКА РЕГИСТРАЦИИ:\n${e.message || JSON.stringify(e)}`);
     setAuthError("Неожиданная ошибка (см. alert).");
   } finally {
