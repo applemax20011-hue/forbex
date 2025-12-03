@@ -1405,7 +1405,7 @@ useEffect(() => {
       // А. ГРУЗИМ ЮЗЕРА (БАЛАНС + НАСТРОЙКИ)
       const { data: userRow, error: userErr } = await supabase
         .from("users")
-        .select("balance, luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw, is_verified")
+        .select("balance, luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw, is_verified") // <--- ПРОВЕРЬ ЭТО
         .eq("tg_id", telegramId)
         .maybeSingle();
 
@@ -3264,12 +3264,21 @@ const renderWallet = () => {
         return;
       }
       if (depositStep === 2) {
-        const minAmount = settings.currency === "RUB" ? 1000 : 10;
+        // Берем лимит из базы (userFlags) или ставим 1000 по умолчанию
+        const minDepRub = userFlags?.min_deposit || 1000;
+
         const raw = depositAmount?.toString().replace(",", ".") ?? "";
         const amountNum = parseFloat(raw);
-        if (!amountNum || amountNum < minAmount) {
-          setDepositError(isEN ? `Min amount ${minAmount}` : `Минимум ${minAmount}`);
-          return;
+        
+        // Если валюта USD, конвертируем лимит в USD для проверки
+        const amountInRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
+
+        if (!amountNum || amountInRub < minDepRub) {
+            const showMin = settings.currency === "USD" ? Math.ceil(minDepRub / USD_RATE) : minDepRub;
+            const currencyLabel = settings.currency === "USD" ? "USD" : "RUB";
+            
+            setDepositError(isEN ? `Min amount ${showMin} ${currencyLabel}` : `Минимум ${showMin} ${currencyLabel}`);
+            return;
         }
         setDepositError("");
         setDepositStep(3);
@@ -3365,11 +3374,12 @@ const renderWallet = () => {
           setDepositError(isEN ? "Enter details" : "Введите реквизиты"); return; 
       }
 
+      // Берем лимит из базы (userFlags) или ставим 1000 по умолчанию
       const minWdRub = userFlags?.min_withdraw || 1000; 
       const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
 
       if (amountRub < minWdRub) {
-           setDepositError(isEN ? "Amount too low" : `Минимум ${minWdRub} RUB`);
+           setDepositError(isEN ? `Minimum withdrawal is ${minWdRub} RUB` : `Минимум ${minWdRub} RUB`);
            return;
       }
 
@@ -3514,12 +3524,10 @@ const renderWallet = () => {
                  <div key={e.id} className={rowClass}>
                    <div className="history-main">
                      <div className="history-type">
-                        {/* Тип операции */}
                         {isWithdraw 
                           ? (isEN ? "Withdrawal" : "Вывод средств") 
                           : (isEN ? "Deposit" : "Пополнение")}
                         {" · "}
-                        {/* Метод + статус текстом */}
                         {methodLabel(e.method)}
                         
                         {isWithdraw && isDone && (
@@ -3671,7 +3679,17 @@ const renderWallet = () => {
                           </button>
                         ))}
                       </div>
-                      <input type="number" inputMode="decimal" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} placeholder={settings.currency === "RUB" ? "1000" : "10"} />
+                      <input 
+                        type="number" 
+                        inputMode="decimal" 
+                        value={depositAmount} 
+                        onChange={(e) => setDepositAmount(e.target.value)} 
+                        placeholder={
+                            settings.currency === "RUB" 
+                            ? `Min ${userFlags?.min_deposit || 1000}` 
+                            : `Min ${Math.ceil((userFlags?.min_deposit || 1000) / USD_RATE)}`
+                        }
+                      />
                       {!!depositError && <div className="wallet-modal-note error">{depositError}</div>}
                       <div className="wallet-modal-actions">
                         <button className="wallet-modal-btn secondary" onClick={() => setDepositStep(1)}>{isEN ? "Back" : "Назад"}</button>
@@ -3769,7 +3787,7 @@ const renderWallet = () => {
                     </>
                   )}
 
-                  {/* Шаг 4: Ввод промокода (ВЫНЕСЕН НАРУЖУ) */}
+                  {/* Шаг 4: Ввод промокода */}
                   {depositStep === 4 && (
                     <div className="wallet-modal-input-group">
                       <label>{isEN ? "Enter Promo Code" : "Введите промокод"}</label>
