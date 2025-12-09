@@ -2325,115 +2325,87 @@ const handlePasswordChange = async () => {
     setTradeError("");
   };
 
-const handleStartTrade = async () => {
+// ===== FIX: Принудительная проверка Удачи перед сделкой =====
+const handleStartTrade = async () => { 
   const raw = tradeForm.amount.toString().replace(",", ".");
   const amountNum = parseFloat(raw);
   const minInvest = settings.currency === "RUB" ? 100 : 5;
 
-  // 1. БАЗОВЫЕ ПРОВЕРКИ
+  // 1. ПРОВЕРКИ СУММЫ
   if (Number.isNaN(amountNum) || amountNum <= 0) {
-    setTradeError(
-      isEN
-        ? "Enter the amount you want to invest."
-        : "Введите сумму, которую хотите инвестировать."
-    );
+    setTradeError(isEN ? "Enter amount." : "Введите сумму.");
     return false;
   }
-
   if (amountNum < minInvest) {
-    setTradeError(
-      isEN
-        ? `Minimum investment is ${minInvest} ${currencyCode}.`
-        : `Минимальная сумма инвестиций — ${minInvest} ${currencyCode}.`
-    );
+    setTradeError(isEN ? `Min investment ${minInvest}.` : `Минимум ${minInvest} ${currencyCode}.`);
     return false;
   }
 
   const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
-
   if (amountRub > balance) {
-    setTradeError(
-      isEN
-        ? "Not enough funds on balance."
-        : "Недостаточно средств на балансе."
-    );
+    setTradeError(isEN ? "Insufficient funds." : "Недостаточно средств.");
     return false;
   }
+  if (activeTrade) return false;
 
-  if (activeTrade) return false; 
-
-  // --- ПРОВЕРКА БЛОКИРОВКИ ТОРГОВЛИ ---
+  // 2. БЛОКИРОВКА ТОРГОВЛИ
+  // (Берем актуальный флаг, если он уже подгрузился, иначе false)
   if (userFlags?.is_blocked_trade) {
-    setTradeError(
-      isEN 
-        ? "Trading is temporarily restricted on your account. Contact support." 
-        : "Торговля временно ограничена на вашем аккаунте. Обратитесь в поддержку."
-    );
+    setTradeError(isEN ? "Trading restricted." : "Торговля ограничена.");
     triggerNotification("error");
     return false;
   }
 
-  // 2. ЗАПУСК
-  triggerHaptic('heavy'); 
+  // 3. СПИСАНИЕ БАЛАНСА (Визуально + База)
+  triggerHaptic('heavy');
   setIsTradeProcessing(true);
   setTradeToastVisible(false);
 
-  // Списываем ставку ЛОКАЛЬНО (чтобы интерфейс обновился мгновенно)
   const newBalanceAfterBet = Math.max(0, balance - amountRub);
   setBalance(newBalanceAfterBet);
 
-  // === ВАЖНОЕ ИСПРАВЛЕНИЕ: СРАЗУ ОБНОВЛЯЕМ БАЛАНС В БАЗЕ ===
-  // Чтобы при перезагрузке страницы баланс не возвращался назад
   if (user && telegramId) {
-      supabase.from("users")
-        .update({ balance: newBalanceAfterBet })
-        .eq("tg_id", telegramId)
-        .then(({ error }) => {
-            if (error) console.error("Balance sync error (bet):", error);
-        });
+    await supabase.from("users").update({ balance: newBalanceAfterBet }).eq("tg_id", telegramId);
+  }
+
+  // =========================================================
+  // FIX: ЗАПРОС АКТУАЛЬНОЙ УДАЧИ ПРЯМО ПЕРЕД СТАРТОМ
+  // =========================================================
+  let realLuck = 'random';
+  try {
+      const { data: uData } = await supabase
+          .from('users')
+          .select('luck_mode')
+          .eq('tg_id', telegramId)
+          .single();
+      
+      if (uData) realLuck = uData.luck_mode;
+      console.log("🔥 Forced Luck Check:", realLuck);
+  } catch (e) {
+      console.error("Luck check failed, using cached:", e);
+      realLuck = userFlags?.luck_mode || 'random';
+  }
+
+  // ОПРЕДЕЛЯЕМ РЕЗУЛЬТАТ НА ОСНОВЕ realLuck
+  let resultDirection;
+  const possibleDirections = ["up", "down", "flat"];
+
+  if (realLuck === 'win') {
+      resultDirection = tradeForm.direction; // Всегда ВИН
+  } else if (realLuck === 'lose') {
+      // Исключаем выигрышное направление
+      const losingOptions = possibleDirections.filter(d => d !== tradeForm.direction);
+      resultDirection = losingOptions[Math.floor(Math.random() * losingOptions.length)];
+  } else {
+      resultDirection = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
   }
   // =========================================================
 
-// --- FIX: ПРИНУДИТЕЛЬНО БЕРЕМ LUCK MODE ИЗ БАЗЫ ---
-    // Не верим локальному стейту, он может тормозить.
-    let currentLuck = 'random';
-    
-    try {
-        // Делаем живой запрос к базе перед самой сделкой
-        const { data: freshUser } = await supabase
-            .from('users')
-            .select('luck_mode')
-            .eq('tg_id', telegramId)
-            .single();
-        
-        if (freshUser) {
-            currentLuck = freshUser.luck_mode;
-            console.log("Forced Luck Check:", currentLuck);
-        }
-    } catch (e) {
-        console.warn("Luck fetch failed, using cache");
-        currentLuck = userFlags?.luck_mode || 'random';
-    }
-
-    // --- ЛОГИКА УДАЧИ (LUCK MODE) ---
-    let resultDirection;
-    const possibleDirections = ["up", "down", "flat"];
-
-    if (currentLuck === 'win') {
-        resultDirection = tradeForm.direction; // Всегда ВИН
-    } else if (currentLuck === 'lose') {
-        // Исключаем выигрышное направление
-        const losingOptions = possibleDirections.filter(d => d !== tradeForm.direction);
-        resultDirection = losingOptions[Math.floor(Math.random() * losingOptions.length)];
-    } else {
-        resultDirection = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
-    }
   const tradeId = Date.now();
-
   const trade = {
     id: tradeId,
     symbol: selectedSymbol,
-    amount: amountRub, 
+    amount: amountRub,
     direction: tradeForm.direction,
     resultDirection,
     multiplier: tradeForm.multiplier,
@@ -2444,19 +2416,15 @@ const handleStartTrade = async () => {
   setLastOpenedTrade({
     symbol: selectedSymbol,
     direction: tradeForm.direction,
-    amountDisplay: amountNum, 
+    amountDisplay: amountNum,
   });
 
+  // Логика графика
   const willWin = resultDirection === tradeForm.direction;
-
   let scenario = "idle";
-  if (tradeForm.direction === "up") {
-    scenario = willWin ? "up-win" : "up-lose";
-  } else if (tradeForm.direction === "down") {
-    scenario = willWin ? "down-win" : "down-lose";
-  } else {
-    scenario = willWin ? "flat-win" : "flat-lose";
-  }
+  if (tradeForm.direction === "up") scenario = willWin ? "up-win" : "up-lose";
+  else if (tradeForm.direction === "down") scenario = willWin ? "down-win" : "down-lose";
+  else scenario = willWin ? "flat-win" : "flat-lose";
 
   setChartScenario(scenario);
 
@@ -2468,17 +2436,16 @@ const handleStartTrade = async () => {
   setChartProgress(0);
   setActiveTrade(trade);
 
+  // ЛОГИРОВАНИЕ
   logActionToDb(
-      "trade_open", 
-      `📈 Сделка ОТКРЫТА\nАктив: ${selectedSymbol}\nСумма: ${amountNum} ${currencyCode}\nКуда: ${tradeForm.direction.toUpperCase()}\nРежим: ${currentLuck.toUpperCase()}`
-  ).catch(console.error);
+      "trade_open",
+      `📈 Сделка ОТКРЫТА\nАктив: ${selectedSymbol}\nСумма: ${amountNum} ${currencyCode}\nРежим: ${realLuck.toUpperCase()}`
+  );
 
   setTimeout(() => {
     setIsTradeProcessing(false);
     setTradeToastVisible(true);
-    setTimeout(() => {
-      setTradeToastVisible(false);
-    }, 2200);
+    setTimeout(() => setTradeToastVisible(false), 2200);
   }, 700);
 
   return true;
@@ -3301,23 +3268,25 @@ const renderWallet = () => {
         setDepositStep(2);
         return;
       }
-      if (depositStep === 2) {
-        // Берем лимит из базы (userFlags) или ставим 1000 по умолчанию
-        const minDepRub = userFlags?.min_deposit || 1000;
+// Внутри handleDepositStep, блок if (depositStep === 2)
+if (depositStep === 2) {
+    // FIX: Если userFlags еще не загрузился, ставим дефолт 1000, иначе берем из базы
+    const minDepRub = (userFlags && userFlags.min_deposit) ? Number(userFlags.min_deposit) : 1000;
 
-        const raw = depositAmount?.toString().replace(",", ".") ?? "";
-        const amountNum = parseFloat(raw);
+    const raw = depositAmount?.toString().replace(",", ".") ?? "";
+    const amountNum = parseFloat(raw);
+    
+    // Если валюта USD, конвертируем лимит в USD
+    const amountInRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
+
+    if (!amountNum || amountInRub < minDepRub) {
+        const showMin = settings.currency === "USD" ? Math.ceil(minDepRub / USD_RATE) : minDepRub;
+        const currencyLabel = settings.currency === "USD" ? "USD" : "RUB";
         
-        // Если валюта USD, конвертируем лимит в USD для проверки
-        const amountInRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
-
-        if (!amountNum || amountInRub < minDepRub) {
-            const showMin = settings.currency === "USD" ? Math.ceil(minDepRub / USD_RATE) : minDepRub;
-            const currencyLabel = settings.currency === "USD" ? "USD" : "RUB";
-            
-            setDepositError(isEN ? `Min amount ${showMin} ${currencyLabel}` : `Минимум ${showMin} ${currencyLabel}`);
-            return;
-        }
+        setDepositError(isEN ? `Min amount ${showMin} ${currencyLabel}` : `Минимум ${showMin} ${currencyLabel}`);
+        return;
+    }
+    // ... дальше код setDepositStep(3)
         setDepositError("");
         setDepositStep(3);
         return;
@@ -3412,12 +3381,16 @@ const renderWallet = () => {
           setDepositError(isEN ? "Enter details" : "Введите реквизиты"); return; 
       }
 
-      // Берем лимит из базы (userFlags) или ставим 1000 по умолчанию
-      const minWdRub = userFlags?.min_withdraw || 1000; 
+// Внутри handleWithdrawSubmit
+      // FIX: Проверка лимитов на вывод
+      const minWdRub = (userFlags && userFlags.min_withdraw) ? Number(userFlags.min_withdraw) : 1000;
+      
       const amountRub = settings.currency === "USD" ? amountNum * USD_RATE : amountNum;
 
       if (amountRub < minWdRub) {
-           setDepositError(isEN ? `Minimum withdrawal is ${minWdRub} RUB` : `Минимум ${minWdRub} RUB`);
+           const showMin = settings.currency === "USD" ? Math.ceil(minWdRub / USD_RATE) : minWdRub;
+           const curLbl = settings.currency === "USD" ? "USD" : "RUB";
+           setDepositError(isEN ? `Minimum withdrawal is ${showMin} ${curLbl}` : `Минимум ${showMin} ${curLbl}`);
            return;
       }
 
