@@ -879,27 +879,34 @@ const accountStats = useMemo(() => {
 useEffect(() => {
   if (!user) return;
 
-  async function loadUserHistoriesFromSupabase() {
+// Внутри useEffect, где объявляется эта функция
+async function loadUserHistoriesFromSupabase() {
     try {
+      // КРИТИЧНО: Если нет user.id, ничего не грузим, чтобы не показать чужое
+      if (!user || !user.id) return;
+
       const [loginsRes, tradesRes] = await Promise.all([
         supabase
           .from("login_history")
           .select("id, event_type, login, email, device, ts")
-          .eq("user_id", user.id)
+          .eq("user_id", user.id) // <--- ВОТ ЭТОТ ФИЛЬТР ОБЯЗАТЕЛЕН
           .order("ts", { ascending: false })
-          .limit(100),
+          .limit(50),
         supabase
           .from("trade_history")
           .select(
             "id, symbol, amount, direction, multiplier, duration, status, profit, started_at, finished_at"
           )
-          .eq("user_id", user.id)
+          .eq("user_id", user.id) // <--- И ЗДЕСЬ ТОЖЕ
           .order("finished_at", { ascending: false })
-          .limit(100),
+          .limit(50),
       ]);
 
       if (!loginsRes.error) {
-        const loginRows = (loginsRes.data || []).map((row) => ({
+        // Доп. защита: фильтруем на клиенте, если база вернула лишнее
+        const myLogins = (loginsRes.data || []).filter(item => item.email === user.email || item.login === user.login);
+        
+        const loginRows = myLogins.map((row) => ({
           id: row.id,
           type: row.event_type,
           login: row.login,
@@ -908,8 +915,6 @@ useEffect(() => {
           ts: row.ts ? new Date(row.ts).getTime() : Date.now(),
         }));
         setLoginHistory(loginRows);
-      } else {
-        console.error("loadUserHistories logins error:", loginsRes.error);
       }
 
       if (!tradesRes.error) {
@@ -918,7 +923,7 @@ useEffect(() => {
           symbol: row.symbol,
           amount: Number(row.amount || 0),
           direction: row.direction,
-          resultDirection: row.result_direction, // в таблице нет — будет undefined, но логика не ломается
+          resultDirection: row.result_direction,
           multiplier: row.multiplier,
           duration: row.duration,
           profit: Number(row.profit || 0),
@@ -931,13 +936,11 @@ useEffect(() => {
             : undefined,
         }));
         setTradeHistory(tradeRows);
-      } else {
-        console.error("loadUserHistories trades error:", tradesRes.error);
       }
     } catch (e) {
       console.error("loadUserHistoriesFromSupabase exception", e);
     }
-  }
+}
 
   loadUserHistoriesFromSupabase();
 }, [user]);
@@ -1395,55 +1398,56 @@ useEffect(() => {
     return () => clearTimeout(id);
   }, [toast]);
 
-// 2. ЗАГРУЗКА ДАННЫХ ИЗ БАЗЫ
+// 2. ЗАГРУЗКА ДАННЫХ ИЗ БАЗЫ (ЗАЩИЩЕННАЯ)
   const loadWalletDataFromSupabase = useCallback(async () => {
-    if (!telegramId) return; // Если ID нет, не грузим
+    if (!telegramId) return; 
 
     try {
-      console.log("🔄 Loading data for:", telegramId);
-      
-      // А. ГРУЗИМ ЮЗЕРА (БАЛАНС + НАСТРОЙКИ)
-      const { data: userRow, error: userErr } = await supabase
+      // А. ГРУЗИМ ЮЗЕРА
+      const { data: userRow } = await supabase
         .from("users")
-        .select("balance, luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw, is_verified") // <--- ПРОВЕРЬ ЭТО
-        .eq("tg_id", telegramId)
+        .select("balance, luck_mode, is_blocked_trade, is_blocked_withdraw, min_deposit, min_withdraw, is_verified")
+        .eq("tg_id", telegramId) // <--- Фильтр по ID
         .maybeSingle();
 
       if (userRow) {
-        console.log("💰 Balance from DB:", userRow.balance);
-        setBalance(Number(userRow.balance)); // <--- ВОТ ГЛАВНЫЙ ФИКС
+        setBalance(Number(userRow.balance));
         setUserFlags(userRow);
-      } else if (!userErr) {
-        // Если юзера нет в базе — создаем его
-        console.log("🆕 User not found in DB, creating...");
-        await supabase.from("users").insert({ 
-            tg_id: telegramId, 
-            balance: 0,
-            username: telegramUsername || "User"
-        });
       }
 
-      // Б. ГРУЗИМ ИСТОРИЮ (ПОПОЛНЕНИЯ + ВЫВОДЫ)
+      // Б. ГРУЗИМ ИСТОРИЮ (Строго по user_tg_id)
       const [topups, withdrawals] = await Promise.all([
-        supabase.from("topups").select("*").eq("user_tg_id", telegramId).order("created_at", { ascending: false }),
-        supabase.from("wallet_withdrawals").select("*").eq("user_tg_id", telegramId).order("ts", { ascending: false })
+        supabase.from("topups")
+            .select("*")
+            .eq("user_tg_id", telegramId) // <--- ОБЯЗАТЕЛЬНО
+            .order("created_at", { ascending: false })
+            .limit(50),
+        supabase.from("wallet_withdrawals")
+            .select("*")
+            .eq("user_tg_id", telegramId) // <--- ОБЯЗАТЕЛЬНО
+            .order("ts", { ascending: false })
+            .limit(50)
       ]);
 
-      // В. СОБИРАЕМ ИСТОРИЮ В ОДИН СПИСОК
       const history = [];
       
       (topups.data || []).forEach(t => {
+        // Двойная проверка на всякий случай
+        if(String(t.user_tg_id) !== String(telegramId)) return;
+        
         history.push({
           id: `dep-${t.id}`,
           type: "deposit",
           amount: t.amount,
           method: t.method || "card",
-          status: t.status, // pending, approved, rejected
+          status: t.status,
           ts: new Date(t.created_at).getTime()
         });
       });
 
       (withdrawals.data || []).forEach(w => {
+        if(String(w.user_tg_id) !== String(telegramId)) return;
+
         history.push({
           id: `wd-${w.id}`,
           type: "withdraw",
