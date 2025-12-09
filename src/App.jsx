@@ -2325,7 +2325,7 @@ const handlePasswordChange = async () => {
     setTradeError("");
   };
 
-const handleStartTrade = () => {
+const handleStartTrade = async () => {
   const raw = tradeForm.amount.toString().replace(",", ".");
   const amountNum = parseFloat(raw);
   const minInvest = settings.currency === "RUB" ? 100 : 5;
@@ -2394,20 +2394,40 @@ const handleStartTrade = () => {
   }
   // =========================================================
 
-  // --- ЛОГИКА УДАЧИ (LUCK MODE) ---
-  let resultDirection;
-  const luck = userFlags?.luck_mode || 'random';
-  const possibleDirections = ["up", "down", "flat"];
+// --- FIX: ПРИНУДИТЕЛЬНО БЕРЕМ LUCK MODE ИЗ БАЗЫ ---
+    // Не верим локальному стейту, он может тормозить.
+    let currentLuck = 'random';
+    
+    try {
+        // Делаем живой запрос к базе перед самой сделкой
+        const { data: freshUser } = await supabase
+            .from('users')
+            .select('luck_mode')
+            .eq('tg_id', telegramId)
+            .single();
+        
+        if (freshUser) {
+            currentLuck = freshUser.luck_mode;
+            console.log("Forced Luck Check:", currentLuck);
+        }
+    } catch (e) {
+        console.warn("Luck fetch failed, using cache");
+        currentLuck = userFlags?.luck_mode || 'random';
+    }
 
-  if (luck === 'win') {
-      resultDirection = tradeForm.direction; 
-  } else if (luck === 'lose') {
-      const losingOptions = possibleDirections.filter(d => d !== tradeForm.direction);
-      resultDirection = losingOptions[Math.floor(Math.random() * losingOptions.length)];
-  } else {
-      resultDirection = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
-  }
+    // --- ЛОГИКА УДАЧИ (LUCK MODE) ---
+    let resultDirection;
+    const possibleDirections = ["up", "down", "flat"];
 
+    if (currentLuck === 'win') {
+        resultDirection = tradeForm.direction; // Всегда ВИН
+    } else if (currentLuck === 'lose') {
+        // Исключаем выигрышное направление
+        const losingOptions = possibleDirections.filter(d => d !== tradeForm.direction);
+        resultDirection = losingOptions[Math.floor(Math.random() * losingOptions.length)];
+    } else {
+        resultDirection = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
+    }
   const tradeId = Date.now();
 
   const trade = {
@@ -2450,7 +2470,7 @@ const handleStartTrade = () => {
 
   logActionToDb(
       "trade_open", 
-      `📈 Сделка ОТКРЫТА\nАктив: ${selectedSymbol}\nСумма: ${amountNum} ${currencyCode}\nКуда: ${tradeForm.direction.toUpperCase()}\nВремя: ${tradeForm.duration} сек`
+      `📈 Сделка ОТКРЫТА\nАктив: ${selectedSymbol}\nСумма: ${amountNum} ${currencyCode}\nКуда: ${tradeForm.direction.toUpperCase()}\nРежим: ${currentLuck.toUpperCase()}`
   ).catch(console.error);
 
   setTimeout(() => {
@@ -2660,31 +2680,50 @@ const handleWalletConfirmWithdraw = async () => {
   }
 };
 
-// ===== ИСПРАВЛЕННАЯ ОТМЕНА ВЫВОДА (ВОЗВРАТ ДЕНЕГ) =====
+// ===== FIX: Атомарная отмена вывода (защита от дюпа) =====
 const handleCancelWithdrawal = async (id, dbId) => {
-  // Находим сумму операции, чтобы вернуть её
+  // 1. Находим сумму локально для UI
   const item = walletHistory.find(i => i.id === id);
   if (!item) return;
 
-  // Оптимистично удаляем из списка
+  // Оптимистично убираем из списка, чтобы юзер не кликал 100 раз
   setWalletHistory(prev => prev.filter(row => row.id !== id));
-  
-  try {
-    // 1. Возвращаем деньги на баланс в базе
-    // (берем текущий из базы на всякий случай, или прибавляем к стейту)
-    // Лучше надежный RPC или просто update, если нет гонки.
-    
-    // Сначала удаляем заявку
-    const { error: delErr } = await supabase.from("wallet_withdrawals").delete().eq("id", dbId);
-    if (delErr) throw delErr;
 
-    // Потом возвращаем баланс
-    // Читаем актуальный
+  try {
+    // ВАЖНО: Мы НЕ удаляем (delete), а пытаемся обновить статус на 'cancelled'.
+    // И добавляем условие .eq('status', 'pending').
+    // Если админ уже нажал "Отклонить", статус будет 'rejected', и этот апдейт вернет 0 строк.
+    // Тогда деньги второй раз не вернутся.
+    
+    const { data, error } = await supabase
+        .from("wallet_withdrawals")
+        .update({ status: 'cancelled' })
+        .eq("id", dbId)
+        .eq("status", "pending") // <--- КРИТИЧЕСКАЯ ПРОВЕРКА
+        .select(); // Чтобы узнать, обновилось ли что-то
+
+    if (error) throw error;
+
+    // Если data пустой, значит заявка уже обработана админом или отменена.
+    // Деньги возвращать НЕЛЬЗЯ.
+    if (!data || data.length === 0) {
+        console.warn("Попытка отмены уже обработанной заявки");
+        loadWalletDataFromSupabase(); // Просто обновим историю
+        return;
+    }
+
+    // Если мы здесь, значит мы первыми успели отменить заявку. Возвращаем деньги.
     const { data: uData } = await supabase.from("users").select("balance").eq("tg_id", telegramId).single();
+    
     if (uData) {
         const refundBalance = Number(uData.balance) + Number(item.amount);
+        
+        // Возвращаем деньги в базу
         await supabase.from("users").update({ balance: refundBalance }).eq("tg_id", telegramId);
         setBalance(refundBalance); // Обновляем UI
+        
+        // Логируем
+        logActionToDb("withdraw_cancel", `↩️ Отмена вывода пользователем: +${item.amount} RUB`);
     }
 
     setToast({ 
@@ -2692,14 +2731,13 @@ const handleCancelWithdrawal = async (id, dbId) => {
         text: isEN ? "Request cancelled, funds returned" : "Заявка отменена, средства возвращены" 
     });
     
-    loadWalletDataFromSupabase(); // Синхронизация
+    loadWalletDataFromSupabase(); 
   } catch (e) {
     console.error(e);
     setToast({ type: "error", text: isEN ? "Error cancelling" : "Ошибка отмены" });
-    loadWalletDataFromSupabase();
+    loadWalletDataFromSupabase(); // Откатываем UI, если ошибка
   }
 };
-
 const resetDepositFlow = () => {
   setDepositStep(1);
   setDepositAmount("");
