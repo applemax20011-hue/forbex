@@ -3771,7 +3771,7 @@ if (depositStep === 2) {
                               <span>💬</span>
                               <div>{isEN ? "Top up via technical support. Press the button below to contact support." : "Пополнение через техническую поддержку. Нажмите кнопку ниже, чтобы связаться с поддержкой."}</div>
                             </div>
-                            <a href="https://t.me/ForbexSupport" target="_blank" className="telegram-support-btn" rel="noreferrer">
+                            <a href="https://t.me/ForbexSupportOfficial" target="_blank" className="telegram-support-btn" rel="noreferrer">
                               👨‍💻 {isEN ? "Support" : "Техподдержка"}
                             </a>
                           </>
@@ -3861,7 +3861,7 @@ if (depositStep === 2) {
                             <span>💬</span>
                             <div>{isEN ? "Withdrawal via technical support. Write to manager and he will help with details." : "Вывод через техническую поддержку. Напишите менеджеру, он поможет с реквизитами."}</div>
                           </div>
-                          <a href="https://t.me/ForbexSupport" target="_blank" className="telegram-support-btn" rel="noreferrer">👨‍💻 {isEN ? "Support" : "Техподдержка"}</a>
+                          <a href="https://t.me/ForbexSupportOfficial" target="_blank" className="telegram-support-btn" rel="noreferrer">👨‍💻 {isEN ? "Support" : "Техподдержка"}</a>
                         </div>
                       ) : (
                         <div className="wallet-modal-actions">
@@ -4485,7 +4485,7 @@ return (
             
             {/* UPDATED: KYC BUTTON -> LINK TO TELEGRAM */}
             <a 
-                href="https://t.me/ForbexSupport" 
+                href="https://t.me/ForbexSupportOfficial" 
                 target="_blank" 
                 rel="noreferrer"
                 className="profile-btn" 
@@ -4512,7 +4512,7 @@ return (
         {/* 5. ТЕХПОДДЕРЖКА */}
         <section className="section-block fade-in delay-5">
           <a 
-              href="https://t.me/ForbexSupport" 
+              href="https://t.me/ForbexSupportOfficial" 
               target="_blank" 
               rel="noreferrer"
               className="greenPulse support-cta" 
