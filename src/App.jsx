@@ -375,14 +375,16 @@ const SlotDigit = ({ value }) => {
   );
 };
 
+// === FIX: ОТОБРАЖЕНИЕ МЕЛКИХ СУММ ===
 const TickerNumber = ({ value, currency }) => {
-  // Форматируем число (например: 12 345.67)
+  // Если число меньше 1 (например 0.0045), показываем 6 знаков. Иначе 2.
+  const isSmall = value > 0 && value < 10; 
+  
   const formatted = value.toLocaleString("ru-RU", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: isSmall ? 6 : 2, // <--- БЫЛО 2, СТАЛО 6
   });
 
-  // Разбиваем строку на символы
   const chars = formatted.split("");
 
   return (
@@ -645,22 +647,28 @@ const [adminWallets, setAdminWallets] = useState({
   
 const logActionToDb = async (type, details) => {
   try {
-    // Приоритет: текущий Telegram ID из стейта, потом локальное хранилище, потом юзер
-    const tgId = telegramId || Number(localStorage.getItem("forbex_debug_id")) || user?.tg_id;
+    // 1. Ищем ID везде где можно
+    let tgId = telegramId;
+    if (!tgId && user?.tg_id) tgId = user.tg_id;
+    if (!tgId) tgId = Number(localStorage.getItem("forbex_debug_id"));
+
+    // 2. Если все равно нет ID, пробуем найти по user.id через базу (крайний случай)
+    if (!tgId && user?.id) {
+       const { data } = await supabase.from('app_users').select('tg_id').eq('id', user.id).single();
+       if (data) tgId = data.tg_id;
+    }
 
     if (!tgId) {
-      console.warn("logActionToDb: нет tg_id, лог пропущен");
+      console.warn("⚠️ Лог не отправлен: не найден TG ID");
       return;
     }
 
-    const { error } = await supabase.from("action_logs").insert({
+    await supabase.from("action_logs").insert({
       tg_id: tgId,
       event_type: type,
       details,
       notified: false,
     });
-
-    if (error) console.error("Ошибка лога:", error);
   } catch (err) {
     console.error("log exception:", err);
   }
