@@ -674,93 +674,63 @@ const logActionToDb = async (type, details) => {
   }
 };
 
-  
-const finishTrade = (trade) => {
-  const win = trade.resultDirection === trade.direction; // up / down / flat
-  
-  // Считаем профит (чистую прибыль или убыток)
-  // Если победа: (ставка * множитель) - ставка = чистый навар
-  // Если проигрыш: -ставка
+// ===== FIX: ЗАВЕРШЕНИЕ СДЕЛКИ =====
+const finishTrade = async (trade) => {
+  const win = trade.resultDirection === trade.direction;
   const profit = win ? trade.amount * (trade.multiplier - 1) : -trade.amount;
 
-  // Хаптик + конфетти
+  // Визуал
   if (win) {
     triggerNotification("success");
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ["#f97316", "#fbbf24", "#ffffff"],
-    });
+    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
   } else {
     triggerNotification("error");
   }
 
-  // === ИСПРАВЛЕНИЕ БАЛАНСА ===
-  // Мы НЕ используем setBalance((prev) => ...) здесь, чтобы избежать рассинхрона.
-  // Мы рассчитываем новый баланс от ТЕКУЩЕГО (который уже без ставки) и отправляем в базу.
-  // Realtime сам обновит интерфейс.
-  
-  const revenue = win ? trade.amount * trade.multiplier : 0; // Сколько вернуть на счет
-  
-  if (revenue > 0 && user && telegramId) {
-      // Сначала читаем актуальный баланс из базы (на всякий случай), потом обновляем
-      // Но для скорости просто прибавим к текущему стейту и отправим
-      const newTotal = balance + revenue;
+  // Обновляем баланс в базе (если победа)
+  if (win) {
+      const revenue = trade.amount * trade.multiplier;
+      // ВАЖНО: Читаем актуальный баланс, чтобы не сбить
+      const { data: u } = await supabase.from("users").select("balance").eq("tg_id", telegramId).single();
+      const currentBal = u ? Number(u.balance) : balance;
+      const newTotal = currentBal + revenue;
       
-      // Оптимистичное обновление (чтобы цифры поменялись мгновенно)
-      setBalance(newTotal);
-      
-      // Отправка в базу
-      supabase.from("users")
-        .update({ balance: newTotal })
-        .eq("tg_id", telegramId)
-        .then(({ error }) => {
-            if (error) console.error("Win payout error:", error);
-        });
+      setBalance(newTotal); // UI
+      await supabase.from("users").update({ balance: newTotal }).eq("tg_id", telegramId);
   }
-  // Если проиграл - ничего делать не надо, деньги уже списаны в handleStartTrade
 
   const finishedAt = Date.now();
+  const resultStatus = win ? "win" : "lose";
 
-  const finished = {
-    ...trade,
-    finishedAt,
-    status: win ? "win" : "lose",
-    profit,
-  };
-
+  // Обновляем историю в UI
+  const finished = { ...trade, finishedAt, status: resultStatus, profit };
   setTradeHistory((prev) => [finished, ...prev]);
   setActiveTrade(null);
+  
+  // УДАЛЯЕМ ИЗ LOCALSTORAGE (Сделка закончена)
+  localStorage.removeItem("forbex_active_trade");
 
   setLastTradeResult({
-    status: win ? "win" : "lose",
-    chartDirection: trade.resultDirection,
-    message: win
-      ? isEN
-        ? "Congratulations! The asset price moved in your direction."
-        : "Поздравляем! Стоимость актива пошла в вашу сторону."
-      : isEN
-      ? "The asset price moved against your forecast. The investment failed."
-      : "Стоимость актива пошла против вашего прогноза. Инвестиция не удалась.",
+    status: resultStatus,
+    message: win ? (isEN ? "You won!" : "Вы выиграли!") : (isEN ? "You lost." : "Сделка убыточна."),
   });
 
-  setChartDirection(trade.resultDirection);
-
-  // В КОНЦЕ ФУНКЦИИ:
-  const resultText = win ? "✅ WIN (+PROFIT)" : "❌ LOSE (Потеря)";
+  // ЛОГИ
   const profitStr = win ? `+${profit.toFixed(2)}` : `-${trade.amount.toFixed(2)}`;
-  
   logActionToDb(
       "trade_close", 
-      `🏁 Сделка ЗАВЕРШЕНА\nРезультат: ${resultText}\nПрофит: ${profitStr} ${currencyCode}\nАктив: ${trade.symbol}`
+      `🏁 Сделка ЗАВЕРШЕНА\nРезультат: ${win ? '✅ WIN' : '❌ LOSE'}\nПрофит: ${profitStr} ${currencyCode}`
   );
 
-  // сохраняем сделку в Supabase
-  (async () => {
-    try {
-      if (!user) return;
-
+  // ОБНОВЛЯЕМ ЗАПИСЬ В БД (или создаем, если dbId нет)
+  if (trade.dbId) {
+      await supabase.from("trade_history").update({
+          status: resultStatus,
+          profit: profit,
+          finished_at: new Date(finishedAt).toISOString()
+      }).eq('id', trade.dbId);
+  } else {
+      // Фолбэк, если вдруг dbId потерялся
       await supabase.from("trade_history").insert({
         user_id: user.id,
         symbol: trade.symbol,
@@ -768,15 +738,12 @@ const finishTrade = (trade) => {
         direction: trade.direction,
         multiplier: trade.multiplier,
         duration: trade.duration,
-        status: win ? "win" : "lose",
+        status: resultStatus,
         profit,
         started_at: new Date(trade.startedAt).toISOString(),
         finished_at: new Date(finishedAt).toISOString(),
       });
-    } catch (e) {
-      console.error("trade_history insert error:", e);
-    }
-  })();
+  }
 };
 
 
@@ -1640,6 +1607,44 @@ useEffect(() => {
       clearTimeout(t2);
     };
   }, [activeTab, showLanding, authMode, user]);
+  
+// === FIX: ВОССТАНОВЛЕНИЕ СДЕЛКИ ПОСЛЕ ЗАКРЫТИЯ ===
+  useEffect(() => {
+      const savedTrade = localStorage.getItem("forbex_active_trade");
+      if (savedTrade && !activeTrade) {
+          try {
+              const parsed = JSON.parse(savedTrade);
+              const now = Date.now();
+              const endTime = parsed.startedAt + (parsed.duration * 1000);
+              
+              if (now < endTime) {
+                  // Сделка еще идет — восстанавливаем
+                  console.log("♻️ Restoring active trade...");
+                  
+                  // Восстанавливаем сценарий графика для красоты
+                  const willWin = parsed.resultDirection === parsed.direction;
+                  let scenario = "idle";
+                  if (parsed.direction === "up") scenario = willWin ? "up-win" : "up-lose";
+                  else if (parsed.direction === "down") scenario = willWin ? "down-win" : "down-lose";
+                  else scenario = willWin ? "flat-win" : "flat-lose";
+                  
+                  setChartScenario(scenario);
+                  // Генерим точки
+                  const future = generateScenarioPoints(scenario, { value: 100, time: Math.floor(now/1000) }); 
+                  setChartPoints(future); // Упрощенно
+                  
+                  setActiveTrade(parsed);
+              } else {
+                  // Время вышло пока нас не было — завершаем сделку
+                  console.log("⌛️ Finishing expired trade...");
+                  finishTrade(parsed);
+              }
+          } catch (e) {
+              console.error("Trade restore error", e);
+              localStorage.removeItem("forbex_active_trade");
+          }
+      }
+  }, []); // Запускается 1 раз при старте
   // ===========================================
   // ======================================
   const showOverlay = (title, subtitle, callback, delay = 1100) => {
@@ -2107,6 +2112,13 @@ const handleLogin = async () => {
       createdAt: createdAtTs,
       tg_id: row.tg_id, // Добавляем tg_id
     };
+	
+	// === FIX: ВОССТАНАВЛИВАЕМ ID, ЧТОБЫ БАЛАНС ГРУЗИЛСЯ ===
+    if (row.tg_id) {
+        setTelegramId(row.tg_id); 
+        localStorage.setItem("forbex_debug_id", row.tg_id); // Дублируем в память
+    }
+    // ======================================================
 
     let loadedSettings = null;
     try {
@@ -2337,19 +2349,18 @@ const handlePasswordChange = async () => {
     setTradeError("");
   };
 
-// ===== FIX: Принудительная проверка Удачи перед сделкой =====
-const handleStartTrade = async () => { 
+// ===== FIX: УМНАЯ СДЕЛКА (Не пропадает при закрытии + Детальные логи) =====
+const handleStartTrade = async () => {
   const raw = tradeForm.amount.toString().replace(",", ".");
   const amountNum = parseFloat(raw);
   const minInvest = settings.currency === "RUB" ? 100 : 5;
 
-  // 1. ПРОВЕРКИ СУММЫ
   if (Number.isNaN(amountNum) || amountNum <= 0) {
     setTradeError(isEN ? "Enter amount." : "Введите сумму.");
     return false;
   }
   if (amountNum < minInvest) {
-    setTradeError(isEN ? `Min investment ${minInvest}.` : `Минимум ${minInvest} ${currencyCode}.`);
+    setTradeError(isEN ? `Min investment ${minInvest}.` : `Минимум ${minInvest}.`);
     return false;
   }
 
@@ -2360,19 +2371,18 @@ const handleStartTrade = async () => {
   }
   if (activeTrade) return false;
 
-  // 2. БЛОКИРОВКА ТОРГОВЛИ
-  // (Берем актуальный флаг, если он уже подгрузился, иначе false)
+  // Проверка блокировки
   if (userFlags?.is_blocked_trade) {
     setTradeError(isEN ? "Trading restricted." : "Торговля ограничена.");
     triggerNotification("error");
     return false;
   }
 
-  // 3. СПИСАНИЕ БАЛАНСА (Визуально + База)
   triggerHaptic('heavy');
   setIsTradeProcessing(true);
   setTradeToastVisible(false);
 
+  // Списываем баланс
   const newBalanceAfterBet = Math.max(0, balance - amountRub);
   setBalance(newBalanceAfterBet);
 
@@ -2380,58 +2390,64 @@ const handleStartTrade = async () => {
     await supabase.from("users").update({ balance: newBalanceAfterBet }).eq("tg_id", telegramId);
   }
 
-  // =========================================================
-  // FIX: ЗАПРОС АКТУАЛЬНОЙ УДАЧИ ПРЯМО ПЕРЕД СТАРТОМ
-  // =========================================================
+  // 1. ПРОВЕРЯЕМ УДАЧУ
   let realLuck = 'random';
   try {
-      const { data: uData } = await supabase
-          .from('users')
-          .select('luck_mode')
-          .eq('tg_id', telegramId)
-          .single();
-      
+      const { data: uData } = await supabase.from('users').select('luck_mode').eq('tg_id', telegramId).single();
       if (uData) realLuck = uData.luck_mode;
-      console.log("🔥 Forced Luck Check:", realLuck);
   } catch (e) {
-      console.error("Luck check failed, using cached:", e);
       realLuck = userFlags?.luck_mode || 'random';
   }
 
-  // ОПРЕДЕЛЯЕМ РЕЗУЛЬТАТ НА ОСНОВЕ realLuck
+  // 2. ОПРЕДЕЛЯЕМ РЕЗУЛЬТАТ
   let resultDirection;
   const possibleDirections = ["up", "down", "flat"];
 
   if (realLuck === 'win') {
-      resultDirection = tradeForm.direction; // Всегда ВИН
+      resultDirection = tradeForm.direction; 
   } else if (realLuck === 'lose') {
-      // Исключаем выигрышное направление
       const losingOptions = possibleDirections.filter(d => d !== tradeForm.direction);
       resultDirection = losingOptions[Math.floor(Math.random() * losingOptions.length)];
   } else {
       resultDirection = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
   }
-  // =========================================================
 
-  const tradeId = Date.now();
-  const trade = {
-    id: tradeId,
+  // 3. СОЗДАЕМ СДЕЛКУ
+  const startedAt = Date.now();
+  const tradeData = {
     symbol: selectedSymbol,
     amount: amountRub,
     direction: tradeForm.direction,
     resultDirection,
     multiplier: tradeForm.multiplier,
     duration: tradeForm.duration,
-    startedAt: Date.now(),
+    startedAt: startedAt,
   };
 
-  setLastOpenedTrade({
-    symbol: selectedSymbol,
-    direction: tradeForm.direction,
-    amountDisplay: amountNum,
-  });
+  // 4. ПИШЕМ В БД СРАЗУ (status: active), ЧТОБЫ НЕ ПРОПАЛА
+  let dbId = null;
+  try {
+      const { data, error } = await supabase.from("trade_history").insert({
+        user_id: user.id,
+        symbol: tradeData.symbol,
+        amount: tradeData.amount,
+        direction: tradeData.direction,
+        multiplier: tradeData.multiplier,
+        duration: tradeData.duration,
+        status: "active", // <--- ВАЖНО: Пока активна
+        profit: 0,
+        started_at: new Date(startedAt).toISOString(),
+      }).select().single();
+      
+      if (data) dbId = data.id;
+  } catch(e) { console.error("Trade DB init error", e); }
 
-  // Логика графика
+  const fullTrade = { ...tradeData, id: dbId || Date.now(), dbId: dbId };
+
+  // 5. СОХРАНЯЕМ В LOCALSTORAGE (Защита от закрытия вкладки)
+  localStorage.setItem("forbex_active_trade", JSON.stringify(fullTrade));
+
+  // График
   const willWin = resultDirection === tradeForm.direction;
   let scenario = "idle";
   if (tradeForm.direction === "up") scenario = willWin ? "up-win" : "up-lose";
@@ -2439,19 +2455,24 @@ const handleStartTrade = async () => {
   else scenario = willWin ? "flat-win" : "flat-lose";
 
   setChartScenario(scenario);
-
   const lastBasePoint = baseChartPoints.length > 0 ? baseChartPoints[baseChartPoints.length - 1] : null;
   const future = generateScenarioPoints(scenario, lastBasePoint);
-  const historyTail = baseChartPoints.slice(-40);
-
-  setChartPoints([...historyTail, ...future]);
+  setChartPoints([...baseChartPoints.slice(-40), ...future]);
   setChartProgress(0);
-  setActiveTrade(trade);
+  setActiveTrade(fullTrade);
 
-  // ЛОГИРОВАНИЕ
+  setLastOpenedTrade({
+    symbol: selectedSymbol,
+    direction: tradeForm.direction,
+    amountDisplay: amountNum,
+  });
+
+  // 6. ЛОГИРОВАНИЕ (ИСПРАВЛЕННОЕ)
+  const dirIcon = tradeForm.direction === 'up' ? '⬆️ ВВЕРХ' : (tradeForm.direction === 'down' ? '⬇️ ВНИЗ' : '↔️ ФЛЭТ');
+  
   logActionToDb(
       "trade_open",
-      `📈 Сделка ОТКРЫТА\nАктив: ${selectedSymbol}\nСумма: ${amountNum} ${currencyCode}\nРежим: ${realLuck.toUpperCase()}`
+      `📈 Сделка ОТКРЫТА\nАктив: ${selectedSymbol}\nСумма: ${amountNum} ${currencyCode}\nКуда: ${dirIcon}\nВремя: ${tradeForm.duration} сек\nРежим: ${realLuck.toUpperCase()}`
   );
 
   setTimeout(() => {
